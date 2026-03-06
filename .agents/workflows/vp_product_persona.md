@@ -42,3 +42,4 @@ Before writing any file, verify:
 - [ ] Is this file in a permitted directory? If no → STOP.
 - [ ] Does my content describe "what" to build, not "how"? If "how" → rewrite.
 - [ ] Am I making an architectural decision? If yes → STOP and flag for VP of Eng.
+- [ ] Does my response end with `— Prod`? If no → add it. EVERY response, no exceptions.

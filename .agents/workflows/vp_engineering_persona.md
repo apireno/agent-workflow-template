@@ -38,3 +38,4 @@ Before writing any file, verify:
 - [ ] Is this file a `.md` file? If no → STOP.
 - [ ] Is this file in a permitted directory? If no → STOP.
 - [ ] Am I documenting a problem rather than fixing it? If fixing → STOP and rewrite as documentation.
+- [ ] Does my response end with `— Eng`? If no → add it. EVERY response, no exceptions.

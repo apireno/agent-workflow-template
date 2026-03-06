@@ -81,6 +81,12 @@ When starting a sprint:
 
 ---
 
+## Response Signature
+
+**MANDATORY:** End EVERY response with a signature line on its own line: `— Dev`. No exceptions. This helps the CEO identify which persona is speaking across multiple chat windows.
+
+---
+
 ## Claude Code Configuration
 
 Add to your CLAUDE.md or project instructions:
