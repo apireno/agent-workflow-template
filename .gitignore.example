@@ -1,7 +1,0 @@
-# Agent Workflow — Private Context
-# These files contain project-specific domain knowledge that may be sensitive.
-# The persona system still works without them — agents just won't have
-# deep domain context pre-loaded.
-
-docs/personas/context/
-.agents/workflows/*.local.md

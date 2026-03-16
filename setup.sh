@@ -10,7 +10,9 @@ echo "Setting up agent workflow for: $PROJECT_NAME"
 echo ""
 
 # Update project name in persona files
-for f in docs/personas/vp-engineering.md docs/personas/vp-product.md docs/personas/dev-team.md; do
+for f in docs/personas/vp-engineering.md docs/personas/vp-product.md docs/personas/dev-team.md \
+         docs/personas/vp-security.md docs/personas/vp-compliance.md docs/personas/vp-devops.md \
+         docs/personas/concerns/security.md docs/personas/concerns/compliance.md docs/personas/concerns/devops.md; do
     if [ -f "$f" ]; then
         sed -i "s/{PROJECT_NAME}/$PROJECT_NAME/g" "$f"
         echo "  ✓ Updated $f"
@@ -19,19 +21,32 @@ done
 
 # Set dates
 TODAY=$(date +%Y-%m-%d)
-for f in docs/personas/*.md; do
+for f in docs/personas/*.md docs/personas/concerns/*.md; do
     if [ -f "$f" ]; then
         sed -i "s/YYYY-MM-DD/$TODAY/g" "$f"
     fi
 done
 echo "  ✓ Set dates to $TODAY"
 
-# Create first sprint directory
+# Create directory structure
 mkdir -p docs/sprints/sprint-01
-echo "  ✓ Created docs/sprints/sprint-01/"
+mkdir -p docs/architecture/decisions
+mkdir -p docs/security/threat-models
+mkdir -p docs/security/audits
+mkdir -p docs/compliance/tos
+mkdir -p docs/operations/runbooks
+mkdir -p docs/operations/monitoring
+echo "  ✓ Created directory structure"
+
+# Make vp-review.sh executable
+if [ -f scripts/vp-review.sh ]; then
+    chmod +x scripts/vp-review.sh
+    echo "  ✓ Made scripts/vp-review.sh executable"
+fi
 
 # Create roadmap placeholder
 if [ ! -f docs/roadmap/ROADMAP.md ]; then
+    mkdir -p docs/roadmap/prds
     cat > docs/roadmap/ROADMAP.md << 'ROADMAP'
 # Product Roadmap
 
@@ -61,14 +76,35 @@ ROADMAP
     echo "  ✓ Created docs/roadmap/ROADMAP.md"
 fi
 
+# Check for Gemini CLI
+if command -v gemini &> /dev/null; then
+    GEMINI_VERSION=$(gemini --version 2>/dev/null || echo "unknown")
+    echo "  ✓ Gemini CLI found (v$GEMINI_VERSION)"
+else
+    echo "  ⚠ Gemini CLI not found — install it for automated VP reviews"
+    echo "    See: https://github.com/google-gemini/gemini-cli"
+fi
+
 echo ""
 echo "Done! Next steps:"
-echo "  1. Edit docs/personas/vp-engineering.md — fill in the Domain Knowledge and Anti-Pattern Watchlist sections"
-echo "  2. Edit docs/personas/vp-product.md — fill in the Domain Knowledge section"
-echo "  3. Edit docs/roadmap/ROADMAP.md — define your product vision and phases"
-echo "  4. Write your first PRD in docs/roadmap/prds/PRD-001-{slug}.md"
 echo ""
-echo "To start a sprint:"
-echo "  - Antigravity (VP Product): /vp_product_persona Write the scope for Sprint 01"
-echo "  - Antigravity (VP Eng):     /vp_engineering_persona Review Sprint 01 scope"
-echo "  - Claude Code (Dev Team):   Read docs/personas/dev-team.md and docs/sprints/sprint-01/"
+echo "  1. Fill in project concerns:"
+echo "     - docs/personas/concerns/security.md   (attack surface, data classification)"
+echo "     - docs/personas/concerns/compliance.md  (applicable regulations, ToS)"
+echo "     - docs/personas/concerns/devops.md      (infrastructure, CI/CD, monitoring)"
+echo ""
+echo "  2. Customize persona Domain Knowledge sections:"
+echo "     - docs/personas/vp-engineering.md"
+echo "     - docs/personas/vp-product.md"
+echo ""
+echo "  3. (Optional) Create private context files (gitignored):"
+echo "     - docs/personas/context/vp-eng-context.md"
+echo "     - docs/personas/context/vp-product-context.md"
+echo ""
+echo "  4. Add technical standards to CLAUDE.md"
+echo ""
+echo "  5. Write your first PRD: docs/roadmap/prds/PRD-001-{slug}.md"
+echo ""
+echo "  To test the Gemini CLI review loop:"
+echo "    echo '# Test Plan' > docs/sprints/sprint-01/sprint-plan.md"
+echo "    ./scripts/vp-review.sh vp-eng docs/sprints/sprint-01/sprint-plan.md docs/sprints/sprint-01/vp-eng-review.md"

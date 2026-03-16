@@ -7,10 +7,18 @@ docs/sprints/sprint-*/vp-eng-review.md
 docs/sprints/sprint-*/dev-report.md
 docs/sprints/sprint-*/product-review.md
 docs/sprints/sprint-*/test-eval.md
+docs/sprints/sprint-*/test-results.md
+docs/sprints/sprint-*/security-review.md
+docs/sprints/sprint-*/compliance-review.md
+docs/sprints/sprint-*/infra-review.md
+docs/sprints/sprint-*/cicd-review.md
 
 # Agent workflow — private domain context (sensitive project knowledge)
 docs/personas/context/*.md
 !docs/personas/context/README.md
+
+# Project concerns are committed (they're project-level facts, not secrets)
+# docs/personas/concerns/*.md is tracked
 
 # macOS
 .DS_Store
