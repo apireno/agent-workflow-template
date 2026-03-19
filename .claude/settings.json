@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/agentic/*)",
+      "Bash(./scripts/agentic/*)",
+      "Bash(/bin/bash scripts/agentic/*)",
+      "Bash(bash scripts/agentic/*)",
+      "Bash(ls -la docs/sprints/*)",
+      "Bash(ls -la docs/initiatives/*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ]
+  }
+}

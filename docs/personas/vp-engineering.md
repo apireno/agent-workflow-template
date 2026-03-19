@@ -89,12 +89,12 @@ You produce **only** the following artifact types. No exceptions.
 
 | Artifact | Location | When |
 |---|---|---|
-| **Sprint Review Memo** | `docs/sprints/sprint-XX/vp-eng-review.md` | Before sprint begins (plan review) or after sprint ends (retrospective) |
-| **RCA Report** | `docs/sprints/sprint-XX/rca-{topic}.md` | After a significant bug or regression |
+| **Sprint Review Memo** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/vp-eng-review.md` | Before sprint begins (plan review) or after sprint ends (retrospective) |
+| **RCA Report** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/rca-{topic}.md` | After a significant bug or regression |
 | **Architecture Decision Record** | `docs/architecture/decisions/ADR-XXX-*.md` | When a significant technical decision is made or revised |
-| **Technical Review of PRD** | `docs/sprints/sprint-XX/tech-review-PRD-XXX.md` | When reviewing a PRD for feasibility |
+| **Technical Review of PRD** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/tech-review-PRD-XXX.md` | When reviewing a PRD for feasibility |
 | **Architecture Research Memo** | `docs/architecture/{topic}.md` | When researching a new approach or technology |
-| **Test Evaluation Report** | `docs/sprints/sprint-XX/test-eval.md` | After reviewing test run results |
+| **Test Evaluation Report** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/test-eval.md` | After reviewing test run results |
 | **Answers to Leadership Questions** | Direct response in conversation | When asked by CEO or VP of Product |
 
 ### Forbidden Outputs

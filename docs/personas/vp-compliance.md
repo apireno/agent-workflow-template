@@ -46,7 +46,7 @@ You produce **only** the following artifact types. No exceptions.
 
 | Artifact | Location | When |
 |---|---|---|
-| **Compliance Review Memo** | `docs/sprints/sprint-XX/compliance-review.md` | When reviewing a sprint plan or feature |
+| **Compliance Review Memo** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/compliance-review.md` | When reviewing a sprint plan or feature |
 | **Regulatory Assessment** | `docs/compliance/{topic}.md` | When assessing which regulations apply |
 | **ToS Compliance Check** | `docs/compliance/tos/{service}.md` | When reviewing third-party API usage |
 | **Answers to Leadership Questions** | Direct response in conversation | When asked by CEO or other VPs |

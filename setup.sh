@@ -26,10 +26,17 @@ for f in docs/personas/*.md docs/personas/concerns/*.md; do
         sed -i "s/YYYY-MM-DD/$TODAY/g" "$f"
     fi
 done
+# Also set date in PROTOCOL.md
+if [ -f "docs/personas/PROTOCOL.md" ]; then
+    sed -i "s/YYYY-MM-DD/$TODAY/g" "docs/personas/PROTOCOL.md"
+fi
 echo "  ✓ Set dates to $TODAY"
 
 # Create directory structure
-mkdir -p docs/sprints/sprint-01
+mkdir -p docs/initiatives/_templates/amendments
+mkdir -p docs/initiatives/_templates/merge-review
+mkdir -p docs/backlog/bugs
+mkdir -p docs/backlog/ideas
 mkdir -p docs/architecture/decisions
 mkdir -p docs/security/threat-models
 mkdir -p docs/security/audits
@@ -38,11 +45,13 @@ mkdir -p docs/operations/runbooks
 mkdir -p docs/operations/monitoring
 echo "  ✓ Created directory structure"
 
-# Make vp-review.sh executable
-if [ -f scripts/vp-review.sh ]; then
-    chmod +x scripts/vp-review.sh
-    echo "  ✓ Made scripts/vp-review.sh executable"
-fi
+# Make all agentic scripts executable
+for script in scripts/agentic/*.sh; do
+    if [ -f "$script" ]; then
+        chmod +x "$script"
+        echo "  ✓ Made $script executable"
+    fi
+done
 
 # Create roadmap placeholder
 if [ ! -f docs/roadmap/ROADMAP.md ]; then
@@ -76,13 +85,42 @@ ROADMAP
     echo "  ✓ Created docs/roadmap/ROADMAP.md"
 fi
 
-# Check for Gemini CLI
+# Detect available LLM CLIs and set engine
+HAS_GEMINI=0
+HAS_CLAUDE=0
+
 if command -v gemini &> /dev/null; then
-    GEMINI_VERSION=$(gemini --version 2>/dev/null || echo "unknown")
-    echo "  ✓ Gemini CLI found (v$GEMINI_VERSION)"
+    echo "  ✓ Gemini CLI found"
+    HAS_GEMINI=1
 else
-    echo "  ⚠ Gemini CLI not found — install it for automated VP reviews"
-    echo "    See: https://github.com/google-gemini/gemini-cli"
+    echo "  - Gemini CLI not found (optional: https://github.com/google-gemini/gemini-cli)"
+fi
+
+if command -v claude &> /dev/null; then
+    echo "  ✓ Claude CLI found"
+    HAS_CLAUDE=1
+else
+    echo "  - Claude CLI not found (optional: https://docs.anthropic.com/en/docs/claude-code)"
+fi
+
+# Set default engine based on what's available
+if [ ! -f .review-engine ]; then
+    if [ "$HAS_GEMINI" -eq 1 ] && [ "$HAS_CLAUDE" -eq 1 ]; then
+        echo "dual" > .review-engine
+        echo "  ✓ Review engine set to 'dual' (both Gemini + Claude)"
+    elif [ "$HAS_GEMINI" -eq 1 ]; then
+        echo "gemini" > .review-engine
+        echo "  ✓ Review engine set to 'gemini'"
+    elif [ "$HAS_CLAUDE" -eq 1 ]; then
+        echo "claude" > .review-engine
+        echo "  ✓ Review engine set to 'claude'"
+    else
+        echo "  ⚠ No LLM CLI found — install Gemini CLI or Claude CLI for automated VP reviews"
+        echo "    Then create .review-engine with: gemini | claude | dual"
+    fi
+else
+    CURRENT_ENGINE=$(cat .review-engine | tr -d '[:space:]')
+    echo "  ✓ Review engine already configured: $CURRENT_ENGINE"
 fi
 
 echo ""
@@ -105,6 +143,10 @@ echo "  4. Add technical standards to CLAUDE.md"
 echo ""
 echo "  5. Write your first PRD: docs/roadmap/prds/PRD-001-{slug}.md"
 echo ""
+echo "  6. Start your first initiative:"
+echo "     ./scripts/agentic/start-initiative.sh INIT-001 feature/{slug} 'Initiative Name'"
+echo ""
 echo "  To test the Gemini CLI review loop:"
-echo "    echo '# Test Plan' > docs/sprints/sprint-01/sprint-plan.md"
-echo "    ./scripts/vp-review.sh vp-eng docs/sprints/sprint-01/sprint-plan.md docs/sprints/sprint-01/vp-eng-review.md"
+echo "    echo '# Test Plan' > /tmp/test-plan.md"
+echo "    ./scripts/agentic/vp-review.sh vp-eng /tmp/test-plan.md /tmp/test-review.md"
+echo "    cat /tmp/test-review.md"

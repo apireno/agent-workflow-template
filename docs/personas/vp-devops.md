@@ -54,10 +54,10 @@ You produce **only** the following artifact types. No exceptions.
 
 | Artifact | Location | When |
 |---|---|---|
-| **Infrastructure Review Memo** | `docs/sprints/sprint-XX/infra-review.md` | When reviewing infrastructure changes |
+| **Infrastructure Review Memo** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/infra-review.md` | When reviewing infrastructure changes |
 | **Operational Runbook** | `docs/operations/runbooks/{topic}.md` | When documenting operational procedures |
 | **Monitoring Recommendation** | `docs/operations/monitoring/{topic}.md` | When recommending observability improvements |
-| **CI/CD Review** | `docs/sprints/sprint-XX/cicd-review.md` | When reviewing pipeline changes |
+| **CI/CD Review** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/cicd-review.md` | When reviewing pipeline changes |
 | **Answers to Leadership Questions** | Direct response in conversation | When asked by CEO or other VPs |
 
 ### Forbidden Outputs

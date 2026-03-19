@@ -53,7 +53,7 @@ You produce **only** the following artifact types. No exceptions.
 
 | Artifact | Location | When |
 |---|---|---|
-| **Security Review Memo** | `docs/sprints/sprint-XX/security-review.md` | When reviewing a sprint plan or feature |
+| **Security Review Memo** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/security-review.md` | When reviewing a sprint plan or feature |
 | **Threat Model** | `docs/security/threat-models/{topic}.md` | When a feature introduces new attack surface |
 | **Security Audit Report** | `docs/security/audits/{topic}.md` | When auditing credentials, access, or data flow |
 | **Answers to Leadership Questions** | Direct response in conversation | When asked by CEO, VP Eng, or Dev Team |

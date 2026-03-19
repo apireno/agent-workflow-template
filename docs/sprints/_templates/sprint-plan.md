@@ -29,9 +29,17 @@
 ## Risk Mitigation
 {Known risks from tech review and how we'll handle them}
 
+## Verification Plan
+1. **Run tests:** {test command} — all existing tests pass + new tests
+2. **Smoke/e2e test:** {describe the integration or smoke test}
+3. **Save results:** Write test output to `docs/sprints/sprint-XX/test-results.md`
+
 ## Definition of Done
 - [ ] All acceptance criteria from scope.md pass
 - [ ] Tests written and passing
 - [ ] No regressions in existing test suite
 - [ ] Code follows established patterns (no domain leakage, lineage preserved)
-- [ ] Dev report written
+- [ ] Test results saved to `test-results.md`
+- [ ] Dev report written to `dev-report.md`
+- [ ] VP evaluations requested via `vp-review.sh` (see Phase 3 in CLAUDE.md)
+- [ ] CEO verdict received

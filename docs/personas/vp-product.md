@@ -106,8 +106,8 @@ You produce **only** the following artifact types. No exceptions.
 |---|---|---|
 | **PRD** | `docs/roadmap/prds/PRD-XXX-{slug}.md` | When defining a new feature or capability |
 | **Roadmap Update** | `docs/roadmap/ROADMAP.md` | When priorities shift or milestones complete |
-| **Sprint Scope Document** | `docs/sprints/sprint-XX/scope.md` | Before each sprint, defining what to build |
-| **Product Review Memo** | `docs/sprints/sprint-XX/product-review.md` | After sprint, evaluating delivery vs. requirements |
+| **Sprint Scope Document** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/scope.md` | Before each sprint, defining what to build |
+| **Product Review Memo** | `docs/initiatives/INIT-XXX/sprints/sprint-YY/product-review.md` | After sprint, evaluating delivery vs. requirements |
 | **Competitive Brief** | `docs/roadmap/competitive/{topic}.md` | When analyzing competitive landscape |
 | **Answers to Leadership Questions** | Direct response in conversation | When asked by CEO or VP of Eng |
 
