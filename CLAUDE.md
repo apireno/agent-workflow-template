@@ -139,6 +139,42 @@ If you need to do work that isn't in the initiative brief:
 
 ---
 
+### IDEO Ideation Sprint
+
+When the CEO wants to explore ideas for a new feature, experiment, or initiative before writing PRDs, you can trigger an IDEO-style ideation sprint. This runs all VP personas through a structured creative process.
+
+**When to use:** Before an initiative is defined, when the CEO says things like "let's brainstorm", "I need ideas for...", "what are our options for...", or "run an ideation sprint on..."
+
+**Step 1.** Write the goal to a file using the template at `docs/ideation/_templates/ideation-goal.md`. Save it to `docs/ideation/YYYY-MM-DD-{slug}/goal.md` or within an initiative folder.
+
+**Step 2. EXECUTE:**
+
+```bash
+./scripts/agentic/ideo-sprint.sh docs/ideation/YYYY-MM-DD-{slug}/goal.md docs/ideation/YYYY-MM-DD-{slug}/
+```
+
+This runs 4 phases automatically:
+1. **Ideate** — Each VP persona independently generates maximum ideas (8-15+ each)
+2. **Vote** — Each VP reviews others' ideas, casts votes with mandatory improvement suggestions
+3. **Merge** — Facilitator consolidates similar ideas and tallies votes
+4. **Produce** — VP Prod drafts PRDs/ADRs from top-voted ideas
+
+**Step 3.** Read the merged results (`phase3-merged-results.md`) and PRD drafts (`phase4-prds.md`).
+
+**Step 4. STOP.** Present to the CEO:
+1. **Session summary** — how many ideas generated, how many after merge, vote distribution
+2. **Top 3-5 ideas** — ranked by votes, with the improvement suggestions incorporated
+3. **PRD drafts** — summary of what VP Prod produced
+4. **Ask for direction** — "Which ideas should we pursue? Approved PRDs will go to the roadmap."
+
+Then WAIT for CEO direction. Approved PRDs move to `docs/roadmap/prds/` and may seed a new initiative.
+
+**Options:**
+- `--votes N` — votes per persona (default: 3)
+- `--personas vp-eng,vp-prod,vp-security,vp-devops` — customize participants
+
+---
+
 ### Merge Gate — Tier 3
 
 When the CEO decides the initiative is ready to merge:

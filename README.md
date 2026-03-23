@@ -175,15 +175,38 @@ If new work is discovered that isn't in the initiative brief:
 3. CEO approves or rejects
 4. Amendment is logged in the initiative brief — no silent scope changes
 
+### IDEO Ideation Sprints
+
+Before defining an initiative, run a structured ideation session to explore the solution space. Based on the IDEO sprint methodology, adapted for AI personas:
+
+```bash
+# Write a goal file, then run the ideation sprint
+./scripts/agentic/ideo-sprint.sh docs/ideation/2025-01-15-caching/goal.md docs/ideation/2025-01-15-caching/
+```
+
+The script orchestrates four phases across all VP personas:
+
+| Phase | What Happens | Output |
+|-------|-------------|--------|
+| **1. Ideate** | Each VP independently generates 8-15+ ideas | `phase1-ideas-{persona}.md` per VP |
+| **2. Vote** | Each VP reviews others' ideas, votes with improvement suggestions | `phase2-votes-{persona}.md` per VP |
+| **3. Merge** | Facilitator consolidates similar ideas, tallies votes | `phase3-merged-results.md` |
+| **4. Produce** | VP Prod drafts PRDs/ADRs from top-voted ideas | `phase4-prds.md` |
+
+Each persona runs as a separate CLI process with zero shared context — ensuring truly independent creative thinking. The voting rule (you can't vote for your own ideas + every vote requires an improvement suggestion) drives cross-pollination.
+
+Top-voted PRD drafts go to the CEO for approval. Approved PRDs seed new initiatives.
+
 ## What's Included
 
 ```
 CLAUDE.md                                    # Claude Code config — loaded automatically
 scripts/agentic/
-  vp-review.sh                               # Gemini CLI wrapper for VP reviews
+  vp-review.sh                               # Configurable VP review engine
   start-initiative.sh                        # Create branch + scaffold initiative
   start-sprint.sh                            # Scaffold sprint within initiative
   request-merge.sh                           # Run Tier 3 merge reviews
+  ideo-sprint.sh                             # IDEO-style ideation sprint
 docs/
   personas/                                  # Agent persona definitions
     PROTOCOL.md                              # Three-tier lifecycle (v3)
@@ -208,6 +231,9 @@ docs/
         merge-checklist.md                   # Merge gate checklist template
   sprints/
     _templates/                              # Sprint artifact templates (8 files)
+  ideation/
+    _templates/
+      ideation-goal.md                       # IDEO sprint goal template
   backlog/
     bugs/
       bug-report-template.md                 # Bug report template
