@@ -31,6 +31,7 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 VOTES_PER_PERSONA=3
 PERSONAS="vp-eng vp-prod vp-security vp-devops"
+EXTRA_CONTEXT_FILES=""
 
 # --- Engine selection (shared with vp-review.sh) ---
 resolve_engine() {
@@ -107,6 +108,10 @@ while [ $# -gt 0 ]; do
             PERSONAS=$(echo "$2" | tr ',' ' ')
             shift 2
             ;;
+        --context)
+            EXTRA_CONTEXT_FILES="$EXTRA_CONTEXT_FILES $2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 <goal-file> <output-dir> [--votes N] [--personas P1,P2,...]"
             echo ""
@@ -119,6 +124,8 @@ while [ $# -gt 0 ]; do
             echo "Options:"
             echo "  --votes N              Votes per persona (default: 3)"
             echo "  --personas P1,P2,...   Comma-separated list of personas (default: vp-eng,vp-prod,vp-security,vp-devops)"
+            echo "  --context FILE         Additional context file (repeatable). Auto-discovery also scans"
+            echo "                         docs/roadmap/, docs/architecture/, docs/sprints/, docs/initiatives/"
             echo ""
             echo "Engine: $ENGINE (set via REVIEW_ENGINE env var, .review-engine file, or auto-detected)"
             echo ""
@@ -152,6 +159,123 @@ fi
 
 # --- Create output directory ---
 mkdir -p "$OUTPUT_DIR"
+
+# --- Auto-discover existing work ---
+# Builds a context document so participants don't re-propose already-built features.
+# Scans: roadmap, PRDs, ADRs, initiative briefs, completed sprint dev reports.
+# Also includes any files passed via --context.
+
+EXISTING_WORK_FILE=$(mktemp)
+trap "rm -f '$EXISTING_WORK_FILE'" EXIT
+
+echo "=== EXISTING WORK — DO NOT RE-PROPOSE THESE ===" > "$EXISTING_WORK_FILE"
+echo "" >> "$EXISTING_WORK_FILE"
+CONTEXT_FOUND=0
+
+# Roadmap
+if [ -f "$REPO_ROOT/docs/roadmap/ROADMAP.md" ]; then
+    echo "--- ROADMAP ---" >> "$EXISTING_WORK_FILE"
+    cat "$REPO_ROOT/docs/roadmap/ROADMAP.md" >> "$EXISTING_WORK_FILE"
+    echo "" >> "$EXISTING_WORK_FILE"
+    CONTEXT_FOUND=$((CONTEXT_FOUND + 1))
+fi
+
+# PRDs (titles + status + goal — not full content, to keep prompt manageable)
+PRD_DIR="$REPO_ROOT/docs/roadmap/prds"
+if [ -d "$PRD_DIR" ]; then
+    PRD_FILES=$(find "$PRD_DIR" -name "*.md" -type f 2>/dev/null | sort)
+    if [ -n "$PRD_FILES" ]; then
+        echo "--- EXISTING PRDs ---" >> "$EXISTING_WORK_FILE"
+        for prd in $PRD_FILES; do
+            echo "" >> "$EXISTING_WORK_FILE"
+            echo "File: $(basename "$prd")" >> "$EXISTING_WORK_FILE"
+            # Extract first 30 lines (title, status, goal) to keep context lean
+            head -30 "$prd" >> "$EXISTING_WORK_FILE"
+            echo "" >> "$EXISTING_WORK_FILE"
+            echo "..." >> "$EXISTING_WORK_FILE"
+        done
+        echo "" >> "$EXISTING_WORK_FILE"
+        CONTEXT_FOUND=$((CONTEXT_FOUND + 1))
+    fi
+fi
+
+# ADRs (titles + decision summaries)
+ADR_DIR="$REPO_ROOT/docs/architecture/decisions"
+if [ -d "$ADR_DIR" ]; then
+    ADR_FILES=$(find "$ADR_DIR" -name "*.md" -type f 2>/dev/null | sort)
+    if [ -n "$ADR_FILES" ]; then
+        echo "--- EXISTING ADRs (Architectural Decisions) ---" >> "$EXISTING_WORK_FILE"
+        for adr in $ADR_FILES; do
+            echo "" >> "$EXISTING_WORK_FILE"
+            echo "File: $(basename "$adr")" >> "$EXISTING_WORK_FILE"
+            head -30 "$adr" >> "$EXISTING_WORK_FILE"
+            echo "" >> "$EXISTING_WORK_FILE"
+            echo "..." >> "$EXISTING_WORK_FILE"
+        done
+        echo "" >> "$EXISTING_WORK_FILE"
+        CONTEXT_FOUND=$((CONTEXT_FOUND + 1))
+    fi
+fi
+
+# Initiative briefs (what's been scoped or is in-flight)
+INIT_DIR="$REPO_ROOT/docs/initiatives"
+if [ -d "$INIT_DIR" ]; then
+    BRIEF_FILES=$(find "$INIT_DIR" -name "initiative-brief.md" -not -path "*/_templates/*" -type f 2>/dev/null | sort)
+    if [ -n "$BRIEF_FILES" ]; then
+        echo "--- ACTIVE/COMPLETED INITIATIVES ---" >> "$EXISTING_WORK_FILE"
+        for brief in $BRIEF_FILES; do
+            echo "" >> "$EXISTING_WORK_FILE"
+            echo "File: $brief" >> "$EXISTING_WORK_FILE"
+            head -40 "$brief" >> "$EXISTING_WORK_FILE"
+            echo "" >> "$EXISTING_WORK_FILE"
+            echo "..." >> "$EXISTING_WORK_FILE"
+        done
+        echo "" >> "$EXISTING_WORK_FILE"
+        CONTEXT_FOUND=$((CONTEXT_FOUND + 1))
+    fi
+fi
+
+# Completed sprint dev reports (what was actually built)
+SPRINT_DIRS="$REPO_ROOT/docs/sprints $REPO_ROOT/docs/initiatives"
+for sdir in $SPRINT_DIRS; do
+    if [ -d "$sdir" ]; then
+        DEV_REPORTS=$(find "$sdir" -name "dev-report.md" -type f 2>/dev/null | sort)
+        if [ -n "$DEV_REPORTS" ]; then
+            echo "--- COMPLETED SPRINT DEV REPORTS (what was built) ---" >> "$EXISTING_WORK_FILE"
+            for report in $DEV_REPORTS; do
+                echo "" >> "$EXISTING_WORK_FILE"
+                echo "File: $report" >> "$EXISTING_WORK_FILE"
+                # Extract title + summary section (first 25 lines)
+                head -25 "$report" >> "$EXISTING_WORK_FILE"
+                echo "" >> "$EXISTING_WORK_FILE"
+                echo "..." >> "$EXISTING_WORK_FILE"
+            done
+            echo "" >> "$EXISTING_WORK_FILE"
+            CONTEXT_FOUND=$((CONTEXT_FOUND + 1))
+        fi
+    fi
+done
+
+# Extra context files passed via --context
+for ctx_file in $EXTRA_CONTEXT_FILES; do
+    if [ -f "$ctx_file" ]; then
+        echo "--- ADDITIONAL CONTEXT: $(basename "$ctx_file") ---" >> "$EXISTING_WORK_FILE"
+        cat "$ctx_file" >> "$EXISTING_WORK_FILE"
+        echo "" >> "$EXISTING_WORK_FILE"
+        CONTEXT_FOUND=$((CONTEXT_FOUND + 1))
+    else
+        echo "  ⚠ Context file not found: $ctx_file"
+    fi
+done
+
+echo "=== END EXISTING WORK ===" >> "$EXISTING_WORK_FILE"
+
+if [ "$CONTEXT_FOUND" -gt 0 ]; then
+    CONTEXT_LINES=$(wc -l < "$EXISTING_WORK_FILE" | tr -d ' ')
+    echo "  Auto-discovered existing work: $CONTEXT_FOUND sources ($CONTEXT_LINES lines)"
+else
+    echo "  No existing work found (clean repo). Ideation will start from scratch."
+fi
 
 # --- Helper: persona display name ---
 persona_display_name() {
@@ -219,6 +343,7 @@ echo "Output:   $OUTPUT_DIR"
 echo "Engine:   $ENGINE"
 echo "Personas: $PERSONAS ($PERSONA_COUNT participants)"
 echo "Votes:    $VOTES_PER_PERSONA per persona"
+echo "Context:  $CONTEXT_FOUND existing work sources discovered"
 echo ""
 
 # =============================================
@@ -252,7 +377,9 @@ $(cat "$PERSONA_PATH")
 === END PERSONA DEFINITION ===
 
 === IDEATION INSTRUCTIONS ===
-You are participating in an IDEO-style ideation sprint. The goal is to generate the MAXIMUM NUMBER of ideas possible. Quantity over quality at this stage — wild ideas are encouraged.
+You are participating in an IDEO-style ideation sprint. The goal is to generate the MAXIMUM NUMBER of NEW ideas possible. Quantity over quality at this stage — wild ideas are encouraged.
+
+CRITICAL: Below you will find a section called "EXISTING WORK." These are features, systems, and decisions that ALREADY EXIST in this project. Read it carefully. DO NOT re-propose anything that has already been built, decided, or scoped. Your ideas must go BEYOND what exists. You may propose improvements or extensions to existing work, but label them clearly as "Extension of [existing thing]" and explain what is NEW.
 
 Rules:
 - Generate as many ideas as you can (aim for 8-15 minimum)
@@ -262,6 +389,7 @@ Rules:
 - No idea is too crazy — include moonshots alongside practical ones
 - Do NOT evaluate or critique ideas — just generate
 - Do NOT reference other people's ideas (you haven't seen any yet)
+- Do NOT re-propose things that already exist (see EXISTING WORK below)
 
 Format each idea as:
 
@@ -272,8 +400,10 @@ Format each idea as:
 $GOAL_CONTENT
 === END GOAL ===
 
+$(cat "$EXISTING_WORK_FILE")
+
 Generate your ideas now. Start with "# Ideation — $DISPLAY_NAME" as the document title.
-Remember: maximum quantity, think from your unique perspective as $DISPLAY_NAME.
+Remember: maximum quantity, think from your unique perspective as $DISPLAY_NAME. Do NOT re-propose anything listed in EXISTING WORK.
 IDEATION_PROMPT
 
     run_llm "$PROMPT_FILE" "$IDEA_FILE"
@@ -439,14 +569,17 @@ You are a neutral facilitator running an IDEO-style ideation sprint. Your job is
 
 1. Read ALL the ideas generated in Phase 1
 2. Read ALL the votes and improvement suggestions from Phase 2
-3. Identify ideas that are similar enough to merge (same core concept, different angles)
-4. Tally votes (merged ideas get combined vote counts)
-5. Rank ideas by total votes (highest first)
-6. For each top idea, incorporate the improvement suggestions from voters
+3. Cross-check ideas against EXISTING WORK (below) — flag and REMOVE any idea that re-proposes something already built. Note removed ideas in a "Duplicates of Existing Work" section.
+4. Identify ideas that are similar enough to merge (same core concept, different angles)
+5. Tally votes (merged ideas get combined vote counts)
+6. Rank ideas by total votes (highest first)
+7. For each top idea, incorporate the improvement suggestions from voters
 
 === ORIGINAL GOAL ===
 $GOAL_CONTENT
 === END GOAL ===
+
+$(cat "$EXISTING_WORK_FILE")
 
 === ALL IDEAS (Phase 1) ===
 $(cat "$ALL_IDEAS_FILE")
@@ -482,8 +615,15 @@ Then for each idea (ranked by votes, descending), write a section:
 
 ---
 
-Include ALL ideas, even those with zero votes (rank them last).
-At the end, add a section "## Session Statistics" with: total ideas generated, total unique ideas after merge, total votes cast, and participation by persona.
+Include ALL genuinely new ideas, even those with zero votes (rank them last).
+
+Before the ranked list, add a section:
+## Duplicates of Existing Work (Removed)
+| Idea | Proposed By | Duplicates |
+|------|------------|------------|
+[List any ideas that re-propose features/systems that already exist, with the existing work they duplicate. These are EXCLUDED from ranking and vote tallying.]
+
+At the end, add a section "## Session Statistics" with: total ideas generated, duplicates removed, total unique ideas after merge, total votes cast, and participation by persona.
 === END OUTPUT FORMAT ===
 
 Produce the merged results document now.
