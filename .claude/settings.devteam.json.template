@@ -1,0 +1,57 @@
+{
+  "_comment": "Template for per-repo .claude/settings.json on Phase 2 dev-team targets. push-to-repos.sh installs this. Strip _comment fields when applying.",
+
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+
+  "hooks": {
+    "_comment_SessionStart": "Auto-paste the brief from .claude/pending-prompt.md into Claude's session context. Also record session_id for /peek and /resume-dev-team.",
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/auto-paste-brief.sh"
+          }
+        ]
+      }
+    ],
+
+    "_comment_SessionEnd": "Record session end + touch .claude/CRASHED on unclean exit so the CTO's /sprint-status sees it.",
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/session-end-record.sh"
+          }
+        ]
+      }
+    ],
+
+    "_comment_Stop": "On every turn end, check if dev-report.md exists at the expected path and touch .claude/COMPLETE if so. Lets the CTO's /sprint-status detect completion automatically.",
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/check-complete.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

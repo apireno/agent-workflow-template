@@ -1,0 +1,38 @@
+# CTO Project Registry
+#
+# Copy this file to .cto/projects.yaml and fill in your repo paths.
+# This file is gitignored — it contains your local filesystem paths.
+#
+# Fields:
+#   name         — short identifier, used in assignment files and scripts
+#   path         — absolute path to the repo on your machine
+#   description  — one-line description of what this repo does
+#   language     — primary language (python, typescript, go, etc.)
+#   sprints      — path within repo where sprint folders live (default: docs/sprints)
+#   scripts      — path within repo where agentic scripts live (default: scripts/agentic)
+#   active       — set to false to exclude from orchestration without deleting entry
+
+projects:
+  - name: my-project
+    path: /Users/yourname/repos/my-project
+    description: "Main product backend"
+    language: python
+    sprints: docs/sprints
+    scripts: scripts/agentic
+    active: true
+
+  - name: my-frontend
+    path: /Users/yourname/repos/my-frontend
+    description: "React frontend for main product"
+    language: typescript
+    sprints: docs/sprints
+    scripts: scripts/agentic
+    active: true
+
+  - name: my-data-pipeline
+    path: /Users/yourname/repos/my-data-pipeline
+    description: "ETL and analytics pipeline"
+    language: python
+    sprints: docs/sprints
+    scripts: scripts/agentic
+    active: false   # parked — exclude from sprint orchestration
