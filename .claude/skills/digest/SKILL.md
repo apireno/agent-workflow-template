@@ -11,13 +11,14 @@ Generated: !`date -u +%FT%TZ`
 ## Preflight status (fleet health)
 
 ```!
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 scripts/agentic/preflight.sh 2>&1 || echo "(preflight exited non-zero — see above)"
 ```
 
 ## Recent ADRs (last 7 days)
 
 ```!
-find /Users/apireno/repos/agent-workflow-template/docs/architecture/decisions -name 'ADR-*.md' -type f -mtime -7 2>/dev/null | while read f; do
+find docs/architecture/decisions -name 'ADR-*.md' -type f -mtime -7 2>/dev/null | while read f; do
   ts=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$f")
   size=$(stat -f "%z" "$f")
   echo "  $ts  $(basename $f)  (${size} bytes)"
@@ -27,7 +28,7 @@ done | sort -r | head -10 || echo "  (none in last 7 days)"
 ## Recent CTO decisions (last 7 days)
 
 ```!
-find /Users/apireno/repos/agent-workflow-template/docs/architecture/decisions -name 'cto-decision-*.md' -type f -mtime -7 2>/dev/null | while read f; do
+find docs/architecture/decisions -name 'cto-decision-*.md' -type f -mtime -7 2>/dev/null | while read f; do
   ts=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$f")
   echo "  $ts  $(basename $f)"
 done | sort -r | head -10 || echo "  (none in last 7 days)"

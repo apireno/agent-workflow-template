@@ -9,6 +9,7 @@ argument-hint: <repo-name>
 
 ```!
 set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 REPO_NAME="$ARGUMENTS"
 
 if [ -z "$REPO_NAME" ]; then
@@ -19,7 +20,7 @@ fi
 # Resolve repo path
 REPO_PATH=$(python3 - <<PYEOF
 import re
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 for b in re.split(r'(?=- name:)', text):
     m = re.search(r'- name:\s*(\S+)', b)

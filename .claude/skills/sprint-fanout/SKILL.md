@@ -13,6 +13,7 @@ Drafts a sprint-plan.md per active repo by feeding the PRD/goal + per-repo CLAUD
 
 ```!
 set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 
 # zsh doesn't word-split unquoted parameter expansion by default. Skills run
 # in whatever shell the harness uses (zsh on macOS). This makes `for tok in $ARGS`
@@ -60,7 +61,7 @@ echo ""
 # Read active repos
 python3 - <<PYEOF > "$OUT/repos.tsv"
 import re
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 blocks = re.split(r'(?=- name:)', text)
 filter_set = set("$REPOS_FILTER".split(',')) if "$REPOS_FILTER" else None

@@ -9,6 +9,7 @@ allowed-tools: Bash(*) Read Write
 ## Check inbox
 
 ```!
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 INBOX="$HOME/.cto/inbox"
 
 if [ ! -d "$INBOX" ]; then
@@ -35,7 +36,7 @@ for f in $PENDING; do
   echo "Dropped: $(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$f")"
   echo "Source: ${f%-*}"
   echo ""
-  /Users/apireno/repos/agent-workflow-template/scripts/agentic/wrap-untrusted.sh "$f" "inbox:$(basename $f .md)"
+  "$ROOT/scripts/agentic/wrap-untrusted.sh" "$f" "inbox:$(basename $f .md)"
   echo ""
 done
 ```

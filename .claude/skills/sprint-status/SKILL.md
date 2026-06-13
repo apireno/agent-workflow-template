@@ -9,7 +9,8 @@ allowed-tools: Bash(cat *) Bash(ls *) Bash(stat *) Bash(date *) Bash(test *) Bas
 ## Read the active repo registry
 
 ```!
-ART=/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
+ART=.cto/projects.yaml
 if [ ! -f "$ART" ]; then
   echo "ERROR: .cto/projects.yaml not found at $ART"
   exit 1
@@ -17,7 +18,7 @@ fi
 
 python3 - <<'PYEOF'
 import re
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 blocks = re.split(r'(?=- name:)', text)
 active = []
@@ -44,7 +45,7 @@ python3 - <<'PYEOF'
 import os, re, json, time
 from pathlib import Path
 
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 blocks = re.split(r'(?=- name:)', text)
 repos = []

@@ -11,6 +11,7 @@ Closes the Terminal window for the named repo's Phase 2 session. The underlying 
 
 ```!
 set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 [ -n "${ZSH_VERSION:-}" ] && setopt sh_word_split
 
 ARGS="$ARGUMENTS"
@@ -33,7 +34,7 @@ fi
 # Resolve repo path. Accepts exact name OR suffix alias ("tuner" -> "acme-service-a").
 REPO_PATH=$(python3 - <<PYEOF
 import re, sys
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 arg = "$REPO_NAME"
 for b in re.split(r'(?=- name:)', text):

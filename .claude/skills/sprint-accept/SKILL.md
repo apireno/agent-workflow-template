@@ -17,6 +17,7 @@ SPRINT_DIR="$ARGUMENTS"
 # sprint dir that has none yet). no_nomatch makes an unmatched glob pass through
 # literally, as bash does — the [ -f ] guards below then handle the no-match case.
 [ -n "${ZSH_VERSION:-}" ] && setopt no_nomatch sh_word_split
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 if [ -z "$SPRINT_DIR" ] || [ ! -d "$SPRINT_DIR" ]; then
   echo "ERROR: provide a path to a sprint directory"
   echo "Usage: /sprint-accept <path-to-sprint-XX/>"
@@ -79,7 +80,7 @@ echo ""
 for vp_file in product-review.md vp-eng-review.md security-review.md infra-review.md vp-datascience-review.md test-eval.md; do
   if [ -f "$SPRINT_DIR/$vp_file" ]; then
     echo "=== $vp_file ==="
-    /Users/apireno/repos/agent-workflow-template/scripts/agentic/wrap-untrusted.sh "$SPRINT_DIR/$vp_file" "gemini-vp-review:$vp_file"
+    "$ROOT/scripts/agentic/wrap-untrusted.sh" "$SPRINT_DIR/$vp_file" "gemini-vp-review:$vp_file"
     echo ""
   fi
 done

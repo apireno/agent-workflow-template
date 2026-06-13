@@ -11,6 +11,7 @@ Tails the named repo's Phase 2 session JSONL to show what the dev team is doing 
 
 ```!
 set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 REPO_NAME="$ARGUMENTS"
 
 if [ -z "$REPO_NAME" ]; then
@@ -20,7 +21,7 @@ if [ -z "$REPO_NAME" ]; then
   python3 - <<'PYEOF'
 import re, os
 from pathlib import Path
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 for b in re.split(r'(?=- name:)', text):
     m = re.search(r'- name:\s*(\S+)', b)
@@ -42,7 +43,7 @@ fi
 # ("tuner" -> "acme-service-a", "morphology" -> "acme-service-b").
 REPO_PATH=$(python3 - <<PYEOF
 import re
-with open('/Users/apireno/repos/agent-workflow-template/.cto/projects.yaml') as f:
+with open('.cto/projects.yaml') as f:
     text = f.read()
 arg = "$REPO_NAME"
 # First pass: exact match
