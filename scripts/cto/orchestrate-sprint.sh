@@ -18,8 +18,8 @@
 #   project_name<TAB>sprint_number<TAB>/absolute/repo/path<TAB>/path/to/goal.md
 #
 # Example assignments.tsv:
-#   omi-ea	05	/Users/apireno/repos/omi_ea	/tmp/cto/session/omi-ea-goal.md
-#   kgenskills	03	/Users/apireno/repos/KGenSkills	/tmp/cto/session/kgenskills-goal.md
+#   acme-core	05	/path/to/repos/acme-core	/tmp/cto/session/acme-core-goal.md
+#   acme-web	03	/path/to/repos/acme-web	/tmp/cto/session/acme-web-goal.md
 #
 # Output layout (in --output-dir):
 #   {project_name}-response.md    — raw dev team response with status trailer
