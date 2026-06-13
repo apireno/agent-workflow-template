@@ -129,6 +129,13 @@ if [ "$ADOPT" -eq 0 ] && [ -n "$REPOS" ]; then
     [ -f "$TPL/.gitignore" ] && cp "$TPL/.gitignore" "$RD/.gitignore"
     cp "$TPL/.claude/settings.permissive.json" "$RD/.claude/settings.permissive.json" 2>/dev/null || true
     [ -d "$TPL/.claude/hooks" ] && cp "$TPL/.claude/hooks/"* "$RD/.claude/hooks/" 2>/dev/null || true
+    chmod +x "$RD/.claude/hooks/"*.sh 2>/dev/null || true
+    # settings.json with the three dev-team session-tracking hooks already wired
+    # (from settings.devteam.json.template, _comment fields stripped) so the repo
+    # is tracked from its first session — /handoff also self-heals this at dispatch.
+    python3 -c "import json; d=json.load(open('$TPL/.claude/settings.devteam.json.template')); d.pop('_comment',None); h=d.get('hooks',{});
+[h.pop(k) for k in list(h) if k.startswith('_comment')]; json.dump(d, open('$RD/.claude/settings.json','w'), indent=2)" 2>/dev/null \
+      || cp "$TPL/.claude/settings.devteam.json.template" "$RD/.claude/settings.json"
     printf 'gemini\n' > "$RD/.claude/.review-engine"   # $0 review engine, never claude -p
     echo "  scaffolded $RD"
     DEV_SCAFFOLD="$DEV_SCAFFOLD $r"

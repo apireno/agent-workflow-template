@@ -28,8 +28,11 @@ TS=$(date -u +%FT%TZ)
 echo "$SESSION_ID" > "$CLAUDE_DIR/current-session.id"
 echo "session_id=$SESSION_ID source=$SOURCE ts=$TS started" >> "$CLAUDE_DIR/session.log"
 
-# Clear stale CRASHED flag — this session is starting clean
+# Clear stale CRASHED + COMPLETE flags — this session is starting clean. A
+# leftover COMPLETE (from a prior accepted sprint in this repo) would otherwise
+# make /sprint-status report this fresh session as already done.
 [ -f "$CLAUDE_DIR/CRASHED" ] && rm "$CLAUDE_DIR/CRASHED"
+[ -f "$CLAUDE_DIR/COMPLETE" ] && rm "$CLAUDE_DIR/COMPLETE"
 
 # Auto-paste the brief if present.
 #
@@ -44,6 +47,12 @@ echo "session_id=$SESSION_ID source=$SOURCE ts=$TS started" >> "$CLAUDE_DIR/sess
 # preamble that the user's first message is authorization to proceed.
 BRIEF="$CLAUDE_DIR/pending-prompt.md"
 if [ -f "$BRIEF" ] && [ "$SOURCE" = "startup" ]; then
+    # Record the active sprint dir so the completion hooks scope to THIS sprint
+    # (fallback — /handoff also writes .claude/current-sprint authoritatively).
+    if [ ! -f "$CLAUDE_DIR/current-sprint" ]; then
+        ACTIVE_SPRINT=$(grep -oE 'docs/sprints/sprint-[^/[:space:]]+' "$BRIEF" 2>/dev/null | sed 's#docs/sprints/##' | head -1)
+        [ -n "$ACTIVE_SPRINT" ] && echo "$ACTIVE_SPRINT" > "$CLAUDE_DIR/current-sprint"
+    fi
     cat <<'PREAMBLE'
 === CTO MISSION BRIEF — SELF-STARTING ON FIRST USER MESSAGE ===
 

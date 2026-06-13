@@ -362,9 +362,16 @@ cp .gitignore /path/to/new-repo/.gitignore
 # "First Interaction: Permissions Setup" does `cp .claude/settings.permissive.json
 # .claude/settings.json` on the dev team's first activation; without this file the
 # copy fails and the team falls back to prompting on every (un-analyzable) command.
-mkdir -p /path/to/new-repo/.claude
+mkdir -p /path/to/new-repo/.claude/hooks
 cp .claude/settings.permissive.json /path/to/new-repo/.claude/settings.permissive.json
 printf 'gemini\n' > /path/to/new-repo/.claude/.review-engine   # $0 review engine, not claude -p
+
+# Session-tracking hooks — REQUIRED for /peek, /sprint-status, /resume-dev-team.
+# Install the hook scripts + the settings.json that WIRES them (settings.permissive.json
+# carries permissions only, NOT the hooks). /new-project and /handoff install + self-heal
+# this automatically; do it manually only for a hand-built repo:
+cp .claude/hooks/{auto-paste-brief,check-complete,session-end-record}.sh /path/to/new-repo/.claude/hooks/
+cp .claude/settings.devteam.json.template /path/to/new-repo/.claude/settings.json  # strip _comment fields; this is what wires the 3 hooks
 
 # Register in CTO registry
 echo "Add the new project to .cto/projects.yaml"

@@ -2,8 +2,9 @@
 # session-end-record.sh — Per-repo SessionEnd hook for Phase 2 dev-team sessions.
 #
 # Records session end + sets CRASHED flag on unclean exit.
-# Records COMPLETE flag if a dev-report.md exists in any sprint dir (indicates
-# the dev team finished the assigned work).
+# Records COMPLETE flag if THE ACTIVE SPRINT's dev-report.md exists but the sprint
+# is not yet accepted (done-but-not-yet-accepted) — same sprint-scoped logic as
+# check-complete.sh, to avoid a prior sprint's dev-report falsely marking COMPLETE.
 #
 # Stdout of SessionEnd hooks is NOT injected into Claude context (session is
 # already ending). All output is for logging only.
@@ -34,10 +35,29 @@ case "$EXIT_REASON" in
         ;;
 esac
 
-# Check for completion: any dev-report.md in any sprint dir indicates the dev team finished
-if find "$REPO_ROOT/docs/sprints" -name 'dev-report.md' -type f 2>/dev/null | head -1 | grep -q .; then
+# Completion: scope to the active sprint (.claude/current-sprint); a sprint is
+# freshly-complete iff it has dev-report.md but no cto-decision-*.md yet.
+sprint_ready() {
+    [ -f "$1/dev-report.md" ] || return 1
+    ls "$1"/cto-decision-*.md >/dev/null 2>&1 && return 1
+    return 0
+}
+mark() {
     touch "$CLAUDE_DIR/COMPLETE"
-    echo "marked COMPLETE (dev-report.md present)" >> "$CLAUDE_DIR/session.log"
+    echo "marked COMPLETE (sprint=$(basename "$1"))" >> "$CLAUDE_DIR/session.log"
+}
+
+if [ ! -f "$CLAUDE_DIR/COMPLETE" ]; then
+    SPRINT=""
+    [ -f "$CLAUDE_DIR/current-sprint" ] && SPRINT=$(tr -d '[:space:]' < "$CLAUDE_DIR/current-sprint")
+    if [ -n "$SPRINT" ] && [ -d "$REPO_ROOT/docs/sprints/$SPRINT" ]; then
+        sprint_ready "$REPO_ROOT/docs/sprints/$SPRINT" && mark "$REPO_ROOT/docs/sprints/$SPRINT"
+    else
+        for d in "$REPO_ROOT"/docs/sprints/*/; do
+            [ -d "$d" ] || continue
+            if sprint_ready "$d"; then mark "$d"; break; fi
+        done
+    fi
 fi
 
 exit 0

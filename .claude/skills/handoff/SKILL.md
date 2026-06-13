@@ -98,6 +98,39 @@ PATHS_TO_OPEN=""
 while IFS=$'\t' read -r REPO_NAME REPO_PATH PLAN_PATH; do
   BRIEF_FILE="$REPO_PATH/docs/sprints/sprint-$SPRINT/brief.md"
   mkdir -p "$REPO_PATH/docs/sprints/sprint-$SPRINT"
+
+  # --- SELF-HEAL: guarantee session-tracking is wired in the target repo ---
+  # A repo set up without the dev-team hooks (or via settings.permissive.json,
+  # which carries no hooks) would otherwise run UNTRACKED — no current-session.id
+  # (/peek + /resume blind) and no COMPLETE (/sprint-status never sees done).
+  # Install the latest hooks, merge their wiring into the repo's settings.json
+  # (idempotent), and record the active sprint for the completion hooks' scope.
+  mkdir -p "$REPO_PATH/.claude/hooks"
+  for h in auto-paste-brief check-complete session-end-record; do
+    cp "$ROOT/.claude/hooks/$h.sh" "$REPO_PATH/.claude/hooks/$h.sh" 2>/dev/null && chmod +x "$REPO_PATH/.claude/hooks/$h.sh"
+  done
+  echo "sprint-$SPRINT" > "$REPO_PATH/.claude/current-sprint"
+  python3 - "$REPO_PATH/.claude/settings.json" <<'PYWIRE'
+import json, sys, os
+p = sys.argv[1]; s = {}
+if os.path.exists(p):
+    try: s = json.load(open(p))
+    except Exception: s = {}
+s.setdefault("permissions", {}).setdefault("allow", ["Bash(*)","Edit","Write","Read","Glob","Grep","WebFetch","WebSearch"])
+hooks = s.setdefault("hooks", {})
+def ensure(event, cmd):
+    arr = hooks.setdefault(event, [])
+    for g in arr:
+        for h in g.get("hooks", []):
+            if h.get("command","").endswith(cmd): return
+    arr.append({"matcher":"*","hooks":[{"type":"command","command":cmd}]})
+ensure("SessionStart", ".claude/hooks/auto-paste-brief.sh")
+ensure("Stop", ".claude/hooks/check-complete.sh")
+ensure("SessionEnd", ".claude/hooks/session-end-record.sh")
+json.dump(s, open(p,"w"), indent=2)
+print("  self-heal: wired session-tracking hooks in", p)
+PYWIRE
+
   # Clear any stale pending-prompt.md so the SessionStart hook can't auto-paste an
   # old brief; the kickoff prompt points the session at the docs brief explicitly.
   rm -f "$REPO_PATH/.claude/pending-prompt.md"
