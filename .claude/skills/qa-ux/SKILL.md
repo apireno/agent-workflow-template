@@ -78,17 +78,29 @@ if [ "$MODE" = "plan" ]; then
   exit 0
 fi
 
-# ---- drive mode: standup guard before any driving ----
+# ---- drive mode ----
 [ -f "$QA_PLAN" ] || { echo "ERROR: $QA_PLAN missing — run '/qa-ux $SPRINT_DIR --mode plan' first (shift-left: the plan precedes the drive)."; exit 1; }
 mkdir -p "$ASSETS"
 
+# engine=gemini (default, proven, $0): SELF-ORCHESTRATE the whole browser drive — register
+# domshell for gemini, standup guard, single-lane protocol, drive, on-exit lane sweep. The
+# skill no longer just runs standup and assumes the caller has domshell_execute.
+if [ "$ENGINE" = "gemini" ] && [ -x "$ROOT/scripts/agentic/qa-drive-gemini.sh" ]; then
+  echo "DRIVE MODE (engine=gemini) — self-orchestrating via qa-drive-gemini.sh ..."
+  "$ROOT/scripts/agentic/qa-drive-gemini.sh" "$SPRINT_DIR" --url "$URL"
+  echo ""
+  echo "GEMINI DRIVE FINISHED — artifacts written. As CTO, READ + SUMMARIZE them (do NOT re-drive)."
+  exit 0
+fi
+
+# engine=claude (or gemini script absent): standup guard, then drive IN-SESSION per Your task.
 if [ -x "$ROOT/scripts/agentic/qa-standup.sh" ]; then
-  "$ROOT/scripts/agentic/qa-standup.sh" --url "$URL" --sprint-dir "$SPRINT_DIR" || { echo "STANDUP FAILED — aborting drive (target unreachable / prod-guard tripped / DOMShell session absent)."; exit 1; }
+  "$ROOT/scripts/agentic/qa-standup.sh" --url "$URL" --sprint-dir "$SPRINT_DIR" || { echo "STANDUP FAILED — aborting drive (target unreachable / prod-guard tripped / DOMShell not wired)."; exit 1; }
 else
-  echo "WARN: scripts/agentic/qa-standup.sh missing — cannot verify standup/prod-guard. Proceed only on a known non-prod target."
+  echo "WARN: scripts/agentic/qa-standup.sh missing — proceed only on a known non-prod target."
 fi
 echo ""
-echo "DRIVE MODE — standup OK. Provenance: CODE_SHA=${QA_CODE_SHA:-<unset>} APP_VERSION=${QA_APP_VERSION:-<unset>}"
+echo "DRIVE MODE (engine=claude, in-session) — standup OK. Adopt QA-UX and drive per Your task below."
 echo "Artifacts to produce: $QA_REPORT , $SPRINT_DIR/flow-graph.json(+.md) , $ASSETS/"
 ```
 
@@ -105,6 +117,10 @@ Author/refine `qa-plan.md` (template seeded above):
 Stop after writing the plan — no live driving. Sign `— QA`.
 
 ### If `--mode drive` (accept-time gate)
+
+**Engine=gemini (default):** the drive already ran self-orchestrated in the setup block (`qa-drive-gemini.sh` registered domshell for gemini, enforced the single-lane protocol, drove the live browser, and swept the lane on exit). Your job is to **read the produced `qa-report.md` + flow-graph + assets and summarize as CTO — do NOT re-drive.**
+
+**Engine=claude (in-session):** adopt QA-UX and drive it yourself:
 1. **Drive each in-scope surface** against `qa-plan.md`:
    - **browser** → DOMShell MCP. **PRECONDITION: `domshell_execute` MUST be in your tool list.** The standup (`qa-standup.sh`) already self-registers DOMShell into `.mcp.json`; if the tool is still absent, the session simply wasn't restarted afterward (MCP loads at session start). In that case **do NOT substitute API/DB inspection and call it a browser drive**: mark the browser surface `BLOCKED — DOMShell registered but session not restarted`, finish the other surfaces, and tell the CTO to restart the session + re-run. **If present:** **open your OWN tab group first** (`group_id:"new"`, name it `qa-ux-<sprint>`, carry the returned `[lane: <id>]` on every call, and **`group close <group_id>` when done** — the harness also sweeps orphan `qa-ux-*` lanes on exit — NEVER the shared/default lane, so you don't hijack a human's tabs or collide with another agent). Then `ls`/`cd`/`cat`/`text`/`grep`/`extract_table` to assert HARD signals; judge SOFT signals; `screenshot` each hero feature.
    - **CLI** → Bash: invoke the real CLI, capture stdout/stderr + exit codes, assert HARD, judge SOFT.

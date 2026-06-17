@@ -164,3 +164,5 @@ docs/architecture/decisions/cto-*.md
 .claude/.domshell-token
 .domshell-token
 *.domshell-token
+.qa-lane
+**/.qa-lane

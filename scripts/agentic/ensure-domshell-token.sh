@@ -61,6 +61,15 @@ if [ -n "$found" ]; then
   exit 1
 fi
 
+# 2b. Last resort before asking — the live DOMShell proxy's own --token arg.
+PROXY_TOK=$(ps -axo command 2>/dev/null | grep -oE 'domshell-proxy .*--token [0-9a-fA-F]{32,}' | grep -oE '[0-9a-fA-F]{32,}' | head -1)
+if [ -n "$PROXY_TOK" ]; then
+  echo "ensure-domshell-token: DOMSHELL_TOKEN not in env, but the running domshell-proxy is using a token."
+  echo "  Export it from the live proxy (no login shell), then restart the session:"
+  echo "    export DOMSHELL_TOKEN=\$(ps -axo command | grep -oE 'domshell-proxy .*--token [0-9a-fA-F]{32,}' | grep -oE '[0-9a-fA-F]{32,}' | head -1)"
+  exit 1
+fi
+
 # 3. Nowhere — first-time setup: ask for it.
 echo "ensure-domshell-token: DOMSHELL_TOKEN is NOT set and no local token file was found."
 echo "  DOMShell's server/proxy authenticates with this token. Provide it (first-time setup):"
