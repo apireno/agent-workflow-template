@@ -215,6 +215,8 @@ docs/
     vp-security.md                           # VP of Security persona
     vp-compliance.md                         # VP of Compliance persona
     vp-devops.md                             # VP of DevOps persona
+    vp-datascience.md                        # VP of Data Science persona
+    qa-ux.md                                 # QA-UX persona (drives the live app: browser/CLI/MCP)
     dev-team.md                              # Dev Team persona
     context/                                 # Private domain context (gitignored)
       README.md

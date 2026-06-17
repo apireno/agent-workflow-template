@@ -122,6 +122,10 @@ Reference: `cto-rca-20260519-drug-blocklist-domain-leakage.md`, FLEET-ADR-043 (D
 - After `/sprint-accept` finalizes + commits land, **CTO autonomously closes the Terminal tab** — either via `/close-window <repo>` Skill OR by replicating the close-window skill body inline (osascript). Window-mgmt is hygiene, not a permission-gated action.
 - **The only Anthropic-API-charge constraint:** never invoke `claude -p` or direct Anthropic API calls. Everything else (interactive claude CLI, osascript, gemini-cli, file system, Bash) is fair game for autonomous CTO action.
 
+### 8. QA-UX Acceptance Gate (user-facing sprints)
+- For any sprint that exposes a **user-facing surface** (browser / CLI / MCP), run the **QA-UX** persona (`docs/personas/qa-ux.md`) — at **planning** to author `qa-plan.md` (HARD vs SOFT assertions, hero shots), and as an **accept-time gate** before `/sprint-accept`: `/qa-ux <sprint-dir> --mode plan|drive`. Unlike VP reviews (gemini text-only), QA-UX **drives the live app** (DOMShell MCP / CLI / the repo's own MCP) and produces a defect report + UX flow-graph + provenance-stamped hero assets. The report must exist + be reviewed; ship-with-known-defects is a CTO/CEO call.
+- **Browser-QA MCP provisioning (multi-repo projects):** register the DOMShell MCP server in the **UX-focused repos' `.mcp.json`** (the apps under test) — NOT this CTO home or backend/data repos. The browser drive runs in a session **rooted in the UX repo**; `qa-standup.sh` self-provisions DOMShell into the target repo (derived from the sprint dir) and asks for a session restart.
+
 ---
 
 ## Orchestration via skills (replaces deprecated bash scripts)

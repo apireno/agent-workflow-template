@@ -389,3 +389,11 @@ echo "Add the new project to .cto/projects.yaml"
 ```
 
 Then add the project to `.cto/projects.yaml`.
+
+**For UX-focused repos (anything with a browser UI, CLI, or its own MCP that QA-UX will drive):** the `cp -r docs/personas/` + `cp -r scripts/` above already deliver the QA-UX persona + `qa-redact.sh`/`qa-standup.sh`. Additionally copy the **skill** so the browser drive can run from a session rooted in that repo, and let the standup provision the browser MCP itself:
+```bash
+mkdir -p /path/to/ux-repo/.claude/skills
+cp -r .claude/skills/qa-ux /path/to/ux-repo/.claude/skills/   # so /qa-ux runs in that repo
+# DOMShell is auto-provisioned into the UX repo's .mcp.json by qa-standup.sh on first
+# `/qa-ux ... --mode drive`; the CTO home and backend/data repos do NOT get a browser MCP.
+```

@@ -22,7 +22,7 @@ SPRINT_DIR=""; MODE="drive"; SURFACES=""; URL=""; ENGINE="gemini"
 # Accept BOTH `--flag=value` and `--flag value` (the argument-hint shows the space
 # form). Bare `--flag` sets EXPECT so the next token fills it — otherwise a value
 # like `plan` falls through to the positional branch and the flag silently keeps
-# its default (the `--mode plan` -> stays `drive` bug the kgspin CTO flagged).
+# its default (the `--mode plan` -> stays `drive` bug caught in review).
 EXPECT=""
 for tok in $ARGS; do
   if [ -n "$EXPECT" ]; then
