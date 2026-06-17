@@ -90,7 +90,21 @@ This **self-orchestrates**: resolves the token, registers DOMShell for gemini, r
 
 ---
 
-## 7. Bright-line + safety (always)
+## 7. The living baseline + per-sprint regression subset
+
+Three QA artifacts at three scopes:
+
+| Artifact | Scope | Path | Owner / approver |
+|---|---|---|---|
+| **Master baseline** | repo-level, durable acceptance bar (all features + coverage matrix + code-touchpoints) | `docs/qa/ux-baseline-test-plan.md` (template: `docs/qa/_templates/`) | QA-UX authors/amends · **VP-Product approves** |
+| **Sprint `qa-plan.md`** | this sprint's **regression subset** (impacted baseline IDs) + any new tests | `docs/sprints/sprint-XX/qa-plan.md` | QA-UX |
+| **`qa-report.md` + flow-graph** | what this drive actually found | `docs/sprints/sprint-XX/` | QA-UX |
+
+**Workflow:** author a comprehensive baseline → VP-Product approves → promote to `docs/qa/` (living, monotonic). At **planning**, the CTO maps the sprint's code touchpoints to a **subset** of baseline test IDs (the sprint's regression gate). At **accept**, drive that subset + any newly-amended tests; the **full** baseline is re-driven only on cadence (release / major refactor). A sprint that changes a feature **amends** the baseline (VP-Product-approved) as a deliverable — silent drift is an incomplete sprint.
+
+---
+
+## 8. Bright-line + safety (always)
 
 - **Engine:** gemini-CLI or interactive Claude only — **never `claude -p`** / direct Anthropic API.
 - **Target:** a preview/ephemeral **non-prod** env, sandboxed browser profile, stripped creds.
