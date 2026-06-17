@@ -161,3 +161,6 @@ docs/architecture/decisions/cto-*.md
 .claude/used-prompts/
 .claude/session.log
 .mcp.json
+.claude/.domshell-token
+.domshell-token
+*.domshell-token

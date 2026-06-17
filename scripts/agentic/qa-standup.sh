@@ -97,9 +97,13 @@ else:
     print("ADDED")
 PY
 )
-  if [ -z "${DOMSHELL_TOKEN:-}" ]; then
-    echo "qa-standup: WARNING — DOMSHELL_TOKEN is not set in this env; the domshell proxy will get 401 and load no tool."
-    echo "  Export it first (from DOMShell's mcp-server/.env or 'npx @apireno/domshell init'): export DOMSHELL_TOKEN=..."
+  # Ensure the proxy's auth token is available (env is the path the server uses).
+  # First-time setup with no token gets a clear prompt instead of a later 401.
+  TOK_HELPER="$(dirname "$0")/ensure-domshell-token.sh"
+  if [ -x "$TOK_HELPER" ]; then
+    "$TOK_HELPER" "$TARGET_ROOT" || { echo "qa-standup: DOMSHELL_TOKEN not ready (see above) — aborting browser drive."; exit 1; }
+  elif [ -z "${DOMSHELL_TOKEN:-}" ]; then
+    echo "qa-standup: WARNING — DOMSHELL_TOKEN not set and ensure-domshell-token.sh missing; the proxy will 401."
   fi
   if [ "$REG" = "ADDED" ]; then
     echo "qa-standup: self-provisioned DOMShell (stdio proxy -> :3001) into ${MCP_JSON} (UX/target repo; existing servers preserved)."
