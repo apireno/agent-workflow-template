@@ -80,16 +80,29 @@ reuse your existing <ID> instead.
 === END SINGLE-LANE PROTOCOL ===
 
 Execute the journeys in $PLAN. For each: run the steps, assert the HARD signals (exact strings /
-selectors — pass/fail), judge the SOFT signals. Capture each designated hero shot via
-domshell_execute screenshot into $ASSETS/ (provenance: code_sha=$QA_CODE_SHA). Build the UX
-flow-graph ($SPRINT_DIR/flow-graph.json) from the states you actually traverse.
+selectors — pass/fail), judge the SOFT signals.
 
-Then OVERWRITE $REPORT with the real browser findings: surface-by-surface pass/fail, each finding
-tagged severity (BLOCKER/MAJOR/MINOR/NOTE) AND fault-domain (client/integration/server/data-quality/ux),
-with concrete evidence (DOM grep / screenshot path). Route data/quality findings to VP-DS — make NO
-statistical claim. Cross-reference the prior backend audit already in the file (keep its real findings,
-mark them backend-confirmed). End with a ship/no-ship posture. Sign "— QA".
-Do NOT write code, fix bugs, or touch any database. Files only.
+CRITICAL — WAIT FOR ASYNC STATES BEFORE ASSERTING. Never assert on a mid-flight DOM. After any
+action that triggers loading (search, navigate, fetch), WAIT for the loading/searching indicator
+to disappear and the result region to settle (poll the DOM, or use a wait) BEFORE you read/assert.
+A still-loading panel is NOT an empty panel; "0 results" mid-fetch is NOT "search is broken". If
+unsure whether a state settled, wait and re-read rather than file a defect.
+
+Capture each designated hero shot via domshell_execute screenshot into $ASSETS/ (provenance:
+code_sha=$QA_CODE_SHA). Only report a hero shot as captured if the file ACTUALLY EXISTS (verify
+with ls $ASSETS/) — never claim a phantom asset. Build the UX flow-graph
+($SPRINT_DIR/flow-graph.json) from the states you actually traverse.
+
+Then UPDATE $REPORT — do NOT blindly overwrite it. First READ the existing $REPORT and PRESERVE its
+prior backend/data audit findings verbatim (mark them "backend-confirmed"); only ADD or correct the
+BROWSER findings from this drive. Losing the prior audit is a regression. Each finding: severity
+(BLOCKER/MAJOR/MINOR/NOTE) AND fault-domain (client/integration/server/data-quality/ux), with concrete
+evidence (DOM grep / screenshot path). Route data/quality findings to VP-DS — make NO statistical
+claim. End with a ship/no-ship posture. Sign "— QA".
+
+Do NOT write code, fix bugs, or touch any database. Files only. Before you finish, VERIFY your work
+landed: $REPORT was actually written and the claimed hero-shot files exist in $ASSETS/. Do not report
+success for artifacts that were not actually produced.
 EOF
 )
 echo "$PROMPT" | gemini --yolo --allowed-mcp-server-names domshell 2>&1 | grep -vE "Loaded cached|YOLO mode is enabled"

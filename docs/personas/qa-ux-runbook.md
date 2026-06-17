@@ -34,7 +34,19 @@ Writes/seeds `qa-plan.md`: in-scope surfaces, journeys with **HARD** (exact stri
 This **self-orchestrates**: resolves the token, registers DOMShell for gemini, runs the standup guard (prod-guard + reachability + provenance), then drives via `gemini --yolo --allowed-mcp-server-names domshell` under the **single-lane protocol**, writing `qa-report.md`, `flow-graph.json`/`.md`, and provenance-stamped (redacted) hero assets to `assets/`. **One drive at a time** against a shared Chrome.
 
 - Browser-QA runs from a session **rooted in the UX repo** (where DOMShell + the live app are). The CTO home stays DOMShell-free.
-- `--engine claude` (in-session, interactive) is the fallback; gemini is the proven default.
+
+### Engines: gemini (default) vs claude
+
+| | `--engine gemini` (default, recommended) | `--engine claude` |
+|---|---|---|
+| How | `qa-drive-gemini.sh` fans the persona+plan to `gemini --yolo --allowed-mcp-server-names domshell` in-process | `qa-drive-claude.sh` **launches an interactive Claude session** (reuses `/handoff` machinery) to drive |
+| Setup the CTO does | none — self-orchestrated | none — the skill writes the brief to `docs/`, writes `.claude/pending-prompt.md` itself, pre-trusts the workspace (CTO **never** hand-edits `.claude/`) |
+| Manual step | none | **press Enter once** in the launched tab (Claude-Code limitation: the brief auto-pastes but doesn't auto-submit) |
+| Cost | $0 | subscription pool (interactive; never `claude -p`) |
+
+`--handover <path>` (both engines, primarily claude) drives from an **existing brief/handover doc** instead of the synthesized default — briefs always live in `docs/`, never `.claude/`. **Prefer gemini**: it's proven, $0, and avoids the press-Enter step; reach for claude only when you specifically need it.
+
+> **Drive-prompt hygiene baked into both engines:** wait for async/loading states to settle before asserting (a mid-flight DOM is not a defect — this caused false "search broken" findings); **update** `qa-report.md` preserving the prior backend audit (don't overwrite); and verify artifacts/hero-shots actually exist before reporting success.
 
 ## 4. Tab-group lifecycle (cleanup)
 

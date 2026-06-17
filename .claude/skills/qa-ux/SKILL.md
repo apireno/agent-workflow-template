@@ -2,7 +2,7 @@
 name: qa-ux
 description: Drive the live product as a skeptical end-user across browser (DOMShell MCP), CLI, and MCP surfaces, then produce a defect report + a derived UX flow-graph + provenance-stamped hero assets. Two modes — `--mode plan` authors qa-plan.md at sprint-planning time (HARD vs SOFT assertions, hero shots, in-scope surfaces); `--mode drive` (default) is the accept-time gate that exercises the running app against qa-plan.md before /sprint-accept. Use when a user-facing sprint needs UX/output-quality verification, or to author a QA test plan up front. Implements docs/personas/qa-ux.md.
 allowed-tools: Bash(*) Read Write
-argument-hint: <sprint-dir> [--mode plan|drive] [--surfaces browser,cli,mcp] [--url <app-url>] [--engine gemini|claude]
+argument-hint: <sprint-dir> [--mode plan|drive] [--surfaces browser,cli,mcp] [--url <app-url>] [--engine gemini|claude] [--handover <path>]
 ---
 
 # QA-UX: $ARGUMENTS
@@ -18,7 +18,7 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 
 ARGS="$ARGUMENTS"
-SPRINT_DIR=""; MODE="drive"; SURFACES=""; URL=""; ENGINE="gemini"
+SPRINT_DIR=""; MODE="drive"; SURFACES=""; URL=""; ENGINE="gemini"; HANDOVER=""
 # Accept BOTH `--flag=value` and `--flag value` (the argument-hint shows the space
 # form). Bare `--flag` sets EXPECT so the next token fills it — otherwise a value
 # like `plan` falls through to the positional branch and the flag silently keeps
@@ -31,6 +31,7 @@ for tok in $ARGS; do
       surfaces) SURFACES="$tok" ;;
       url)      URL="$tok" ;;
       engine)   ENGINE="$tok" ;;
+      handover) HANDOVER="$tok" ;;
     esac
     EXPECT=""; continue
   fi
@@ -39,10 +40,12 @@ for tok in $ARGS; do
     --surfaces=*) SURFACES="${tok#--surfaces=}" ;;
     --url=*)      URL="${tok#--url=}" ;;
     --engine=*)   ENGINE="${tok#--engine=}" ;;
+    --handover=*) HANDOVER="${tok#--handover=}" ;;
     --mode)       EXPECT=mode ;;
     --surfaces)   EXPECT=surfaces ;;
     --url)        EXPECT=url ;;
     --engine)     EXPECT=engine ;;
+    --handover)   EXPECT=handover ;;
     --*)          echo "Unknown flag: $tok" >&2 ;;
     *)            [ -z "$SPRINT_DIR" ] && SPRINT_DIR="$tok" ;;
   esac
@@ -93,14 +96,25 @@ if [ "$ENGINE" = "gemini" ] && [ -x "$ROOT/scripts/agentic/qa-drive-gemini.sh" ]
   exit 0
 fi
 
-# engine=claude (or gemini script absent): standup guard, then drive IN-SESSION per Your task.
+# engine=claude: LAUNCH an interactive Claude session via qa-drive-claude.sh (reuses /handoff
+# machinery — brief in docs/, skill writes pending-prompt.md, pre-trusts the workspace). The
+# CTO never hand-edits .claude/. Optional --handover <path> drives from an existing brief.
+if [ "$ENGINE" = "claude" ] && [ -x "$ROOT/scripts/agentic/qa-drive-claude.sh" ]; then
+  echo "DRIVE MODE (engine=claude) — launching an interactive Claude session via qa-drive-claude.sh ..."
+  "$ROOT/scripts/agentic/qa-drive-claude.sh" "$SPRINT_DIR" --url "$URL" ${HANDOVER:+--handover "$HANDOVER"}
+  echo ""
+  echo "CLAUDE DRIVE LAUNCHED — press Enter ONCE in the new tab to start; artifacts land in the sprint dir."
+  exit 0
+fi
+
+# fallback (no engine script available): standup guard, then drive IN-SESSION per Your task.
 if [ -x "$ROOT/scripts/agentic/qa-standup.sh" ]; then
   "$ROOT/scripts/agentic/qa-standup.sh" --url "$URL" --sprint-dir "$SPRINT_DIR" || { echo "STANDUP FAILED — aborting drive (target unreachable / prod-guard tripped / DOMShell not wired)."; exit 1; }
 else
   echo "WARN: scripts/agentic/qa-standup.sh missing — proceed only on a known non-prod target."
 fi
 echo ""
-echo "DRIVE MODE (engine=claude, in-session) — standup OK. Adopt QA-UX and drive per Your task below."
+echo "DRIVE MODE (in-session fallback) — standup OK. Adopt QA-UX and drive per Your task below."
 echo "Artifacts to produce: $QA_REPORT , $SPRINT_DIR/flow-graph.json(+.md) , $ASSETS/"
 ```
 
