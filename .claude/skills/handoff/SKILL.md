@@ -110,13 +110,25 @@ while IFS=$'\t' read -r REPO_NAME REPO_PATH PLAN_PATH; do
     cp "$ROOT/.claude/hooks/$h.sh" "$REPO_PATH/.claude/hooks/$h.sh" 2>/dev/null && chmod +x "$REPO_PATH/.claude/hooks/$h.sh"
   done
   echo "sprint-$SPRINT" > "$REPO_PATH/.claude/current-sprint"
-  python3 - "$REPO_PATH/.claude/settings.json" <<'PYWIRE'
+  python3 - "$REPO_PATH/.claude/settings.json" "$REPO_PATH" <<'PYWIRE'
 import json, sys, os
-p = sys.argv[1]; s = {}
+p = sys.argv[1]; repo = sys.argv[2]; s = {}
 if os.path.exists(p):
     try: s = json.load(open(p))
     except Exception: s = {}
-s.setdefault("permissions", {}).setdefault("allow", ["Bash(*)","Edit","Write","Read","Glob","Grep","WebFetch","WebSearch"])
+allow = s.setdefault("permissions", {}).setdefault("allow", ["Bash(*)","Edit","Write","Read","Glob","Grep","WebFetch","WebSearch"])
+# Pre-trust the repo's MCP servers so per-tool prompts don't stall the auto-kickoff.
+# Each MCP tool otherwise prompts separately (e.g. codegram, domshell) — `mcp__<server>`
+# allows all of that server's tools, and enableAllProjectMcpServers skips the trust prompt.
+servers = []
+mj = os.path.join(repo, ".mcp.json")
+if os.path.exists(mj):
+    try: servers = list(json.load(open(mj)).get("mcpServers", {}).keys())
+    except Exception: servers = []
+for srv in servers:
+    rule = "mcp__%s" % srv
+    if rule not in allow: allow.append(rule)
+if servers: s["enableAllProjectMcpServers"] = True
 hooks = s.setdefault("hooks", {})
 def ensure(event, cmd):
     arr = hooks.setdefault(event, [])
@@ -128,8 +140,32 @@ ensure("SessionStart", ".claude/hooks/auto-paste-brief.sh")
 ensure("Stop", ".claude/hooks/check-complete.sh")
 ensure("SessionEnd", ".claude/hooks/session-end-record.sh")
 json.dump(s, open(p,"w"), indent=2)
-print("  self-heal: wired session-tracking hooks in", p)
+print("  self-heal: wired hooks + pre-trusted MCP servers %s in %s" % (servers or "(none)", p))
 PYWIRE
+
+  # Pre-trust the repo's MCP servers at the USER scope too (~/.claude.json), so the
+  # startup "Use this .mcp.json server?" dialog never blocks the auto-kickoff keystroke.
+  python3 - "$REPO_PATH" <<'PYMCP'
+import json, sys, os
+from pathlib import Path
+repo = sys.argv[1]; mj = os.path.join(repo, ".mcp.json"); servers = []
+if os.path.exists(mj):
+    try: servers = list(json.load(open(mj)).get("mcpServers", {}).keys())
+    except Exception: servers = []
+cj = Path.home()/".claude.json"
+if cj.exists() and servers:
+    try:
+        d = json.loads(cj.read_text())
+        proj = d.setdefault("projects", {}).setdefault(repo, {})
+        proj["hasTrustDialogAccepted"] = True
+        en = proj.setdefault("enabledMcpjsonServers", [])
+        for srv in servers:
+            if srv not in en: en.append(srv)
+        cj.write_text(json.dumps(d, indent=2))
+        print("  self-heal: pre-trusted MCP in ~/.claude.json:", servers)
+    except Exception as e:
+        print("  WARN: could not pre-trust MCP in ~/.claude.json:", e)
+PYMCP
 
   # Clear any stale pending-prompt.md so the SessionStart hook can't auto-paste an
   # old brief; the kickoff prompt points the session at the docs brief explicitly.
