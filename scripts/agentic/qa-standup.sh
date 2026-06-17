@@ -64,15 +64,34 @@ echo "qa-standup: provenance  code_sha=$QA_CODE_SHA  app_version=$QA_APP_VERSION
 # 4. Browser surface -> DOMShell must be (a) REGISTERED in this repo's .mcp.json
 #    so the agent actually has the domshell_execute tool, and (b) reachable.
 if [ -z "$SURFACES" ] || printf '%s' "$SURFACES" | grep -q browser; then
-  # 4a. CRITICAL registration check — the gap that silently turns a "browser drive"
-  # into API-only inspection. A server merely running on :3001 is NOT enough; MCP
-  # tools load at session START, so domshell must be in .mcp.json AND the session
-  # must have been (re)started after it was added.
+  # 4a. SELF-PROVISION the DOMShell MCP registration. A server merely running on
+  # :3001 is NOT enough — MCP tools load at session START, so domshell must be in
+  # this repo's .mcp.json AND the session restarted. If it's missing we ADD it
+  # (idempotent, preserving any existing servers) and tell the operator to restart,
+  # rather than making them hand-edit config (same self-heal pattern as /handoff).
   MCP_JSON="$ROOT/.mcp.json"
-  if ! grep -q '"domshell"' "$MCP_JSON" 2>/dev/null; then
-    echo "qa-standup: DOMShell is NOT registered in ${MCP_JSON} — the agent will have NO domshell_execute tool,"
-    echo "  so the browser surface cannot actually be driven (it would silently fall back to API/DB inspection)."
-    echo "  Add this server block, then RESTART the session (MCP loads at startup):"
+  REG=$(python3 - "$MCP_JSON" <<'PY' 2>/dev/null
+import json, sys, os
+p = sys.argv[1]; d = {}
+if os.path.exists(p):
+    try: d = json.load(open(p))
+    except Exception: d = {}
+s = d.setdefault("mcpServers", {})
+if "domshell" in s:
+    print("PRESENT")
+else:
+    s["domshell"] = {"command": "npx", "args": ["-y", "@apireno/domshell", "--allow-write"]}
+    json.dump(d, open(p, "w"), indent=2)
+    print("ADDED")
+PY
+)
+  if [ "$REG" = "ADDED" ]; then
+    echo "qa-standup: self-provisioned DOMShell into ${MCP_JSON} (existing servers preserved)."
+    echo "  >>> RESTART this session so MCP loads the new server, then re-run /qa-ux ... --mode drive. <<<"
+    echo "  Also ensure the server is up (npx @apireno/domshell --allow-write) and the Chrome extension is connected."
+    exit 1
+  elif [ "$REG" != "PRESENT" ]; then
+    echo "qa-standup: could not auto-register DOMShell in ${MCP_JSON} (python3 unavailable?). Add manually + restart:"
     echo '    "domshell": { "command": "npx", "args": ["-y", "@apireno/domshell", "--allow-write"] }'
     exit 1
   fi
