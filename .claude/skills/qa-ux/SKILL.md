@@ -19,12 +19,30 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo
 
 ARGS="$ARGUMENTS"
 SPRINT_DIR=""; MODE="drive"; SURFACES=""; URL=""; ENGINE="gemini"
+# Accept BOTH `--flag=value` and `--flag value` (the argument-hint shows the space
+# form). Bare `--flag` sets EXPECT so the next token fills it — otherwise a value
+# like `plan` falls through to the positional branch and the flag silently keeps
+# its default (the `--mode plan` -> stays `drive` bug the kgspin CTO flagged).
+EXPECT=""
 for tok in $ARGS; do
+  if [ -n "$EXPECT" ]; then
+    case "$EXPECT" in
+      mode)     MODE="$tok" ;;
+      surfaces) SURFACES="$tok" ;;
+      url)      URL="$tok" ;;
+      engine)   ENGINE="$tok" ;;
+    esac
+    EXPECT=""; continue
+  fi
   case "$tok" in
     --mode=*)     MODE="${tok#--mode=}" ;;
     --surfaces=*) SURFACES="${tok#--surfaces=}" ;;
     --url=*)      URL="${tok#--url=}" ;;
     --engine=*)   ENGINE="${tok#--engine=}" ;;
+    --mode)       EXPECT=mode ;;
+    --surfaces)   EXPECT=surfaces ;;
+    --url)        EXPECT=url ;;
+    --engine)     EXPECT=engine ;;
     --*)          echo "Unknown flag: $tok" >&2 ;;
     *)            [ -z "$SPRINT_DIR" ] && SPRINT_DIR="$tok" ;;
   esac
