@@ -64,12 +64,15 @@ echo "qa-standup: provenance  code_sha=$QA_CODE_SHA  app_version=$QA_APP_VERSION
 # 4. Browser surface -> DOMShell must be (a) REGISTERED in this repo's .mcp.json
 #    so the agent actually has the domshell_execute tool, and (b) reachable.
 if [ -z "$SURFACES" ] || printf '%s' "$SURFACES" | grep -q browser; then
-  # 4a. SELF-PROVISION the DOMShell MCP registration. A server merely running on
-  # :3001 is NOT enough — MCP tools load at session START, so domshell must be in
-  # this repo's .mcp.json AND the session restarted. If it's missing we ADD it
-  # (idempotent, preserving any existing servers) and tell the operator to restart,
-  # rather than making them hand-edit config (same self-heal pattern as /handoff).
-  MCP_JSON="$ROOT/.mcp.json"
+  # 4a. SELF-PROVISION the DOMShell MCP registration into the UX/TARGET repo — the
+  # one that owns the sprint dir (where the app under test + DOMShell live). A
+  # project's CTO home and non-UX repos do NOT get a browser MCP; only UX-focused
+  # repos do. The browser drive must then run from a session ROOTED IN that repo so
+  # the tool actually loads (MCP loads at session start). Missing -> we ADD it
+  # (idempotent, preserving existing servers), same self-heal pattern as /handoff.
+  TARGET_ROOT="$ROOT"
+  [ -n "$SPRINT_DIR" ] && TARGET_ROOT="$(git -C "$SPRINT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$ROOT")"
+  MCP_JSON="$TARGET_ROOT/.mcp.json"
   REG=$(python3 - "$MCP_JSON" <<'PY' 2>/dev/null
 import json, sys, os
 p = sys.argv[1]; d = {}
@@ -86,8 +89,8 @@ else:
 PY
 )
   if [ "$REG" = "ADDED" ]; then
-    echo "qa-standup: self-provisioned DOMShell into ${MCP_JSON} (existing servers preserved)."
-    echo "  >>> RESTART this session so MCP loads the new server, then re-run /qa-ux ... --mode drive. <<<"
+    echo "qa-standup: self-provisioned DOMShell into ${MCP_JSON} (the UX/target repo; existing servers preserved)."
+    echo "  >>> Run the browser drive from a session ROOTED IN ${TARGET_ROOT} (open/restart claude there) so MCP loads it, then re-run --mode drive. <<<"
     echo "  Also ensure the server is up (npx @apireno/domshell --allow-write) and the Chrome extension is connected."
     exit 1
   elif [ "$REG" != "PRESENT" ]; then

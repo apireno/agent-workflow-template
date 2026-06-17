@@ -264,6 +264,7 @@ The CTO can invoke VP personas for spot-checks without running `vp-review.sh`. S
 1. Read `docs/personas/qa-ux.md`
 2. Adopt that persona fully — **drive the live product** as a skeptical user; find and route defects, never fix
 3. Unlike the VPs (review-only over gemini), QA-UX **uses tools** (DOMShell MCP for browser, Bash for CLI, the repo's own MCP) — it runs as an interactive/MCP-enabled session, never `claude -p`.
+4. **Browser-QA MCP provisioning (multi-repo projects):** the CTO registers the DOMShell MCP server in the **UX-focused repos' `.mcp.json`** (the apps under test) — NOT this CTO home or backend/data repos, which don't drive browsers. The browser drive runs in a session **rooted in the UX repo**. `qa-standup.sh` self-provisions this into the target repo automatically and asks for a restart; you only carry the principle of *which* repos get it.
 
 **Produces:** `qa-plan.md` (planning), `qa-report.md` (defect report by severity + fault-domain), provenance-stamped hero assets, a derived UX flow-graph, regression scripts for CI.
 **NEVER produces:** source code, bug fixes, sprint plans, PRDs, ADRs.
