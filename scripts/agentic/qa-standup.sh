@@ -61,14 +61,27 @@ export QA_CODE_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo 
 export QA_APP_VERSION="${QA_APP_VERSION:-$( [ -f "$ROOT/VERSION" ] && cat "$ROOT/VERSION" 2>/dev/null || (command -v jq >/dev/null 2>&1 && [ -f "$ROOT/package.json" ] && jq -r '.version // "unknown"' "$ROOT/package.json" 2>/dev/null) || echo unknown )}"
 echo "qa-standup: provenance  code_sha=$QA_CODE_SHA  app_version=$QA_APP_VERSION"
 
-# 4. Browser surface -> DOMShell MCP bridge check (HTTP MCP default :3001).
+# 4. Browser surface -> DOMShell must be (a) REGISTERED in this repo's .mcp.json
+#    so the agent actually has the domshell_execute tool, and (b) reachable.
 if [ -z "$SURFACES" ] || printf '%s' "$SURFACES" | grep -q browser; then
+  # 4a. CRITICAL registration check — the gap that silently turns a "browser drive"
+  # into API-only inspection. A server merely running on :3001 is NOT enough; MCP
+  # tools load at session START, so domshell must be in .mcp.json AND the session
+  # must have been (re)started after it was added.
+  MCP_JSON="$ROOT/.mcp.json"
+  if ! grep -q '"domshell"' "$MCP_JSON" 2>/dev/null; then
+    echo "qa-standup: DOMShell is NOT registered in ${MCP_JSON} — the agent will have NO domshell_execute tool,"
+    echo "  so the browser surface cannot actually be driven (it would silently fall back to API/DB inspection)."
+    echo "  Add this server block, then RESTART the session (MCP loads at startup):"
+    echo '    "domshell": { "command": "npx", "args": ["-y", "@apireno/domshell", "--allow-write"] }'
+    exit 1
+  fi
   DS_PORT="${DOMSHELL_MCP_PORT:-3001}"
   if command -v curl >/dev/null 2>&1; then
     if curl -s -o /dev/null --max-time 4 "http://127.0.0.1:${DS_PORT}/mcp" 2>/dev/null; then
-      echo "qa-standup: DOMShell MCP bridge responding on :${DS_PORT}"
+      echo "qa-standup: DOMShell registered + bridge responding on :${DS_PORT}"
     else
-      echo "qa-standup: DOMShell MCP bridge NOT reachable on :${DS_PORT}."
+      echo "qa-standup: DOMShell registered but bridge NOT reachable on :${DS_PORT}."
       echo "  Start it (npx @apireno/domshell --allow-write), open the Chrome extension, and 'connect <token>'."
       echo "  (HITL: browser QA needs a live, connected DOMShell session — see persona Operating Constraints.)"
       exit 1
