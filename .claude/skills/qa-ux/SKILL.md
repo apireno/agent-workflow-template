@@ -106,7 +106,7 @@ Stop after writing the plan — no live driving. Sign `— QA`.
 
 ### If `--mode drive` (accept-time gate)
 1. **Drive each in-scope surface** against `qa-plan.md`:
-   - **browser** → DOMShell MCP (`domshell_execute`): `ls`/`cd`/`cat`/`text`/`grep`/`extract_table` to assert HARD signals; judge SOFT signals; `screenshot` each hero feature.
+   - **browser** → DOMShell MCP (`domshell_execute`): **open your OWN tab group first** (`group_id:"new"`, carry the returned `[lane: <id>]` on every call, close it when done — NEVER the shared/default lane, so you don't hijack a human's tabs or collide with another agent). Then `ls`/`cd`/`cat`/`text`/`grep`/`extract_table` to assert HARD signals; judge SOFT signals; `screenshot` each hero feature.
    - **CLI** → Bash: invoke the real CLI, capture stdout/stderr + exit codes, assert HARD, judge SOFT.
    - **MCP** → call the repo's own MCP server as an agent would; check tool-description fidelity, round-trips/token cost, error recovery.
 2. **Build the UX flow-graph** as a byproduct (`$SPRINT_DIR/flow-graph.json` + Mermaid `flow-graph.md`): nodes = UI states (route + HARD landmarks, transient DOM stripped), edges = actions (+ the API calls they fire + any defect). `diff` against the prior sprint's if present.
