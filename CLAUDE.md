@@ -269,7 +269,7 @@ The CTO can invoke VP personas for spot-checks without running `vp-review.sh`. S
 **Produces:** `qa-plan.md` (planning), `qa-report.md` (defect report by severity + fault-domain), provenance-stamped hero assets, a derived UX flow-graph, regression scripts for CI.
 **NEVER produces:** source code, bug fixes, sprint plans, PRDs, ADRs.
 
-**Invoke QA-UX when** a sprint exposes a user-facing surface (browser / CLI / MCP): at **planning** to author the QA plan (`/qa-ux <sprint-dir> --mode plan`), and as the **accept-time gate** before `/sprint-accept` (`/qa-ux <sprint-dir> --mode drive`). The report must exist + be reviewed; ship-with-known-defects is a CTO/CEO call.
+**Invoke QA-UX when** a sprint exposes a user-facing surface (browser / CLI / MCP): at **planning** to author the QA plan (`/qa-ux <sprint-dir> --mode plan`), and as the **accept-time gate** before `/sprint-accept` (`/qa-ux <sprint-dir> --mode drive`). The report must exist + be reviewed; ship-with-known-defects is a CTO/CEO call. **DOMShell setup, the gemini drive engine, tab-group cleanup, and a troubleshooting table live in `docs/personas/qa-ux-runbook.md`.**
 
 ---
 
