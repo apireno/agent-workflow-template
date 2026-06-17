@@ -26,7 +26,14 @@ When handoffs are conversational, context degrades at every hop. Files in the re
 | **VP of DevOps** | `— DevOps` | LLM CLI or Claude (skill) | `vp-review.sh vp-devops` or `/vp-devops` |
 | **VP of Data Science** | `— Data` | LLM CLI or Claude (skill) | `vp-review.sh vp-datascience` or `/vp-datascience` |
 | **Dev Team** | `— Dev` | Claude Code (VS Code) | Default role in CLAUDE.md |
+| **QA-UX** | `— QA` | Claude/MCP-enabled (drives live app) + gemini for SOFT judgment | `/qa-ux <sprint-dir> --mode plan\|drive` |
 | **CEO** | — | Human | All approval gates |
+
+> **QA-UX artifacts** live in the sprint dir: `qa-plan.md` (authored at planning — HARD vs SOFT
+> assertions, in-scope surfaces, hero shots), `qa-report.md` (the accept-time defect report by
+> severity + fault-domain), `flow-graph.json`/`flow-graph.md` (derived UX state-graph, sprint-scoped),
+> and `assets/` (provenance-stamped, redacted hero shots). Unlike VP reviews, QA-UX **drives the
+> running app** (DOMShell MCP / CLI / the repo's own MCP) — it is not a text review.
 
 ### Review Engine Model
 
