@@ -21,10 +21,21 @@ TOKFILE_PROJECT="$ROOT/.claude/.domshell-token"          # gitignored, per-proje
 TOKFILE_HOME="$HOME/.domshell-token"                     # gitignored, per-user
 DOMSHELL_ENV="${DOMSHELL_HOME:-$HOME/repos/DOMShell}/mcp-server/.env"
 
-# 1. Already in the environment Claude Code will inherit -> ready.
+# 1. Already in the environment the launching session will inherit -> validate it.
+# CRITICAL: a login-shell read (`zsh -lic`, "Restored session ..." banners, etc.) can
+# prepend junk to the token -> a contaminated value that silently 401s/Disconnects.
+# The real token is clean hex; reject contamination loudly instead of registering a bad one.
 if [ -n "${DOMSHELL_TOKEN:-}" ]; then
-  echo "ensure-domshell-token: DOMSHELL_TOKEN present in env — OK."
-  exit 0
+  if printf '%s' "$DOMSHELL_TOKEN" | grep -qE '^[0-9a-fA-F]{32,}$'; then
+    echo "ensure-domshell-token: DOMSHELL_TOKEN present in env (clean hex) — OK."
+    exit 0
+  fi
+  rawlen=$(printf '%s' "$DOMSHELL_TOKEN" | wc -c | tr -d ' ')
+  echo "ensure-domshell-token: DOMSHELL_TOKEN is set but is NOT clean hex (len=$rawlen) — likely login-shell banner contamination."
+  echo "  Re-export just the hex portion (do NOT read it via a login shell / 'zsh -lic'):"
+  echo "    export DOMSHELL_TOKEN=\$(printf '%s' \"\$DOMSHELL_TOKEN\" | grep -oE '[0-9a-fA-F]{32,}' | head -1)"
+  echo "  then restart the session. (The token value is not printed here on purpose.)"
+  exit 1
 fi
 
 # 2. Not in env — look in known local files (do NOT print the value).
@@ -42,10 +53,11 @@ if [ -n "$found" ]; then
   echo "ensure-domshell-token: DOMSHELL_TOKEN not in env, but found in $found."
   echo "  Export it in the shell that launches claude, then restart the session:"
   if [ "$(basename "$found")" = ".env" ]; then
-    echo "    export DOMSHELL_TOKEN=\$(grep '^DOMSHELL_TOKEN=' \"$found\" | cut -d= -f2-)"
+    echo "    export DOMSHELL_TOKEN=\$(grep '^DOMSHELL_TOKEN=' \"$found\" | cut -d= -f2- | tr -dc '0-9a-fA-F')"
   else
-    echo "    export DOMSHELL_TOKEN=\$(cat \"$found\")"
+    echo "    export DOMSHELL_TOKEN=\$(tr -dc '0-9a-fA-F' < \"$found\")"
   fi
+  echo "  (the trailing 'tr -dc' strips any banner/whitespace so only the hex token survives.)"
   exit 1
 fi
 
