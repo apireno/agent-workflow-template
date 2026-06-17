@@ -81,21 +81,38 @@ if os.path.exists(p):
     except Exception: d = {}
 s = d.setdefault("mcpServers", {})
 if "domshell" in s:
-    print("PRESENT")
+    # Only the proxy form is correct here. A direct http/sse entry (e.g.
+    # url=:3001|:17854/mcp) 401s without the token; a `--allow-write` spawn
+    # conflicts with the running server. Flag those as wrong so they get fixed.
+    print("PRESENT" if "domshell-proxy" in json.dumps(s["domshell"]) else "PRESENT_WRONG")
 else:
-    s["domshell"] = {"command": "npx", "args": ["-y", "@apireno/domshell", "--allow-write"]}
+    # stdio PROXY that connects to the already-running DOMShell server on :3001
+    # (Docker/ToolHive/native) and authenticates with $DOMSHELL_TOKEN. This does
+    # NOT start a second server (no :3001/:9876 port conflict) — the spawn form
+    # (`--allow-write`) fails whenever a server is already up. Token via env so it
+    # is never written into the (committable) config file.
+    s["domshell"] = {"command": "npx", "args": ["-y", "-p", "@apireno/domshell",
+        "domshell-proxy", "--port", "3001", "--token", "${DOMSHELL_TOKEN}"]}
     json.dump(d, open(p, "w"), indent=2)
     print("ADDED")
 PY
 )
+  if [ -z "${DOMSHELL_TOKEN:-}" ]; then
+    echo "qa-standup: WARNING — DOMSHELL_TOKEN is not set in this env; the domshell proxy will get 401 and load no tool."
+    echo "  Export it first (from DOMShell's mcp-server/.env or 'npx @apireno/domshell init'): export DOMSHELL_TOKEN=..."
+  fi
   if [ "$REG" = "ADDED" ]; then
-    echo "qa-standup: self-provisioned DOMShell into ${MCP_JSON} (the UX/target repo; existing servers preserved)."
-    echo "  >>> Run the browser drive from a session ROOTED IN ${TARGET_ROOT} (open/restart claude there) so MCP loads it, then re-run --mode drive. <<<"
-    echo "  Also ensure the server is up (npx @apireno/domshell --allow-write) and the Chrome extension is connected."
+    echo "qa-standup: self-provisioned DOMShell (stdio proxy -> :3001) into ${MCP_JSON} (UX/target repo; existing servers preserved)."
+    echo "  It CONNECTS to the already-running DOMShell server (Docker/ToolHive/native) via \$DOMSHELL_TOKEN — it does NOT start a conflicting server."
+    echo "  >>> Export DOMSHELL_TOKEN, then run the drive from a session ROOTED IN ${TARGET_ROOT} (open/restart claude there), connect the Chrome extension, and re-run --mode drive. <<<"
+    exit 1
+  elif [ "$REG" = "PRESENT_WRONG" ]; then
+    echo "qa-standup: ${MCP_JSON} has a DOMShell entry that is NOT the proxy form — a direct http/sse url 401s without the token, and a server-spawn conflicts with the running server. Replace it with the proxy form below, then restart the session:"
+    echo '    "domshell": { "command": "npx", "args": ["-y","-p","@apireno/domshell","domshell-proxy","--port","3001","--token","${DOMSHELL_TOKEN}"] }'
     exit 1
   elif [ "$REG" != "PRESENT" ]; then
     echo "qa-standup: could not auto-register DOMShell in ${MCP_JSON} (python3 unavailable?). Add manually + restart:"
-    echo '    "domshell": { "command": "npx", "args": ["-y", "@apireno/domshell", "--allow-write"] }'
+    echo '    "domshell": { "command": "npx", "args": ["-y","-p","@apireno/domshell","domshell-proxy","--port","3001","--token","${DOMSHELL_TOKEN}"] }'
     exit 1
   fi
   DS_PORT="${DOMSHELL_MCP_PORT:-3001}"
