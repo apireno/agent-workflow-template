@@ -24,10 +24,7 @@ fi
 echo ""
 echo "Per-repo lane-rules present:"
 if [ -f "$ROOT/.cto/projects.yaml" ]; then
-  python3 - "$ROOT/.cto/projects.yaml" <<'PY' | while IFS= read -r p; do
-    [ -d "$p" ] || continue
-    if [ -f "$p/docs/architecture/lane-rules.txt" ]; then echo "  [x] $(basename "$p")"; else echo "  [ ] $(basename "$p") — no lane-rules.txt (declare its forbidden imports)"; fi
-  done
+  python3 - "$ROOT/.cto/projects.yaml" <<'PY' | while IFS= read -r p; do [ -d "$p" ] || continue; if [ -f "$p/docs/architecture/lane-rules.txt" ]; then echo "  [x] $(basename "$p")"; else echo "  [ ] $(basename "$p") — no lane-rules.txt (declare forbidden imports)"; fi; done
 import re,sys
 t=open(sys.argv[1]).read()
 for b in re.split(r'(?=- name:)',t):
