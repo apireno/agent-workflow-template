@@ -74,9 +74,9 @@ surface using the domshell MCP (single tool domshell_execute; browser-as-filesys
 newline-separated).
 
 === SINGLE-LANE PROTOCOL (MANDATORY — read before any domshell call) ===
-DOMShell drives the operator's REAL Chrome; isolation is by GROUP (a lane). group close <id> is
-group-scoped — it closes only that group's tabs, never the user's. You operate in EXACTLY ONE
-named group for the WHOLE drive.
+DOMShell drives the real Chrome; isolation is by GROUP (a lane). group close <id> is group-scoped
+— it closes only the tabs in that lane, never any other tabs. You operate in EXACTLY ONE named
+group for the WHOLE drive.
 1. FIRST domshell_execute call ONLY — mint + name + navigate in ONE call:
      { "command": "text main", "group_id": "new", "initial_url": "$URL", "group_name": "$GROUP_NAME" }
    This opens \$URL at creation (no separate nav to fail) and tags the group. The reply ends with
