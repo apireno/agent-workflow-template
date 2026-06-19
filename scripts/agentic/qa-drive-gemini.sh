@@ -44,18 +44,28 @@ echo "qa-drive-gemini: domshell registered for gemini (--trust); connection veri
 export QA_CODE_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 echo "qa-drive-gemini: domshell Connected · target $URL · code_sha $QA_CODE_SHA · driving via gemini --yolo"
 
-# On-exit teardown sweep: close the QA lane even if the drive CRASHES. DOMShell leaves
-# lanes open on disconnect, so a failed drive would otherwise orphan a Chrome tab group.
-# The agent also closes its lane explicitly (protocol step 4); `group close` is idempotent
-# so the explicit close + this sweep are both safe. The agent records its lane id below.
-LANE_FILE="$SPRINT_DIR/.qa-lane"; rm -f "$LANE_FILE"
+# PROVENANCE-based cleanup (NO server GC). The drive names its group by a hard convention and
+# records EVERY lane id it mints; on ANY exit (success / crash / timeout / kill / 403) the trap
+# closes exactly those ids — never a guessed "garbage" group, never the user's tabs. group close
+# is group-scoped + idempotent, so this + the agent's own close + the invoker's post-round sweep
+# are all safe. DOMShell @apireno/domshell 2.0.5 contract: group_id:"new" + initial_url + group_name
+# in ONE call. (Chrome titles the group with group_name on extension >=1.3.2; the lane id is the
+# load-bearing handle today — the sweep matches ids, the name is the forward-compat bonus.)
+GROUP_NAME="qa-ux-$(basename "$ROOT")-$(basename "$SPRINT_DIR")"
+LANE_FILE="$SPRINT_DIR/.qa-lanes"; : > "$LANE_FILE"
 teardown() {
-  [ -s "$LANE_FILE" ] || return 0
-  local id; id=$(tr -dc '0-9' < "$LANE_FILE" 2>/dev/null)
-  [ -n "$id" ] && { echo "qa-drive-gemini: teardown — closing lane $id (orphan-safe)"; printf 'group close %s\n' "$id" | gemini --yolo --allowed-mcp-server-names domshell >/dev/null 2>&1 || true; }
-  rm -f "$LANE_FILE"
+  if [ -s "$LANE_FILE" ]; then
+    while IFS= read -r id; do
+      id=$(printf '%s' "$id" | tr -dc '0-9'); [ -n "$id" ] || continue
+      echo "qa-drive-gemini: teardown — closing lane $id"
+      printf 'group close %s\n' "$id" | gemini --yolo --allowed-mcp-server-names domshell >/dev/null 2>&1 || true
+    done < "$LANE_FILE"
+    rm -f "$LANE_FILE"
+  fi
+  # Reap the registration so per-connection proxies don't accumulate across drives.
+  gemini mcp remove domshell >/dev/null 2>&1 || true
 }
-trap teardown EXIT
+trap teardown EXIT INT TERM
 
 # 3. fan the drive to gemini (it reads persona+plan, drives domshell, writes artifacts)
 PROMPT=$(cat <<EOF
@@ -64,19 +74,21 @@ surface using the domshell MCP (single tool domshell_execute; browser-as-filesys
 newline-separated).
 
 === SINGLE-LANE PROTOCOL (MANDATORY — read before any domshell call) ===
-DOMShell isolates each tab group as its own Chrome lane. You must operate in EXACTLY ONE group
-for the WHOLE drive, start to finish. Violating this opens orphan browser windows.
-1. FIRST domshell_execute call ONLY: pass group_id:"new". The reply ends with "[lane: <ID>]".
-   READ that <ID>, remember it, AND write just that id (one line) to $SPRINT_DIR/.qa-lane so the
-   harness can sweep it if you crash. This is YOUR lane for the entire session.
-2. EVERY domshell_execute call after the first: pass group_id:"<ID>" (the SAME id from step 1) —
-   navigate, click, type, grep, screenshot, all of it. NEVER pass group_id:"new" again. NEVER
-   omit group_id (that hits the shared/default lane). NEVER open a second group "to be safe".
-3. To move to the next journey, RE-USE the same lane: just navigate it back to $URL. Do NOT open
-   a fresh group per journey — one lane carries all of J1..Jn.
-4. LAST action of the drive: run "group close <ID>" on your one lane. Then stop.
-If you ever find yourself about to send group_id:"new" for a second time, STOP — that is the bug;
-reuse your existing <ID> instead.
+DOMShell drives the operator's REAL Chrome; isolation is by GROUP (a lane). group close <id> is
+group-scoped — it closes only that group's tabs, never the user's. You operate in EXACTLY ONE
+named group for the WHOLE drive.
+1. FIRST domshell_execute call ONLY — mint + name + navigate in ONE call:
+     { "command": "text main", "group_id": "new", "initial_url": "$URL", "group_name": "$GROUP_NAME" }
+   This opens \$URL at creation (no separate nav to fail) and tags the group. The reply ends with
+   "[lane: <ID>]". READ that <ID>, remember it, AND append just that id (one line) to
+   $SPRINT_DIR/.qa-lanes so the harness/invoker can sweep it if you crash. This is YOUR lane.
+2. EVERY later call: pass group_id:"<ID>" (the SAME id) — navigate (open <url>), click, grep,
+   screenshot, all of it. Call group_id:"new" EXACTLY ONCE per drive — NEVER again. NEVER omit
+   group_id. If a navigation is REJECTED, RETRY WITH THE SAME <ID> and the correct verb
+   (use "open <url>", not "cd <url>") — do NOT re-mint a new group (re-minting is the leak bug).
+3. Next journey: reuse the same lane — "open <url>" it back to $URL. One lane carries all of J1..Jn.
+4. LAST action of the drive: run "group close <ID>". Then stop.
+If you are ever about to send group_id:"new" a second time, STOP — that is the bug; reuse your <ID>.
 === END SINGLE-LANE PROTOCOL ===
 
 Execute the journeys in $PLAN. For each: run the steps, assert the HARD signals (exact strings /

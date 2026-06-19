@@ -45,7 +45,7 @@ if [ -z "$HANDOVER" ]; then
   {
     echo "# QA-UX browser-drive brief — $(basename "$SPRINT_DIR")"; echo
     echo "Adopt the QA-UX persona (\`$PERSONA\`). DRIVE the browser surface at $URL via the domshell MCP."
-    echo "- SINGLE-LANE PROTOCOL: first call group_id:\"new\", reuse that lane id on every call, \`group close\` it at the end."
+    echo "- ONE NAMED LANE: first domshell call passes group_id:\"new\" + initial_url + group_name=qa-ux-<repo>-<sprint> (DOMShell 2.0.5); capture the [lane: id], reuse it EVERY call (group_id:new exactly once — never re-mint on a failed nav; use open not cd); group close it at the end. Record minted ids to <sprint-dir>/.qa-lanes."
     echo "- WAIT for async/loading states to settle before asserting — never a mid-flight DOM (a still-loading panel is not empty)."
     echo "- Execute \`$PLAN\`; UPDATE (do not overwrite) \`$SPRINT_DIR/qa-report.md\`, preserving the prior backend audit."
     echo "- Capture hero shots to \`$SPRINT_DIR/assets/\` and verify each file exists; build \`$SPRINT_DIR/flow-graph.json\`."

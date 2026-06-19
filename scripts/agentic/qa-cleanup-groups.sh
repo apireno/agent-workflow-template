@@ -18,14 +18,16 @@
 # $0 / bright-line clean: gemini + domshell, never claude -p.
 
 set -uo pipefail
-ACTION="list"; IDS=""
+ACTION="list"; IDS=""; SPRINT_DIR=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --list)       ACTION=list; shift ;;
-    --close)      ACTION=close; IDS="${2:-}"; shift 2 ;;
-    --close=*)    ACTION=close; IDS="${1#--close=}"; shift ;;
-    --all-agent)  ACTION=all; shift ;;
-    *)            echo "Unknown arg: $1 (use --list | --close <ids> | --all-agent)" >&2; shift ;;
+    --list)         ACTION=list; shift ;;
+    --close)        ACTION=close; IDS="${2:-}"; shift 2 ;;
+    --close=*)      ACTION=close; IDS="${1#--close=}"; shift ;;
+    --all-agent)    ACTION=all; shift ;;
+    --sprint-dir)   ACTION=registry; SPRINT_DIR="${2:-}"; shift 2 ;;
+    --sprint-dir=*) ACTION=registry; SPRINT_DIR="${1#--sprint-dir=}"; shift ;;
+    *)              echo "Unknown arg: $1 (use --list | --close <ids> | --sprint-dir <dir> | --all-agent)" >&2; shift ;;
   esac
 done
 
@@ -55,6 +57,20 @@ case "$ACTION" in
     CMDS=$(echo "$IDS" | tr ',' '\n' | while IFS= read -r id; do [ -n "$id" ] && printf 'group close %s\n' "$id"; done)
     echo "qa-cleanup: closing lanes: $IDS"
     printf 'Run these domshell commands, one per line, then report each result. Do nothing else:\n%s\n' "$CMDS" | run
+    ;;
+  registry)
+    # PROVENANCE sweep — close exactly the lane ids THIS round recorded (safe: never touches a
+    # group the drive didn't mint, so a human's walked-away session is untouched). This is the
+    # invoker's post-round cleanup; it works even if the drive's own engine 403'd/died.
+    REG="$SPRINT_DIR/.qa-lanes"
+    if [ ! -s "$REG" ]; then echo "qa-cleanup: no recorded lanes at $REG (nothing to sweep)."; exit 0; fi
+    CMDS=$(while IFS= read -r id; do id=$(printf '%s' "$id" | tr -dc '0-9'); [ -n "$id" ] && printf 'group close %s\n' "$id"; done < "$REG")
+    echo "qa-cleanup: closing this round's recorded lanes from $REG:"; printf '%s\n' "$CMDS" | sed 's/^/  /'
+    printf 'Run these domshell commands, one per line, then report each result. Do nothing else:\n%s\n' "$CMDS" | run
+    # On DOMShell extension >=1.3.2, also sweep any group named qa-ux-* (catches orphans whose
+    # drive died before recording its id). Pre-1.3.2 the title is "agent", so this is a no-op then.
+    printf 'Run domshell "group list". For EVERY lane whose name/title starts with "qa-ux-", run "group close <id>". Report what you closed. Do nothing else.\n' | run
+    rm -f "$REG"
     ;;
   all)
     echo "qa-cleanup: WARNING — sweeping ALL agent lanes."
