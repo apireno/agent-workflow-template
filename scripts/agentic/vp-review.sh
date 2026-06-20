@@ -30,54 +30,19 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 # --- Engine selection ---
-resolve_engine() {
-    # 1. Environment variable
-    if [ -n "${REVIEW_ENGINE:-}" ]; then
-        echo "$REVIEW_ENGINE"
-        return
-    fi
-
-    # 2. Config file in repo root
-    if [ -f "$REPO_ROOT/.review-engine" ]; then
-        cat "$REPO_ROOT/.review-engine" | tr -d '[:space:]'
-        return
-    fi
-
-    # 3. Auto-detect
-    local HAS_GEMINI=0
-    local HAS_CLAUDE=0
-
-    if command -v gemini > /dev/null 2>&1; then
-        HAS_GEMINI=1
-    elif [ -x "$HOME/.local/bin/gemini" ]; then
-        HAS_GEMINI=1
-    fi
-
-    if command -v claude > /dev/null 2>&1; then
-        HAS_CLAUDE=1
-    fi
-
-    # BRIGHT-LINE: never AUTO-select a claude path. `dual`/`claude` run
-    # `claude -p`, which (post-2026-06-15) bills the Agent-SDK-credit pool.
-    # Auto-detect prefers gemini whenever it is present; running claude -p
-    # requires an EXPLICIT opt-in (REVIEW_ENGINE=claude or .review-engine=claude).
-    if [ "$HAS_GEMINI" -eq 1 ]; then
-        echo "gemini"          # was "dual" when both present — dual fired claude -p (the codegram-Sprint-1 incident)
-    else
-        # gemini unavailable: do NOT silently fall back to claude -p — fail loud.
-        echo "none"
-    fi
-}
-
-ENGINE=$(resolve_engine)
-
-if [ "$ENGINE" = "none" ]; then
-    echo "Error: No LLM CLI found. Install one of:"
-    echo "  Gemini CLI: https://github.com/google-gemini/gemini-cli"
-    echo "  Claude CLI: https://docs.anthropic.com/en/docs/claude-code"
-    echo ""
-    echo "Or set REVIEW_ENGINE=gemini|claude|dual"
-    exit 1
+# Defer to the shared resolver (single source of truth: REVIEW_ENGINE env -> .review-engine
+# file -> default subagent; legacy aliasing; claude-p metered quarantine). This CLI executor
+# can only RUN the CLI engines (gemini, claude-p); subagent/handoff are orchestrator-driven
+# (the /vp-review skill fans them via the Agent tool / windows) and are rejected below.
+RESOLVER="$(dirname "$0")/resolve-review-engine.sh"
+if [ -x "$RESOLVER" ]; then
+    ENGINE=$("$RESOLVER") || { rc=$?; [ "$ENGINE" = "claude-p-blocked" ] 2>/dev/null; exit $rc; }
+else
+    # Fallback if the shared resolver isn't present: env -> file -> subagent (legacy aliasing).
+    if [ -n "${REVIEW_ENGINE:-}" ]; then ENGINE="$REVIEW_ENGINE"
+    elif [ -f "$REPO_ROOT/.review-engine" ]; then ENGINE="$(tr -d '[:space:]' < "$REPO_ROOT/.review-engine")"
+    else ENGINE="subagent"; fi
+    case "$ENGINE" in claude) ENGINE="claude-p";; dual) ENGINE="gemini";; none|"") ENGINE="subagent";; esac
 fi
 
 # Locate CLI commands
@@ -401,20 +366,26 @@ case "$ENGINE" in
     gemini)
         run_with_retry run_gemini "$OUTPUT_FILE" "gemini"
         ;;
-    claude)
-        run_with_retry run_claude "$OUTPUT_FILE" "claude"
+    claude-p)
+        # ⚠️ METERED Anthropic API (Agent-SDK credit pool). The shared resolver already
+        # enforced REVIEW_ALLOW_METERED=1; this is a defense-in-depth second gate.
+        if [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
+            echo "Error: engine 'claude-p' is the metered API path; set REVIEW_ALLOW_METERED=1 to opt in." >&2
+            exit 1
+        fi
+        run_with_retry run_claude "$OUTPUT_FILE" "claude-p"
         ;;
-    dual)
-        # Primary: Gemini writes to the output file
-        # Secondary: Claude writes to a parallel file for comparison
-        CLAUDE_OUTPUT="${OUTPUT_FILE%.md}-claude.md"
-        echo "  Primary (Gemini) → $OUTPUT_FILE"
-        echo "  Secondary (Claude) → $CLAUDE_OUTPUT"
-        run_with_retry run_gemini "$OUTPUT_FILE" "gemini"
-        run_with_retry run_claude "$CLAUDE_OUTPUT" "claude" || true
+    subagent|handoff)
+        # This CLI executor cannot run an in-session Agent or a window — those are
+        # orchestrator (main-loop) actions. The /vp-review skill fans them; calling
+        # this script directly with these engines is a usage error.
+        echo "Error: engine '$ENGINE' is orchestrator-driven, not a CLI run." >&2
+        echo "  Use the /vp-review skill (it fans subagent/handoff reviews via the Agent tool / windows)," >&2
+        echo "  or pick a CLI engine: REVIEW_ENGINE=gemini $0 $PERSONA $INPUT_FILE $OUTPUT_FILE" >&2
+        exit 2
         ;;
     *)
-        echo "Error: Unknown engine '$ENGINE'. Use: gemini | claude | dual"
+        echo "Error: Unknown engine '$ENGINE'. Use: gemini | claude-p (metered) | subagent | handoff" >&2
         exit 1
         ;;
 esac
