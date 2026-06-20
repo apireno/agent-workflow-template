@@ -63,8 +63,11 @@ if [ -z "$HANDOVER" ]; then
     echo "- Pass \`group_id=\"<id>\"\` (the SAME id) on EVERY later call. Call \`group_id:\"new\"\` EXACTLY ONCE per drive."
     echo "- On a failed navigation, RETRY WITH THE SAME id and the \`open <url>\` verb (never \`cd <url>\`, never re-mint)."
     echo "- LAST action: \`domshell_execute(command=\"group close\", group_id=\"<id>\")\`."
-    echo "- NOTE: every MCP connection also mints a default \`agent\` lane on connect; that one is the"
-    echo "  connection default — leave it, your named \`$GROUP_NAME\` lane is the one you close."
+    echo "- SAFETY: NEVER pass \`group_id:\"shared\"\` or omit \`group_id\` for any write (open/click/type/"
+    echo "  select/submit/js/key). Per DOMShell #53 (ext >=1.3.2) those operate on the user's REAL browser,"
+    echo "  not an isolated lane. Drive ONLY in your named \`$GROUP_NAME\` lane; \`shared\` is read-only-list only."
+    echo "- NOTE: on older extensions a generic \`agent\` connection-lane may also appear; ignore it — your"
+    echo "  named lane is the one you close. (Post-#53 that default lane is no longer created.)"
     echo
     echo "## The drive"
     echo "- WAIT for async/loading states to settle before asserting — never a mid-flight DOM (a still-loading panel is not empty)."

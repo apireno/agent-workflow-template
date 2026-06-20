@@ -60,6 +60,14 @@ This **self-orchestrates**: resolves the token, registers DOMShell for gemini, r
 
 ## 4. Tab-group lifecycle (cleanup)
 
+> **DOMShell #53 / ext ≥1.3.2 (the connection-lane fix):** the generic `agent` connection-default
+> lane is **no longer created** (the maintainers deleted the eager `groupNew(["agent"])` rather than
+> name/reap it). Two consequences: (a) the janitor's self-reap becomes a harmless no-op (kept for
+> older extensions); (b) **`group_id:"shared"` / omitted now means "the user's REAL browser, no
+> isolated lane"** — only ever use it for a read-only `group list`; **never** for a write op (that
+> hits real tabs). MCP server `2.0.6` (npm) ships only forward-compat `[DEPRECATION]` messaging.
+> The separate `domshell-proxy` orphan-process bug is DOMShell #47 (same 1.3.2 bundle).
+
 - **Single-lane protocol** — the drive opens ONE lane (`group_id:"new"`), reuses its id for every call, and `group close`s it at the end. DOMShell leaves lanes *open* on disconnect, so unclosed lanes orphan.
 - **Harness sweep** — `qa-drive-gemini.sh` traps EXIT and closes the recorded lane (`.qa-lane`, gitignored) even on crash. Idempotent.
 - **CTO janitor** (`scripts/agentic/qa-cleanup-groups.sh`) — for orphans the trap can't catch (an LLM driver that spawned *extra* groups, or a hard-killed drive): `--list` (inspect, default) · `--close <ids>` (targeted) · `--all-agent` (sweep every agent lane — loud, also affects other windows/Cowork). Timeout-guarded so it can't hang.

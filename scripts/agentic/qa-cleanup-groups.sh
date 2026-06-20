@@ -106,10 +106,17 @@ PY
 
 ds_init || exit 1
 
-# SELF-REAP: every MCP connection mints its own default `agent` lane on connect (NOTE-A —
-# DOMShell-side behavior, routed to the DOMShell owner). So this janitor's OWN connection
-# leaks one lane per run. Close it on exit, REUSING THE SAME SID (same connection ⇒ no new
-# lane is minted). Best-effort; reaping the connection's own attached lane is supported.
+# SELF-REAP: pre-DOMShell-1.3.2, every MCP connection mints its own default `agent` lane on
+# connect (NOTE-A), so this janitor's OWN connection leaks one lane per run. Close it on exit,
+# REUSING THE SAME SID (same connection ⇒ no new lane is minted).
+#
+# POST-1.3.2 (DOMShell #53 — the team deleted the eager groupNew(["agent"]) in SESSION_START):
+# there is NO connection-default lane, so the `group list` below finds nothing "(attached)" and
+# this is a harmless no-op. Kept as belt-and-suspenders for operators still on older extensions;
+# safe to delete once the fleet is fully on ext >=1.3.2 (per the DOMShell maintainers' memo).
+# NOTE the read-only `group list` uses group_id "shared" — fine because it's READ-ONLY. After
+# 1.3.2 "shared"/omitted means "the user's REAL browser, no isolation", so NEVER pair it with a
+# write verb here; closes below use numeric lane ids (id-scoped), never "shared".
 self_reap() {
   local attached
   attached=$(ds_exec "group list" "shared" 2>/dev/null | grep -i '(attached)' | grep -oE '[0-9]{4,}' | head -1)
