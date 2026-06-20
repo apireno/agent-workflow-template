@@ -12,6 +12,17 @@
 #          DOMSHELL_TOKEN resolvable (env, or the running proxy's --token arg).
 
 set -uo pipefail
+
+# DEPRECATED 2026-06-19 — DO NOT USE. Google removed the gemini-CLI free tier
+# (IneligibleTierError / reasonCode UNSUPPORTED_CLIENT — "migrate to the Antigravity suite").
+# gemini can no longer authenticate, so this drive cannot run. The Claude engine
+# (qa-drive-claude.sh) is now the default + only drive path. Kept on disk for history /
+# in case gemini access is restored via an Antigravity-compatible client. Fail fast:
+echo "qa-drive-gemini: DEPRECATED/DEAD — gemini-CLI free tier removed by Google (UNSUPPORTED_CLIENT)."
+echo "  Use the Claude engine instead:  /qa-ux <sprint-dir> --mode drive   (engine=claude is the default)."
+echo "  (Override only if you have a working Antigravity-compatible gemini and set QA_ALLOW_GEMINI=1.)"
+[ "${QA_ALLOW_GEMINI:-0}" = "1" ] || exit 1
+
 SPRINT_DIR=""; URL=""
 while [ $# -gt 0 ]; do case "$1" in
   --url) URL="${2:-}"; shift 2 ;;

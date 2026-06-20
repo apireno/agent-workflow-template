@@ -18,7 +18,7 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
 
 ARGS="$ARGUMENTS"
-SPRINT_DIR=""; MODE="drive"; SURFACES=""; URL=""; ENGINE="gemini"; HANDOVER=""
+SPRINT_DIR=""; MODE="drive"; SURFACES=""; URL=""; ENGINE="claude"; HANDOVER=""
 # Accept BOTH `--flag=value` and `--flag value` (the argument-hint shows the space
 # form). Bare `--flag` sets EXPECT so the next token fills it — otherwise a value
 # like `plan` falls through to the positional branch and the flag silently keeps
@@ -67,7 +67,7 @@ echo "persona   : $PERSONA"
 echo "sprint    : $SPRINT_DIR"
 echo "mode      : $MODE"
 echo "surfaces  : ${SURFACES:-<read from qa-plan / auto>}"
-echo "engine    : $ENGINE   (bright-line: gemini-CLI or interactive Claude — NEVER claude -p)"
+echo "engine    : $ENGINE   (default+only: interactive Claude — NEVER claude -p; gemini engine DEPRECATED 2026-06-19)"
 echo ""
 
 if [ "$MODE" = "plan" ]; then
@@ -85,25 +85,28 @@ fi
 [ -f "$QA_PLAN" ] || { echo "ERROR: $QA_PLAN missing — run '/qa-ux $SPRINT_DIR --mode plan' first (shift-left: the plan precedes the drive)."; exit 1; }
 mkdir -p "$ASSETS"
 
-# engine=gemini (default, proven, $0): SELF-ORCHESTRATE the whole browser drive — register
-# domshell for gemini, standup guard, single-lane protocol, drive, on-exit lane sweep. The
-# skill no longer just runs standup and assumes the caller has domshell_execute.
-if [ "$ENGINE" = "gemini" ] && [ -x "$ROOT/scripts/agentic/qa-drive-gemini.sh" ]; then
-  echo "DRIVE MODE (engine=gemini) — self-orchestrating via qa-drive-gemini.sh ..."
-  "$ROOT/scripts/agentic/qa-drive-gemini.sh" "$SPRINT_DIR" --url "$URL"
-  echo ""
-  echo "GEMINI DRIVE FINISHED — artifacts written. As CTO, READ + SUMMARIZE them (do NOT re-drive)."
-  exit 0
+# engine=gemini: DEPRECATED 2026-06-19. Google removed the gemini-CLI free tier
+# (IneligibleTierError / reasonCode UNSUPPORTED_CLIENT — "migrate to the Antigravity suite").
+# Every gemini call now hard-fails at auth, so the gemini drive can no longer run. Fail loud
+# and point at the claude engine (the default) rather than dispatching into a broken path.
+if [ "$ENGINE" = "gemini" ]; then
+  echo "ERROR: the gemini drive engine is DEPRECATED/DEAD as of 2026-06-19 (Google UNSUPPORTED_CLIENT;"
+  echo "  migrate-to-Antigravity). It cannot authenticate. The Claude engine is now the default + only path."
+  echo "  Re-run WITHOUT --engine gemini (or with --engine claude). NOTE: this same gemini death also"
+  echo "  breaks /vp-review and /sprint-fanout — flagged separately to the CTO/CEO."
+  exit 1
 fi
 
-# engine=claude: LAUNCH an interactive Claude session via qa-drive-claude.sh (reuses /handoff
-# machinery — brief in docs/, skill writes pending-prompt.md, pre-trusts the workspace). The
+# engine=claude (default + only): LAUNCH an interactive Claude session via qa-drive-claude.sh
+# (reuses /handoff machinery — brief in docs/, skill writes pending-prompt.md, pre-authorizes
+# trust+MCP+permissions, records the window id, AUTO-SENDS the "go" kickoff). Zero-touch; the
 # CTO never hand-edits .claude/. Optional --handover <path> drives from an existing brief.
 if [ "$ENGINE" = "claude" ] && [ -x "$ROOT/scripts/agentic/qa-drive-claude.sh" ]; then
   echo "DRIVE MODE (engine=claude) — launching an interactive Claude session via qa-drive-claude.sh ..."
   "$ROOT/scripts/agentic/qa-drive-claude.sh" "$SPRINT_DIR" --url "$URL" ${HANDOVER:+--handover "$HANDOVER"}
   echo ""
-  echo "CLAUDE DRIVE LAUNCHED — press Enter ONCE in the new tab to start; artifacts land in the sprint dir."
+  echo "CLAUDE DRIVE LAUNCHED — zero-touch (window id recorded, 'go' kickoff auto-sent). If it doesn't"
+  echo "start, grant Terminal Accessibility perm or type 'go' + Enter in the tab. Artifacts land in the sprint dir."
   exit 0
 fi
 
@@ -132,9 +135,9 @@ Stop after writing the plan — no live driving. Sign `— QA`.
 
 ### If `--mode drive` (accept-time gate)
 
-**Engine=gemini (default):** the drive already ran self-orchestrated in the setup block (`qa-drive-gemini.sh` registered domshell for gemini, enforced the single-lane protocol, drove the live browser, and swept the lane on exit). Your job is to **read the produced `qa-report.md` + flow-graph + assets and summarize as CTO — do NOT re-drive.**
+**Engine=claude (default + only):** the setup block above launched an interactive Claude session in the UX repo (`qa-drive-claude.sh`) that pre-authorizes the workspace, records the window id, and auto-sends the "go" kickoff. THAT session is the drive — it calls `domshell_execute` directly and writes the artifacts. From the CTO session your job is to **monitor (`/peek <repo>`) and then read the produced `qa-report.md` + flow-graph + assets and summarize — do NOT re-drive.** (The former gemini engine is deprecated/dead as of 2026-06-19.)
 
-**Engine=claude (in-session):** adopt QA-UX and drive it yourself:
+**If you ARE the launched drive session** (you received the brief), adopt QA-UX and drive it yourself by calling `domshell_execute` directly — never re-invoke the `/qa-ux` skill:
 1. **Drive each in-scope surface** against `qa-plan.md`:
    - **browser** → DOMShell MCP. **PRECONDITION: `domshell_execute` MUST be in your tool list.** The standup (`qa-standup.sh`) already self-registers DOMShell into `.mcp.json`; if the tool is still absent, the session simply wasn't restarted afterward (MCP loads at session start). In that case **do NOT substitute API/DB inspection and call it a browser drive**: mark the browser surface `BLOCKED — DOMShell registered but session not restarted`, finish the other surfaces, and tell the CTO to restart the session + re-run. **If present:** **open your OWN tab group first** (`group_id:"new"`, name it `qa-ux-<sprint>`, carry the returned `[lane: <id>]` on every call, and **`group close <group_id>` when done** — the harness also sweeps orphan `qa-ux-*` lanes on exit — NEVER the shared/default lane, so you don't hijack a human's tabs or collide with another agent). Then `ls`/`cd`/`cat`/`text`/`grep`/`extract_table` to assert HARD signals; judge SOFT signals; `screenshot` each hero feature.
    - **CLI** → Bash: invoke the real CLI, capture stdout/stderr + exit codes, assert HARD, judge SOFT.

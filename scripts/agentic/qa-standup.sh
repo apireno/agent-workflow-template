@@ -121,12 +121,26 @@ PY
   fi
   DS_PORT="${DOMSHELL_MCP_PORT:-3001}"
   if command -v curl >/dev/null 2>&1; then
-    if curl -s -o /dev/null --max-time 4 "http://127.0.0.1:${DS_PORT}/mcp" 2>/dev/null; then
-      echo "qa-standup: DOMShell registered + bridge responding on :${DS_PORT}"
+    # Probe /mcp and INSPECT THE BODY. A real DOMShell server answers with a JSON-RPC
+    # envelope even unauthenticated (e.g. {"jsonrpc":"2.0","error":{...invalid or missing
+    # auth token...}}). A FOREIGN service squatting :3001 (e.g. a plain Docker container,
+    # the known collision) will NOT — it returns HTML / a non-jsonrpc body / nothing. So
+    # "reachable" is not enough; we must confirm it's actually DOMShell.
+    BODY=$(curl -s --max-time 4 -X POST "http://127.0.0.1:${DS_PORT}/mcp" \
+             -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+             -d '{"jsonrpc":"2.0","id":0,"method":"ping"}' 2>/dev/null)
+    if [ -z "$BODY" ] && ! curl -s -o /dev/null --max-time 4 "http://127.0.0.1:${DS_PORT}/mcp" 2>/dev/null; then
+      echo "qa-standup: nothing answering on :${DS_PORT}."
+      echo "  Start DOMShell (npx @apireno/domshell --allow-write, or its Docker/ToolHive container), open the"
+      echo "  Chrome extension, and 'connect <token>'. (HITL: browser QA needs a live DOMShell session.)"
+      exit 1
+    elif printf '%s' "$BODY" | grep -q '"jsonrpc"'; then
+      echo "qa-standup: DOMShell confirmed on :${DS_PORT} (JSON-RPC endpoint responding)."
     else
-      echo "qa-standup: DOMShell registered but bridge NOT reachable on :${DS_PORT}."
-      echo "  Start it (npx @apireno/domshell --allow-write), open the Chrome extension, and 'connect <token>'."
-      echo "  (HITL: browser QA needs a live, connected DOMShell session — see persona Operating Constraints.)"
+      echo "qa-standup: PORT COLLISION — something is on :${DS_PORT} but it is NOT DOMShell"
+      echo "  (no JSON-RPC envelope on /mcp — likely a Docker container or other service squatting the port)."
+      echo "  Free :${DS_PORT} (stop the squatter), or point DOMShell elsewhere and set DOMSHELL_MCP_PORT."
+      echo "  Detected listener:"; lsof -nP -iTCP:${DS_PORT} -sTCP:LISTEN 2>/dev/null | sed 's/^/    /' | head -4
       exit 1
     fi
   fi

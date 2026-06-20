@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-# qa-cleanup-groups.sh — CTO janitor for orphan DOMShell tab groups.
+# qa-cleanup-groups.sh — CTO janitor for orphan DOMShell tab groups (lanes).
 #
-# QA drives are supposed to use ONE lane and close it (single-lane protocol + on-exit
-# sweep in qa-drive-gemini.sh). But an LLM driver can still spawn extra groups, and a
-# hard-killed/hung drive can leave its lane open. This is the manual cleanup the CTO
-# runs when groups pile up: inspect first, then close specific lanes or sweep all.
+# QA drives are supposed to use ONE named lane and close it. But a hard-killed / hung /
+# crashed drive can leave its lane open. This is the manual cleanup the CTO runs when
+# groups pile up: inspect first, then close specific lanes, the lanes a sprint recorded,
+# or sweep all agent lanes.
 #
-# Safety: it is timeout-guarded (won't itself hang), and DEFAULTS TO LIST — it never
-# closes anything unless you ask. `--all-agent` is deliberately separate + loud because
-# it closes EVERY agent lane, including other windows / a Cowork session.
+# ENGINE: a DIRECT curl JSON-RPC client to the running DOMShell server's /mcp endpoint —
+# NO gemini, NO claude -p. (gemini-CLI was deprecated by Google 2026-06-19, UNSUPPORTED_CLIENT;
+# the old gemini-shelling janitor was dead. This talks to DOMShell over HTTP itself.)
+# Auth: Bearer $DOMSHELL_TOKEN (the same token the proxy passes). The server is the one on
+# :3001 (Docker/ToolHive/native); this never starts a second server.
+#
+# Safety: DEFAULTS TO LIST — it never closes anything unless you ask. `--all-agent` is
+# deliberately separate + loud because it closes EVERY agent lane (other windows / Cowork too).
+# `--sprint-dir <dir>` is the SAFEST close path: it closes only the lane ids THAT sprint
+# recorded in <dir>/.qa-lanes, so a human's walked-away session is never touched.
 #
 # Usage:
-#   qa-cleanup-groups.sh                  # LIST all DOMShell lanes (inspect first)
-#   qa-cleanup-groups.sh --close 12,34    # close lanes 12 and 34 only
-#   qa-cleanup-groups.sh --all-agent      # close EVERY agent lane (NOT shared/default) — loud warning
-#
-# $0 / bright-line clean: gemini + domshell, never claude -p.
+#   qa-cleanup-groups.sh                       # LIST all DOMShell lanes (inspect first)
+#   qa-cleanup-groups.sh --close 12,34         # close lanes 12 and 34 only
+#   qa-cleanup-groups.sh --sprint-dir <dir>    # close exactly the ids in <dir>/.qa-lanes (+ qa-ux-* by name)
+#   qa-cleanup-groups.sh --all-agent           # close EVERY agent lane (NOT shared/default) — loud
 
 set -uo pipefail
 ACTION="list"; IDS=""; SPRINT_DIR=""
@@ -31,51 +37,136 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-command -v gemini >/dev/null || { echo "ERROR: gemini-CLI not found."; exit 1; }
+command -v curl >/dev/null    || { echo "ERROR: curl not found."; exit 1; }
+command -v python3 >/dev/null  || { echo "ERROR: python3 not found (used to build/parse JSON-RPC)."; exit 1; }
 
-# Resolve token (env, else the live proxy's --token arg) + register domshell for gemini.
+# Resolve the DOMShell auth token: env first, else the live proxy's --token arg.
 TOK="${DOMSHELL_TOKEN:-}"
-if ! printf '%s' "$TOK" | grep -qE '^[0-9a-fA-F]{32,}$'; then
-  TOK=$(ps -axo command 2>/dev/null | grep -oE 'domshell-proxy .*--token [0-9a-fA-F]{32,}' | grep -oE '[0-9a-fA-F]{32,}' | head -1)
-fi
+[ -n "$TOK" ] || TOK=$(ps -axo command 2>/dev/null | grep -oE 'domshell-proxy .*--token [^ ]+' | grep -oE -- '--token [^ ]+' | awk '{print $2}' | head -1)
 [ -n "$TOK" ] || { echo "ERROR: DOMSHELL_TOKEN not resolvable (export it, or start the DOMShell proxy)."; exit 1; }
-gemini mcp add --scope user --trust domshell npx -- -y -p @apireno/domshell domshell-proxy --port 3001 --token "$TOK" >/dev/null 2>&1 || true
 
-# Portable timeout (macOS lacks `timeout`; coreutils ships `gtimeout`).
-TO=$(command -v timeout || command -v gtimeout || true)
-run() { if [ -n "$TO" ]; then "$TO" 90 gemini --yolo --allowed-mcp-server-names domshell 2>&1; else gemini --yolo --allowed-mcp-server-names domshell 2>&1; fi | grep -vE "Loaded cached|YOLO mode is enabled" ; }
+DS_URL="http://127.0.0.1:${DOMSHELL_MCP_PORT:-3001}/mcp"
+ACCEPT='Accept: application/json, text/event-stream'
+
+# --- minimal MCP-over-HTTP client (initialize -> session id -> tools/call) ---------------
+SID=""
+ds_init() {
+  SID=$(curl -s -D - -o /dev/null --max-time 12 -X POST "$DS_URL" \
+    -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -H "$ACCEPT" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"qa-cleanup","version":"1"}}}' \
+    2>/dev/null | grep -i '^mcp-session-id:' | awk '{print $2}' | tr -d '\r')
+  [ -n "$SID" ] || { echo "ERROR: DOMShell did not return a session (server down on :${DOMSHELL_MCP_PORT:-3001}, or bad token)."; return 1; }
+  # politeness: the initialized notification (server may require it before tools/call)
+  curl -s -o /dev/null --max-time 8 -X POST "$DS_URL" \
+    -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -H "$ACCEPT" \
+    -H "mcp-session-id: $SID" \
+    -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' 2>/dev/null || true
+}
+
+# SSE response parser (inline -c so the curl pipe — not a heredoc — feeds python's stdin;
+# `python3 - <<HEREDOC` would let the heredoc override the pipe and read no JSON).
+DS_PARSE='import sys, json
+text = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line.startswith("data:"):
+        continue
+    try:
+        msg = json.loads(line[5:].strip())
+    except Exception:
+        continue
+    for c in (msg.get("result", {}) or {}).get("content", []) or []:
+        if isinstance(c, dict) and c.get("type") == "text":
+            text.append(c.get("text", ""))
+    if msg.get("error"):
+        text.append("MCP error: " + json.dumps(msg["error"]))
+print("\n".join(text).strip())'
+
+# ds_exec "<command string>" "<group_id-or-empty>" -> prints the domshell text result.
+# The payload builder uses `python3 - <<HEREDOC` with NO pipe in (it's $( ) capture), so the
+# heredoc-as-program + argv-as-data form is correct there; only the parser needs the pipe.
+ds_exec() {
+  local cmd="$1" gid="${2:-}"
+  local payload
+  payload=$(python3 - "$cmd" "$gid" <<'PY'
+import json, sys
+cmd, gid = sys.argv[1], sys.argv[2]
+args = {"command": cmd}
+if gid:
+    args["group_id"] = gid
+print(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                  "params": {"name": "domshell_execute", "arguments": args}}))
+PY
+)
+  curl -s --max-time 40 -X POST "$DS_URL" \
+    -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -H "$ACCEPT" \
+    -H "mcp-session-id: $SID" --data "$payload" 2>/dev/null \
+  | python3 -c "$DS_PARSE"
+}
+
+ds_init || exit 1
+
+# SELF-REAP: every MCP connection mints its own default `agent` lane on connect (NOTE-A —
+# DOMShell-side behavior, routed to the DOMShell owner). So this janitor's OWN connection
+# leaks one lane per run. Close it on exit, REUSING THE SAME SID (same connection ⇒ no new
+# lane is minted). Best-effort; reaping the connection's own attached lane is supported.
+self_reap() {
+  local attached
+  attached=$(ds_exec "group list" "shared" 2>/dev/null | grep -i '(attached)' | grep -oE '[0-9]{4,}' | head -1)
+  if [ -n "$attached" ]; then
+    ds_exec "group close" "$attached" >/dev/null 2>&1 || true
+  fi
+}
+trap self_reap EXIT
 
 case "$ACTION" in
   list)
     echo "qa-cleanup: listing DOMShell lanes (read-only)..."
-    printf 'Run the domshell command "group list" and print its output verbatim. Do nothing else — do not close anything.\n' | run
+    ds_exec "group list" "shared"
     echo ""
-    echo "Next: qa-cleanup-groups.sh --close <id>[,<id>...]   (targeted)   |   --all-agent   (sweep every agent lane)"
+    echo "Next: qa-cleanup-groups.sh --close <id>[,<id>...]   |   --sprint-dir <dir>   |   --all-agent"
     ;;
+
   close)
     [ -n "$IDS" ] || { echo "ERROR: --close needs ids, e.g. --close 12,34"; exit 1; }
-    CMDS=$(echo "$IDS" | tr ',' '\n' | while IFS= read -r id; do [ -n "$id" ] && printf 'group close %s\n' "$id"; done)
     echo "qa-cleanup: closing lanes: $IDS"
-    printf 'Run these domshell commands, one per line, then report each result. Do nothing else:\n%s\n' "$CMDS" | run
+    echo "$IDS" | tr ',' '\n' | while IFS= read -r id; do
+      id=$(printf '%s' "$id" | tr -dc '0-9'); [ -n "$id" ] || continue
+      echo "  close lane $id:"; ds_exec "group close" "$id" | sed 's/^/    /'
+    done
     ;;
+
   registry)
-    # PROVENANCE sweep — close exactly the lane ids THIS round recorded (safe: never touches a
-    # group the drive didn't mint, so a human's walked-away session is untouched). This is the
-    # invoker's post-round cleanup; it works even if the drive's own engine 403'd/died.
+    # PROVENANCE sweep — close exactly the ids THIS round recorded (safe: never touches a
+    # group the drive didn't mint). Works even if the drive's own session died.
     REG="$SPRINT_DIR/.qa-lanes"
     if [ ! -s "$REG" ]; then echo "qa-cleanup: no recorded lanes at $REG (nothing to sweep)."; exit 0; fi
-    CMDS=$(while IFS= read -r id; do id=$(printf '%s' "$id" | tr -dc '0-9'); [ -n "$id" ] && printf 'group close %s\n' "$id"; done < "$REG")
-    echo "qa-cleanup: closing this round's recorded lanes from $REG:"; printf '%s\n' "$CMDS" | sed 's/^/  /'
-    printf 'Run these domshell commands, one per line, then report each result. Do nothing else:\n%s\n' "$CMDS" | run
-    # On DOMShell extension >=1.3.2, also sweep any group named qa-ux-* (catches orphans whose
-    # drive died before recording its id). Pre-1.3.2 the title is "agent", so this is a no-op then.
-    printf 'Run domshell "group list". For EVERY lane whose name/title starts with "qa-ux-", run "group close <id>". Report what you closed. Do nothing else.\n' | run
+    echo "qa-cleanup: closing this round's recorded lanes from $REG:"
+    while IFS= read -r id; do
+      id=$(printf '%s' "$id" | tr -dc '0-9'); [ -n "$id" ] || continue
+      echo "  close lane $id:"; ds_exec "group close" "$id" | sed 's/^/    /'
+    done < "$REG"
+    # Belt-and-suspenders: also close any lane whose name starts with qa-ux- (catches an
+    # orphan whose drive died before recording its id). Needs DOMShell extension >=1.3.2
+    # (older titles the group "agent"); harmless no-op otherwise.
+    echo "  sweeping any remaining qa-ux-* named lanes:"
+    LANES=$(ds_exec "group list" "shared")
+    printf '%s\n' "$LANES" | grep -iE 'qa-ux-' | grep -oE '[0-9]+' | sort -u | while IFS= read -r id; do
+      [ -n "$id" ] || continue; echo "    close qa-ux lane $id:"; ds_exec "group close" "$id" | sed 's/^/      /'
+    done
     rm -f "$REG"
     ;;
+
   all)
     echo "qa-cleanup: WARNING — sweeping ALL agent lanes."
     echo "  This closes EVERY DOMShell agent lane, including other Chrome windows and any Cowork session."
     echo "  Only do this when no other legitimate DOMShell session is active."
-    printf 'Run domshell "group list". Then for EVERY lane that is NOT the shared/default lane, run "group close <id>" using its numeric id. Report every id you closed. Do nothing else.\n' | run
+    LANES=$(ds_exec "group list" "shared")
+    echo "  current lanes:"; printf '%s\n' "$LANES" | sed 's/^/    /'
+    # Best-effort: close every numeric lane id we can see (the shared/default lane has no
+    # closeable group, so a close on it is a harmless no-op).
+    printf '%s\n' "$LANES" | grep -oE 'lane[s]?[^0-9]*[0-9]+|\b[0-9]{1,6}\b' | grep -oE '[0-9]+' | sort -u | while IFS= read -r id; do
+      [ -n "$id" ] || continue; echo "  close lane $id:"; ds_exec "group close" "$id" | sed 's/^/    /'
+    done
     ;;
 esac

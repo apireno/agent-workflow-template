@@ -1,8 +1,18 @@
-# QA-UX Browser-Drive Runbook (DOMShell + gemini)
+# QA-UX Browser-Drive Runbook (DOMShell)
+
+> **⚠️ ENGINE CHANGE 2026-06-19 — the gemini engine is DEAD.** Google removed the gemini-CLI
+> free tier (`IneligibleTierError` / `UNSUPPORTED_CLIENT`, "migrate to Antigravity"); gemini can
+> no longer authenticate. **The Claude engine (`qa-drive-claude.sh`) is now the default + only
+> drive path** and is fully zero-touch (launches an interactive session, records the window id,
+> auto-sends the "go" kickoff, pre-authorizes trust+MCP+permissions). The orphan-lane janitor
+> (`qa-cleanup-groups.sh`) now talks to DOMShell over a **direct curl JSON-RPC client** (no gemini).
+> Sections below that say "fanned to gemini / engine=gemini (default)" are **historical** — read
+> them as the Claude engine. The same gemini death also disables `/vp-review` + `/sprint-fanout`
+> fleet-wide (separate CTO/CEO engine decision).
 
 **Companion to** `docs/personas/qa-ux.md`. This is the operational setup + troubleshooting guide for the **browser** surface (the CLI and MCP surfaces need no DOMShell). It captures the hard-won gotchas so a new project doesn't rediscover them.
 
-**The model in one paragraph:** QA-UX drives the live app as a skeptical user. The browser surface uses **DOMShell** (a browser-as-filesystem MCP) as its driver, fanned to **gemini** by default (`$0`, no `claude -p`, no osascript). DOMShell is provisioned into the **UX-focused repos** under test (never the CTO home or backend/data repos). The `/qa-ux` skill self-orchestrates the whole drive; you mostly just supply a clean token and a connected Chrome.
+**The model in one paragraph:** QA-UX drives the live app as a skeptical user. The browser surface uses **DOMShell** (a browser-as-filesystem MCP) as its driver, via an **interactive Claude session** (`qa-drive-claude.sh` — subscription pool, no `claude -p`). DOMShell is provisioned into the **UX-focused repos** under test (never the CTO home or backend/data repos). The `/qa-ux` skill self-orchestrates the whole drive; you mostly just supply a clean token and a connected Chrome.
 
 ---
 
