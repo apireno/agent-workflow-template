@@ -7,7 +7,7 @@ argument-hint: <prd-or-goal-path> [--repos repo1,repo2] [--sprint NN] [--dry-run
 
 # Sprint Fanout: $ARGUMENTS
 
-Drafts a sprint-plan.md per active repo by feeding the PRD/goal + per-repo CLAUDE.md to gemini in parallel.
+Drafts a sprint-plan.md per active repo by feeding the PRD/goal + per-repo CLAUDE.md to the **configured engine** in parallel. Engine resolved by `scripts/agentic/resolve-review-engine.sh` (`REVIEW_ENGINE` env → `.review-engine` file → default `subagent`). For CLI engines (`gemini`/`claude-p`) the body drafts inline; for `subagent`/`handoff` the body stages per-repo prompts and the CTO drafts them via the Agent tool.
 
 ## Setup + dispatch
 
@@ -91,8 +91,15 @@ if [ "$NUM_REPOS" -eq 0 ]; then
   exit 1
 fi
 
-# Fire gemini per repo, in parallel
-echo "Firing gemini per repo in parallel..."
+# Resolve the engine (shared resolver) — configurable per CEO 2026-06-19, not hardcoded gemini.
+RESOLVER="$ROOT/scripts/agentic/resolve-review-engine.sh"
+ENGINE=$( [ -x "$RESOLVER" ] && "$RESOLVER" || echo subagent ) || true
+case "$ENGINE" in claude) ENGINE=claude-p;; dual) ENGINE=gemini;; none|"") ENGINE=subagent;; esac
+[ "$ENGINE" = "claude-p-blocked" ] && { echo "ENGINE=claude-p refused (metered; set REVIEW_ALLOW_METERED=1)"; exit 3; }
+[ "$ENGINE" = "claude-p" ] && [ "${REVIEW_ALLOW_METERED:-0}" != "1" ] && { echo "ERROR: claude-p is metered; set REVIEW_ALLOW_METERED=1."; exit 1; }
+echo "ENGINE=$ENGINE"
+echo ""
+echo "Staging per-repo prompts$( [ "$ENGINE" = gemini ] || [ "$ENGINE" = claude-p ] && echo ' + firing in parallel' )..."
 date
 PRD_CONTENT=$(cat "$PRD_PATH")
 
@@ -126,16 +133,27 @@ OUTPUT REQUIREMENTS:
 EOF
 
   OUT_PLAN="$OUT/${REPO_NAME}-plan.md"
-  echo "  -> firing gemini for $REPO_NAME (timeout 300s)..."
-  # Stdin-only invocation — gemini -p REQUIRES a string argument; passing the
-  # prompt via stdin without -p is the working pattern (also used by vp-review.sh).
-  ( gtimeout 300 sh -c "cat '$PROMPT_FILE' | gemini" > "$OUT_PLAN" 2> "$OUT/${REPO_NAME}.log" \
-      && echo "SUCCESS" > "$OUT/${REPO_NAME}.status" \
-      || echo "ERROR($?)" > "$OUT/${REPO_NAME}.status" ) &
+  if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "claude-p" ]; then
+    # Stdin-only invocation — neither CLI needs a positional prompt this way.
+    if [ "$ENGINE" = "gemini" ]; then RUNCMD="cat '$PROMPT_FILE' | gemini"
+    else RUNCMD="cat '$PROMPT_FILE' | claude -p --max-turns 1"; fi
+    echo "  -> firing $ENGINE for $REPO_NAME (timeout 300s)..."
+    ( gtimeout 300 sh -c "$RUNCMD" > "$OUT_PLAN" 2> "$OUT/${REPO_NAME}.log" \
+        && echo "SUCCESS" > "$OUT/${REPO_NAME}.status" \
+        || echo "ERROR($?)" > "$OUT/${REPO_NAME}.status" ) &
+  else
+    # subagent / handoff: a skill body can't draft via an Agent/window — the CTO does (Your task).
+    echo "  -> staged prompt for $REPO_NAME (engine=$ENGINE: CTO drafts via the Agent tool)"
+    echo "PENDING" > "$OUT/${REPO_NAME}.status"
+  fi
 done < "$OUT/repos.tsv"
 
 wait
-echo "All gemini calls done at $(date)"
+if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "claude-p" ]; then
+  echo "All $ENGINE calls done at $(date)"
+else
+  echo "DISPATCH=$ENGINE — prompts staged; the CTO drafts each plan via the Agent tool (see Your task)."
+fi
 echo ""
 
 # Report per-repo result
@@ -187,7 +205,13 @@ fi
 
 ## Your task as CTO
 
-Above is the per-repo fanout result. Synthesize:
+**First check the `ENGINE=` / `DISPATCH=` lines in the script output.**
+
+**If `DISPATCH=subagent` (default) or `handoff`:** the plans were NOT drafted yet — you draft them now. For each `repo=… prompt=… plan=… dest=…` repo, launch one `Task`/Agent call in parallel (single message), instructing it to read the staged prompt file (`$OUT/<repo>-prompt.md`), draft the sprint plan exactly per the prompt's OUTPUT REQUIREMENTS (markdown only, this-repo-only, `NO_SCOPE_FOR_THIS_REPO` if it doesn't apply), and **write it to both `$OUT/<repo>-plan.md` and the dest `…/docs/sprints/sprint-<NN>/sprint-plan.md`** (unless `--dry-run`, then staging only). When all return, proceed to synthesize. (Engine is bright-line clean: in-session Agent = subscription pool.)
+
+**If the CLI engine ran (gemini/claude-p):** plans are already drafted + landed above.
+
+Then, regardless of engine, synthesize:
 
 1. **Headline:** "Drafted N plans, M skipped (no scope), K failed"
 2. **For each non-skipped plan:** read it briefly via Read tool, note the top 2-3 tasks and the effort estimate

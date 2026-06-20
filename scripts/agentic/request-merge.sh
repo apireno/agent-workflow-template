@@ -55,33 +55,23 @@ if command -v claude > /dev/null 2>&1; then
     CLAUDE_CMD="claude"
 fi
 
+RESOLVER="$(dirname "$0")/resolve-review-engine.sh"
 resolve_engine() {
-    if [ -n "${REVIEW_ENGINE:-}" ]; then
-        echo "$REVIEW_ENGINE"
-        return
-    fi
-    if [ -f "$REPO_ROOT/.review-engine" ]; then
-        cat "$REPO_ROOT/.review-engine" | tr -d '[:space:]'
-        return
-    fi
-    if [ -n "$GEMINI_CMD" ] && [ -n "$CLAUDE_CMD" ]; then
-        echo "dual"
-    elif [ -n "$GEMINI_CMD" ]; then
-        echo "gemini"
-    elif [ -n "$CLAUDE_CMD" ]; then
-        echo "claude"
-    else
-        echo "none"
-    fi
+    if [ -x "$RESOLVER" ]; then "$RESOLVER"; return; fi
+    if [ -n "${REVIEW_ENGINE:-}" ]; then echo "$REVIEW_ENGINE"; return; fi
+    if [ -f "$REPO_ROOT/.review-engine" ]; then tr -d '[:space:]' < "$REPO_ROOT/.review-engine"; return; fi
+    echo "subagent"
 }
 
-ENGINE=$(resolve_engine)
-
-if [ "$ENGINE" = "none" ]; then
-    echo "ERROR: No LLM CLI found. Install one of:"
-    echo "  Gemini CLI: https://github.com/google-gemini/gemini-cli"
-    echo "  Claude CLI: https://docs.anthropic.com/en/docs/claude-code"
-    exit 1
+ENGINE=$(resolve_engine || true)
+case "$ENGINE" in claude) ENGINE=claude-p;; dual) ENGINE=gemini;; none|"") ENGINE=subagent;; esac
+# CLI executor — runs gemini / claude-p only. subagent + handoff are orchestrator-driven;
+# claude-p-blocked = metered quarantine refused. Exit with guidance instead of misfiring.
+if [ "$ENGINE" = "subagent" ] || [ "$ENGINE" = "handoff" ] || [ "$ENGINE" = "claude-p-blocked" ]; then
+    echo "ERROR: engine '$ENGINE' is not runnable by this CLI script (CLI engines only)." >&2
+    echo "  Set REVIEW_ENGINE=gemini, or REVIEW_ENGINE=claude-p REVIEW_ALLOW_METERED=1 (metered)," >&2
+    echo "  or run the review via a subagent-capable orchestrator (CTO fans Agent calls)." >&2
+    exit 2
 fi
 
 echo "Engine: $ENGINE"
@@ -236,15 +226,14 @@ HEADER
         gemini)
             cat "$PROMPT_FILE" | "$GEMINI_CMD" > "$OUTPUT_FILE" 2>/dev/null
             ;;
-        claude)
+        claude-p)
+            # ⚠️ METERED Anthropic API — only past the resolver quarantine. Second gate here.
+            [ "${REVIEW_ALLOW_METERED:-0}" = "1" ] || { echo "Error: claude-p is metered; set REVIEW_ALLOW_METERED=1." >&2; exit 1; }
             cat "$PROMPT_FILE" | "$CLAUDE_CMD" -p --max-turns 1 > "$OUTPUT_FILE" 2>/dev/null
             ;;
-        dual)
-            # Primary: Gemini
-            cat "$PROMPT_FILE" | "$GEMINI_CMD" > "$OUTPUT_FILE" 2>/dev/null
-            # Secondary: Claude (parallel file for comparison)
-            local CLAUDE_OUT="${OUTPUT_FILE%.md}-claude.md"
-            cat "$PROMPT_FILE" | "$CLAUDE_CMD" -p --max-turns 1 > "$CLAUDE_OUT" 2>/dev/null
+        *)
+            echo "Error: engine '$ENGINE' is not a CLI engine here (use gemini | claude-p)." >&2
+            exit 1
             ;;
     esac
 

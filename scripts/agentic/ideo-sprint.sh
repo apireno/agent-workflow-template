@@ -33,43 +33,27 @@ VOTES_PER_PERSONA=3
 PERSONAS="vp-eng vp-prod vp-security vp-devops"
 EXTRA_CONTEXT_FILES=""
 
-# --- Engine selection (shared with vp-review.sh) ---
+# --- Engine selection (shared resolver: single source of truth) ---
+RESOLVER="$(dirname "$0")/resolve-review-engine.sh"
 resolve_engine() {
-    if [ -n "${REVIEW_ENGINE:-}" ]; then
-        echo "$REVIEW_ENGINE"
-        return
-    fi
-
-    if [ -f "$REPO_ROOT/.review-engine" ]; then
-        cat "$REPO_ROOT/.review-engine" | tr -d '[:space:]'
-        return
-    fi
-
-    local HAS_GEMINI=0
-    local HAS_CLAUDE=0
-
-    if command -v gemini > /dev/null 2>&1; then
-        HAS_GEMINI=1
-    elif [ -x "$HOME/.local/bin/gemini" ]; then
-        HAS_GEMINI=1
-    fi
-
-    if command -v claude > /dev/null 2>&1; then
-        HAS_CLAUDE=1
-    fi
-
-    if [ "$HAS_GEMINI" -eq 1 ] && [ "$HAS_CLAUDE" -eq 1 ]; then
-        echo "dual"
-    elif [ "$HAS_GEMINI" -eq 1 ]; then
-        echo "gemini"
-    elif [ "$HAS_CLAUDE" -eq 1 ]; then
-        echo "claude"
-    else
-        echo "none"
-    fi
+    if [ -x "$RESOLVER" ]; then "$RESOLVER"; return; fi
+    # Fallback if the shared resolver is missing.
+    if [ -n "${REVIEW_ENGINE:-}" ]; then echo "$REVIEW_ENGINE"; return; fi
+    if [ -f "$REPO_ROOT/.review-engine" ]; then tr -d '[:space:]' < "$REPO_ROOT/.review-engine"; return; fi
+    echo "subagent"
 }
 
-ENGINE=$(resolve_engine)
+ENGINE=$(resolve_engine || true)
+case "$ENGINE" in claude) ENGINE=claude-p;; dual) ENGINE=gemini;; none|"") ENGINE=subagent;; esac
+# This is a CLI executor — it can only run CLI engines (gemini / claude-p). subagent + handoff
+# are orchestrator-driven (the CTO fans Agent calls / windows), and claude-p-blocked means the
+# metered quarantine refused. In all three, exit with guidance rather than run the wrong thing.
+if [ "$ENGINE" = "subagent" ] || [ "$ENGINE" = "handoff" ] || [ "$ENGINE" = "claude-p-blocked" ]; then
+    echo "ERROR: engine '$ENGINE' is not runnable by this CLI script (it executes CLI engines only)." >&2
+    echo "  Set REVIEW_ENGINE=gemini (when available), or REVIEW_ENGINE=claude-p REVIEW_ALLOW_METERED=1 (metered)," >&2
+    echo "  or run the ideation via a subagent-capable orchestrator (CTO fans Agent calls per persona)." >&2
+    exit 2
+fi
 
 if [ "$ENGINE" = "none" ]; then
     echo "Error: No LLM CLI found. Install one of:"
@@ -310,20 +294,14 @@ run_llm() {
         gemini)
             cat "$prompt_file" | "$GEMINI_CMD" > "$output_file" 2>/dev/null
             ;;
-        claude)
+        claude-p)
+            # ⚠️ METERED Anthropic API — only reachable when REVIEW_ALLOW_METERED=1 cleared the
+            # shared-resolver quarantine. Defense-in-depth second gate here.
+            [ "${REVIEW_ALLOW_METERED:-0}" = "1" ] || { echo "Error: claude-p is metered; set REVIEW_ALLOW_METERED=1." >&2; exit 1; }
             cat "$prompt_file" | "$CLAUDE_CMD" -p --max-turns 1 > "$output_file" 2>/dev/null
             ;;
-        dual)
-            # In dual mode, use gemini as primary for ideation
-            # (both engines would slow this down 2x per phase — use primary only)
-            if [ -n "$GEMINI_CMD" ]; then
-                cat "$prompt_file" | "$GEMINI_CMD" > "$output_file" 2>/dev/null
-            else
-                cat "$prompt_file" | "$CLAUDE_CMD" -p --max-turns 1 > "$output_file" 2>/dev/null
-            fi
-            ;;
         *)
-            echo "Error: Unknown engine '$ENGINE'"
+            echo "Error: engine '$ENGINE' is not a CLI engine here (use gemini | claude-p)." >&2
             exit 1
             ;;
     esac

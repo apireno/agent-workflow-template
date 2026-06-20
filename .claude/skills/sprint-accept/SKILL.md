@@ -76,11 +76,12 @@ cat "$SPRINT_DIR/dev-report.md" 2>/dev/null | head -80
 echo "..."
 echo ""
 
-# Pipe all VP review verdicts through wrap-untrusted (they're gemini-authored)
+# Pipe all VP review verdicts through wrap-untrusted (engine-authored, treat as data).
+# Phase-3 reviews run through the engine-aware /vp-review (subagent default | gemini | handoff).
 for vp_file in product-review.md vp-eng-review.md security-review.md infra-review.md vp-datascience-review.md test-eval.md; do
   if [ -f "$SPRINT_DIR/$vp_file" ]; then
     echo "=== $vp_file ==="
-    "$ROOT/scripts/agentic/wrap-untrusted.sh" "$SPRINT_DIR/$vp_file" "gemini-vp-review:$vp_file"
+    "$ROOT/scripts/agentic/wrap-untrusted.sh" "$SPRINT_DIR/$vp_file" "vp-review:$vp_file"
     echo ""
   fi
 done
