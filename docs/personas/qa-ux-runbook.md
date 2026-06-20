@@ -27,6 +27,31 @@
 
 > **Why the proxy form, not a spawn or a direct URL:** when DOMShell already runs (Docker/ToolHive), a `--allow-write` *spawn* conflicts on `:3001`/`:9876`, and a direct `type:http` URL `401`s without the token. The `domshell-proxy` stdio entry **connects to** the running server and controls its existing instances — the only form that works against a running server.
 
+### 1b. Using DOMShell (or any stdio MCP server) from a non-Claude agent (gemini / Antigravity / Cursor)
+
+DOMShell and other stdio MCP servers are **client-agnostic** — the same launch command works in any MCP-capable agent; only the *config file location* differs. To wire DOMShell into another agentic client, add the **identical proxy entry** to that client's MCP config:
+
+- **Antigravity (Google's agentic IDE):** `~/.gemini/antigravity/mcp_config.json`
+- **gemini-CLI:** `~/.gemini/settings.json` (note: the CLI free tier is deprecated, but the MCP-config shape is the same)
+- **Cursor / others:** their respective `mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "domshell": {
+      "command": "npx",
+      "args": ["-y", "-p", "@apireno/domshell", "domshell-proxy", "--port", "3001", "--token", "${DOMSHELL_TOKEN}"]
+    }
+  }
+}
+```
+
+> ⚠️ **Common mistake:** there is **no** `@anthropic-ai/domshell-mcp` package — DOMShell is `@apireno/domshell`, driven via the **`domshell-proxy`** form with the **`--token`**. A bare `npx … domshell-mcp` will not connect.
+>
+> ⚠️ **Env-var interpolation:** Claude Code expands `${DOMSHELL_TOKEN}` from the env; **not every client does.** If the agent reports a `401`/`Unauthorized`, the client isn't substituting the var — replace `${DOMSHELL_TOKEN}` with the **literal token value** (`echo $DOMSHELL_TOKEN`). These per-client config files are **local, not committed**, so an inlined token is acceptable there — but **never commit a file containing the literal token**.
+
+Same prerequisites as Claude: the DOMShell server on `:3001` running + the Chrome extension connected. The non-Claude agent then drives the **same real Chrome** under the same lane protocol. (Project-specific MCP servers — e.g. a code/decision-graph server — register the same way: copy that server's stdio command from the repo's `.mcp.json` into the agent's MCP config.)
+
 ---
 
 ## 2. Author the plan (shift-left, before the drive)
