@@ -21,6 +21,9 @@
 #   qa-cleanup-groups.sh                       # LIST all DOMShell lanes (inspect first)
 #   qa-cleanup-groups.sh --close 12,34         # close lanes 12 and 34 only
 #   qa-cleanup-groups.sh --sprint-dir <dir>    # close exactly the ids in <dir>/.qa-lanes (+ qa-ux-* by name)
+#   qa-cleanup-groups.sh --agent-default       # close ONLY generic unnamed `agent` lanes; SPARES named
+#                                              #   (qa-ux-*) lanes — SAFE during an active drive. Interim
+#                                              #   mitigation for the per-connection lane until ext >=1.3.2 (#53).
 #   qa-cleanup-groups.sh --all-agent           # close EVERY agent lane (NOT shared/default) — loud
 
 set -uo pipefail
@@ -31,6 +34,7 @@ while [ $# -gt 0 ]; do
     --close)        ACTION=close; IDS="${2:-}"; shift 2 ;;
     --close=*)      ACTION=close; IDS="${1#--close=}"; shift ;;
     --all-agent)    ACTION=all; shift ;;
+    --agent-default) ACTION=agentdefault; shift ;;
     --sprint-dir)   ACTION=registry; SPRINT_DIR="${2:-}"; shift 2 ;;
     --sprint-dir=*) ACTION=registry; SPRINT_DIR="${1#--sprint-dir=}"; shift ;;
     *)              echo "Unknown arg: $1 (use --list | --close <ids> | --sprint-dir <dir> | --all-agent)" >&2; shift ;;
@@ -164,6 +168,24 @@ case "$ACTION" in
     rm -f "$REG"
     ;;
 
+  agentdefault)
+    # SAFE interim sweep (pre-DOMShell-1.3.2): close ONLY the generic, unnamed `agent`
+    # connection-default lanes — the ones every MCP connection mints until ext #53/1.3.2
+    # ships. SPARES every NAMED lane (qa-ux-*, etc.), so it is safe to run DURING an active
+    # drive: the drive works in its named lane, not the generic `agent` one. Once you install
+    # ext >=1.3.2 these lanes stop being created and this mode becomes a no-op.
+    LANES=$(ds_exec "group list" "shared")
+    echo "qa-cleanup: lanes:"; printf '%s\n' "$LANES" | sed 's/^/  /'
+    # Match lines whose lane NAME is exactly "agent" (name token immediately before "[id N]");
+    # a named lane like "qa-ux-foo  [id N]" or "agent-x" does NOT match "agent  [id".
+    IDS=$(printf '%s\n' "$LANES" | grep -E '(^|[[:space:]])agent[[:space:]]+\[id[[:space:]]+[0-9]+\]' | grep -oE '\[id[[:space:]]+[0-9]+\]' | grep -oE '[0-9]+')
+    if [ -z "$IDS" ]; then echo "qa-cleanup: no generic 'agent' connection-default lanes to close."; else
+      echo "$IDS" | while IFS= read -r id; do
+        [ -n "$id" ] || continue; echo "  close generic agent lane $id:"; ds_exec "group close" "$id" | sed 's/^/    /'
+      done
+      echo "qa-cleanup: closed the generic 'agent' lanes; named (qa-ux-*) lanes left untouched."
+    fi
+    ;;
   all)
     echo "qa-cleanup: WARNING — sweeping ALL agent lanes."
     echo "  This closes EVERY DOMShell agent lane, including other Chrome windows and any Cowork session."
