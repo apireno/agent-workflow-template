@@ -1,9 +1,7 @@
 {
   "_comment": "Template for the CTO repo's .claude/settings.json. Copy or merge into .claude/settings.json after Sprint A. Do NOT include the _comment fields when applying.",
-
-  "_comment_defaultMode": "acceptEdits is the recommended posture for CTO orchestration work — auto-approve Edit/Write, Bash still prompts. CEO can override per-session with Shift+Tab.",
+  "_comment_defaultMode": "acceptEdits is the recommended posture for CTO orchestration work \u2014 auto-approve Edit/Write, Bash still prompts. CEO can override per-session with Shift+Tab.",
   "defaultMode": "acceptEdits",
-
   "permissions": {
     "allow": [
       "Bash(*)",
@@ -13,15 +11,21 @@
       "Glob",
       "Grep",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "mcp__codegram",
+      "mcp__codegram__ask",
+      "mcp__codegram__ask_fleet",
+      "mcp__codegram__search_docs",
+      "mcp__codegram__traverse",
+      "mcp__codegram__provenance",
+      "mcp__domshell",
+      "mcp__domshell__domshell_execute"
     ]
   },
-
   "_comment_skillBudget": "Default skill listing budget is 1% of context. With ~15 skills planned, raise to 2% to keep descriptions intact.",
   "skillListingBudgetFraction": 0.02,
-
   "hooks": {
-    "_comment_SessionStart": "Run preflight on every session start. Output appears in Claude's context as additionalContext — warnings/errors surface immediately.",
+    "_comment_SessionStart": "Run preflight on every session start. Output appears in Claude's context as additionalContext \u2014 warnings/errors surface immediately.",
     "SessionStart": [
       {
         "matcher": "*",
@@ -33,8 +37,7 @@
         ]
       }
     ],
-
-    "_comment_Stop_inbox": "Drain ~/.cto/inbox/ at the end of every turn. Sprint B work — wire this in once /escalate-drain skill exists.",
+    "_comment_Stop_inbox": "Drain ~/.cto/inbox/ at the end of every turn. Sprint B work \u2014 wire this in once /escalate-drain skill exists.",
     "_Stop_placeholder": [
       {
         "matcher": "*",

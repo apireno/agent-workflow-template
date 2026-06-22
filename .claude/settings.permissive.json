@@ -8,7 +8,15 @@
       "Glob",
       "Grep",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "mcp__codegram",
+      "mcp__codegram__ask",
+      "mcp__codegram__ask_fleet",
+      "mcp__codegram__search_docs",
+      "mcp__codegram__traverse",
+      "mcp__codegram__provenance",
+      "mcp__domshell",
+      "mcp__domshell__domshell_execute"
     ]
   }
 }
