@@ -11,26 +11,40 @@
 #   3. .claude/hooks/auto-paste-brief.sh (records session_id, auto-pastes brief)
 #   4. .claude/hooks/session-end-record.sh (records exit, flags CRASHED/COMPLETE)
 #
-# Run from agent-workflow-template:
-#   ./scripts/cto/push-to-repos.sh                # push to all known repos
-#   ./scripts/cto/push-to-repos.sh acme-ui  # push to one repo
-#   ./scripts/cto/push-to-repos.sh --dry-run     # show what would be pushed
+# Run from a CTO home (the template or any <project>-cto):
+#   ./scripts/cto/push-to-repos.sh                # push to all active repos in projects.yaml
+#   ./scripts/cto/push-to-repos.sh <repo-name>    # push to one repo
+#   ./scripts/cto/push-to-repos.sh --dry-run      # show what would be pushed
+#
+# Repo list + paths come from .cto/projects.yaml (NOT hardcoded), so this same script is
+# portable to any CTO home. CTO-home repos (name ends in -cto, or the template itself) get a
+# MECHANISM sync via sync-cto-home.sh instead of the dev-team file copy.
 
 set -euo pipefail
 
 TEMPLATE="$(cd "$(dirname "$0")/../.." && pwd)"
 REPOS_BASE="$(dirname "$TEMPLATE")"
 
-# Repos to push to — keep in sync with .cto/projects.yaml active entries
-ACTIVE_REPOS=(
-  acme-ui
-  acme-admin
-  acme-core
-  acme-web
-  acme-service-a
-  acme-config
-  acme-service-b
+# Active repos (name + path) read from .cto/projects.yaml — no hardcoded names.
+typeset -A REPO_PATH_MAP
+typeset -a ACTIVE_REPOS
+while IFS=$'\t' read -r _nm _pth; do
+  [ -n "$_nm" ] || continue
+  ACTIVE_REPOS+=("$_nm"); REPO_PATH_MAP[$_nm]="$_pth"
+done < <(python3 - "$TEMPLATE/.cto/projects.yaml" <<'PY'
+import re, sys, os
+p = sys.argv[1]
+if not os.path.exists(p): sys.exit(0)
+for b in re.split(r'(?=- name:)', open(p).read()):
+    m = re.search(r'- name:\s*(\S+)', b); pa = re.search(r'path:\s*(\S+)', b); a = re.search(r'active:\s*(\S+)', b)
+    if not m or not pa: continue
+    if a and a.group(1).lower() in ('false', 'no', '0'): continue
+    print(f"{m.group(1)}\t{pa.group(1)}")
+PY
 )
+if [ ${#ACTIVE_REPOS[@]} -eq 0 ]; then
+  echo "WARN: no active repos found in $TEMPLATE/.cto/projects.yaml" >&2
+fi
 
 # Parse args
 DRY_RUN=0
@@ -40,7 +54,8 @@ for arg in "$@"; do
     --dry-run)   DRY_RUN=1 ;;
     --help|-h)
       echo "Usage: $0 [--dry-run] [repo1 repo2 ...]"
-      echo "If no repos given, pushes to all active acme-* repos."
+      echo "If no repos given, pushes to all active repos in .cto/projects.yaml."
+      echo "CTO-home repos (*-cto / the template) get a mechanism sync via sync-cto-home.sh."
       exit 0
       ;;
     *) TARGETS+=("$arg") ;;
@@ -77,13 +92,29 @@ push_count=0
 skip_count=0
 
 for repo in "${TARGETS[@]}"; do
-  DEST="$REPOS_BASE/$repo"
+  DEST="${REPO_PATH_MAP[$repo]:-$REPOS_BASE/$repo}"
 
   if [ ! -d "$DEST" ]; then
     echo "  [skip] $repo — directory not found at $DEST"
     skip_count=$((skip_count + 1))
     continue
   fi
+
+  # CTO-home repos get the MECHANISM sync (skills/scripts/personas/settings), NOT the
+  # dev-team file copy. Detection per CLAUDE.md: name ends in -cto, or is the template.
+  case "$repo" in
+    *-cto|agent-workflow-template)
+      echo "  -> $repo  [CTO home — mechanism sync via sync-cto-home.sh]"
+      SYNC="$TEMPLATE/scripts/cto/sync-cto-home.sh"
+      if [ -x "$SYNC" ]; then
+        if [ "$DRY_RUN" -eq 1 ]; then "$SYNC" "$DEST"; else "$SYNC" "$DEST" --apply; fi
+      else
+        echo "      WARN: $SYNC not found/executable — skipping CTO-home $repo"
+      fi
+      push_count=$((push_count + 1))
+      continue
+      ;;
+  esac
 
   echo "  -> $repo"
 
