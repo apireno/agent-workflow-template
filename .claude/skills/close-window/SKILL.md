@@ -7,7 +7,7 @@ argument-hint: <repo-name> [--force]
 
 # Close window for: $ARGUMENTS
 
-Closes the Terminal window for the named repo's Phase 2 session. The underlying claude process exits cleanly; the JSONL transcript at `~/.claude/projects/...` is preserved for later /peek or /resume-dev-team.
+Closes the Terminal window for the named repo's Phase 2 session — **hands-free** (it pre-kills the window's processes by tty so macOS never raises the "terminate running processes?" sheet, with a Terminate-click fallback). The claude process is terminated; its JSONL transcript at `~/.claude/projects/...` was flushed continuously and is preserved for later /peek or /resume-dev-team.
 
 ```!
 set -uo pipefail
@@ -84,60 +84,59 @@ if [ "$FORCE" -ne 1 ]; then
 fi
 
 echo "Closing Terminal window id $WIN_ID for $REPO_NAME..."
-# Close strategy (revised 2026-05-29 — see memory feedback-close-window-terminal-flaky):
-#   We do NOT rely on getting claude to exit first. The inner claude TUI
-#   intercepts keystrokes, so an `/exit`+Return keystroke often does not reach
-#   or submit (same flaky keystroke channel as /send). claude keeps running and
-#   `close` then raises macOS's sheet:
-#     "Do you want to terminate running processes in this window?  [Cancel] [Terminate]"
-#   `saving no` does NOT suppress that sheet (it suppresses the *save* dialog, a
-#   different prompt). If left unhandled, the sheet sits there blocking forever.
-#   So: fire `close`, then deterministically click the "Terminate" button on the
-#   sheet via System Events accessibility — that needs no keystroke into claude.
-#   Also: use `(first window whose id is X)` — `window id X` raises -1728.
-#
-# Requires Accessibility permission for Terminal (System Settings → Privacy &
-# Security → Accessibility) — same requirement as /send.
-osascript <<APPLESCRIPT 2>&1 | tail -5
-tell application "Terminal"
-    try
-        set targetWin to (first window whose id is $WIN_ID)
-        set frontmost of targetWin to true
-    end try
-end tell
+# Close strategy (revised 2026-06-22 — the prior "close then click Terminate" in ONE script
+# DEADLOCKED: Terminal's `close` BLOCKS on the "terminate running processes?" sheet, so the
+# click code that came AFTER it never ran — the agent had to click Terminate / type exit by
+# hand. New strategy makes it deterministic and hands-free:
+#   (1) PRE-KILL the window's processes by its tty (claude/node/uv/domshell-proxy/python) so
+#       `close` finds nothing running and never raises the sheet at all. The JSONL transcript
+#       is already flushed and dev-report.md is already on disk, so a hard kill loses nothing.
+#   (2) Fire `close` in the BACKGROUND so that IF a residual sheet still appears it cannot
+#       block this script.
+#   (3) FOREGROUND loop clicks any lingering "Terminate" sheet (which also unblocks the bg
+#       close) and verifies the window is gone.
+# Use `(first window whose id is X)` — `window id X` raises -1728.
+# Requires Accessibility permission for Terminal (System Settings → Privacy & Security →
+# Accessibility) — same requirement as /send.
 
-delay 0.3
+# (1) resolve the TARGET window's tty, then SIGTERM/SIGKILL its processes. Guard the tty
+#     format so an empty/garbled value can never widen the kill.
+TTY=$(osascript 2>/dev/null -e "tell application \"Terminal\" to get tty of selected tab of (first window whose id is $WIN_ID)" || true)
+TTY=$(printf '%s' "$TTY" | tr -d '[:space:]')
+if printf '%s' "$TTY" | grep -qE '^/dev/ttys[0-9]+$'; then
+  TN=${TTY#/dev/}
+  pkill -TERM -t "$TN" 2>/dev/null || true
+  sleep 0.4
+  pkill -KILL -t "$TN" 2>/dev/null || true
+  echo "  terminated processes on $TTY (window cleared — no terminate sheet expected)"
+else
+  echo "  (could not resolve window tty: '$TTY'); relying on the Terminate-sheet click below"
+fi
 
--- close raises the "terminate running processes?" sheet because claude is running
-tell application "Terminal"
-    try
-        close (first window whose id is $WIN_ID)
-    end try
-end tell
+# (2) close in the BACKGROUND so a residual sheet can't block us.
+osascript -e "tell application \"Terminal\" to close (first window whose id is $WIN_ID)" >/dev/null 2>&1 &
 
-delay 0.7
-
--- confirm the terminate sheet if it appeared (deterministic; no keystroke into claude)
+# (3) FOREGROUND: click any "Terminate" sheet (unblocks the bg close), then verify gone.
+RESULT="WARNING: window id $WIN_ID may still be open — retry /close-window or click the red X"
+for _i in 1 2 3 4 5 6; do
+  sleep 0.4
+  osascript >/dev/null 2>&1 <<'OSA' || true
 tell application "System Events"
+  if exists process "Terminal" then
     tell process "Terminal"
-        set frontmost to true
-        repeat with w in windows
-            if (exists sheet 1 of w) and (exists button "Terminate" of sheet 1 of w) then
-                click button "Terminate" of sheet 1 of w
-            end if
-        end repeat
+      repeat with w in windows
+        if (exists sheet 1 of w) and (exists button "Terminate" of sheet 1 of w) then
+          click button "Terminate" of sheet 1 of w
+        end if
+      end repeat
     end tell
+  end if
 end tell
-
--- verify
-tell application "Terminal"
-    if (id of windows) contains $WIN_ID then
-        return "WARNING: window id $WIN_ID still open — retry /close-window or click the red X"
-    else
-        return "closed window id $WIN_ID (claude terminated)"
-    end if
-end tell
-APPLESCRIPT
+OSA
+  STILL=$(osascript -e "tell application \"Terminal\" to ((id of windows) contains $WIN_ID)" 2>/dev/null || echo "true")
+  if [ "$STILL" = "false" ]; then RESULT="closed window id $WIN_ID (processes terminated, window closed)"; break; fi
+done
+echo "$RESULT"
 
 # Clear the recorded window id so /send / /close-window don't try to use it again
 rm -f "$WIN_ID_FILE"
