@@ -31,8 +31,8 @@ ls -la "$SPRINT_DIR" | tail -n +2
 
 echo ""
 echo "=== Artifact summary ==="
-for f in scope.md sprint-plan.md dev-report.md test-results.md demo-output.md \
-         product-review.md vp-eng-review.md security-review.md infra-review.md \
+for f in scope.md sprint-plan.md dev-report.md test-results.md demo-output.md conformance.md \
+         qa-report.md product-review.md vp-eng-review.md security-review.md infra-review.md \
          vp-datascience-review.md test-eval.md cto-decision-*.md approval.md rejection.md; do
   for match in "$SPRINT_DIR"/$f; do
     if [ -f "$match" ]; then
@@ -53,9 +53,20 @@ for f in sprint-plan.md dev-report.md; do
   fi
 done
 
+# CONFORMANCE GATE (process, not outcome): you cannot accept BLIND. conformance.md must
+# EXIST (verification must have happened) — but it need NOT PASS. Accept stays a decision:
+# shipping with NOT-MET/UNVERIFIED criteria as documented known-issues is a CTO/CEO call.
+# This mirrors the QA-UX gate (report must exist + be reviewed; ship-with-defects is your call).
+if [ ! -f "$SPRINT_DIR/conformance.md" ]; then
+  echo "  [missing] conformance.md — REQUIRED for accept (objective verification precedes the decision)"
+  echo "            Run:  /sprint-verify $SPRINT_DIR   (after tests + the QA drive), then re-run /sprint-accept."
+  echo "            (Refusing only because verification is ABSENT — not because it failed. Accept never requires conformance to PASS.)"
+  MISSING=$((MISSING + 1))
+fi
+
 if [ "$MISSING" -gt 0 ]; then
   echo ""
-  echo "CANNOT ACCEPT: missing $MISSING canonical artifact(s). Sprint is not done yet."
+  echo "CANNOT ACCEPT: missing $MISSING canonical artifact(s). Sprint is not ready to decide on yet."
   exit 2
 fi
 ```
@@ -92,9 +103,17 @@ done
 Above are the sprint plan, dev report, and all VP reviews. Synthesize a final accept/reject decision:
 
 1. **Tally** — count BLOCKER / MAJOR / MINOR per VP. Flag any verdict file that's missing.
-2. **Did the dev report address ALL Phase 1 review blockers?** (compare dev-report to vp-*-review.md from Phase 1)
-3. **Did Phase 3 evals approve?** (check test-eval.md, vp-datascience-review.md for dev-report.md)
-4. **PROVENANCE GATE — comparison claims must rest on matching provenance**
+2. **CONFORMANCE — read `conformance.md` (the objective deliverable verification).** List every
+   **NOT-MET** and **UNVERIFIED** criterion. This is the "did we build what the plan said" check,
+   already done objectively by `/sprint-verify` — do NOT re-derive it from the dev-report's prose.
+   Your decision MUST explicitly state, for each NOT-MET / UNVERIFIED item, whether it is **accepted
+   as a documented known-issue** (with rationale + follow-up owner) or **blocks acceptance**. Accept
+   does NOT require conformance to PASS — shipping with known gaps is your call, but it must be
+   *named here*, never silent. If `conformance.md` shows everything MET, say so in one line.
+
+3. **Did the dev report address ALL Phase 1 review blockers?** (compare dev-report to vp-*-review.md from Phase 1)
+4. **Did Phase 3 evals approve?** (check test-eval.md, vp-datascience-review.md for dev-report.md)
+5. **PROVENANCE GATE — comparison claims must rest on matching provenance**
    (sprint-provenance-gating-for-graph-comparisons-20260528). Before you
    accept ANY quantitative comparison claim in the dev-report of the form
    "X improved/changed/drifted Y by Z" (deltas, %s, before/after, baseline-vs-
@@ -122,17 +141,18 @@ Above are the sprint plan, dev report, and all VP reviews. Synthesize a final ac
      unverified and call it out as an action item.
    - Date timestamps are NOT acceptable as a freshness/equivalence signal
      (that was the failure mode this gate exists to prevent).
-5. **Cross-VP convergence on remaining issues** — name them.
-6. **Decision** — one of:
+6. **Cross-VP convergence on remaining issues** — name them.
+7. **Decision** — one of:
    - `APPROVED` — sprint shipped, ready to merge
    - `APPROVED-WITH-CONDITIONS` — minor follow-ups recorded but ship is OK
    - `REJECTED-FOR-REVISION` — material blockers remain, sprint continues
    - `ESCALATE-TO-CEO` — judgment call only CEO can make
-7. **Write decision file** to `$SPRINT_DIR/cto-decision-$(date +%Y%m%d-%H%M%S).md` with:
+8. **Write decision file** to `$SPRINT_DIR/cto-decision-$(date +%Y%m%d-%H%M%S).md` with:
    - Decision verdict
    - Reasoning citing specific VP review excerpts
+   - Conformance disposition — the NOT-MET/UNVERIFIED items being accepted as known-issues (with follow-up owners) vs. those that blocked
    - Action items if APPROVED-WITH-CONDITIONS or REJECTED
    - PRD status update guidance for VP Prod
-8. **Present 5-line summary to CEO.**
+9. **Present 5-line summary to CEO.**
 
 Sign as: — CTO

@@ -137,17 +137,27 @@ During execution, monitor via:
 
 ### Phase 3: Evaluation
 
-**Step 12.** When `/sprint-status` shows COMPLETE (i.e., `dev-report.md` landed and the per-repo Stop hook touched `.claude/COMPLETE`), the CEO **explicitly types** (slash-only — formal sprint close):
+**Objective-then-decision.** Phase 3 separates *verification* (objective fact-finding) from *acceptance* (the ship decision). Evidence is produced first (re-run tests + `/qa-ux` drive), then **`/sprint-verify`** aggregates it into a conformance report, then **`/sprint-accept`** decides. "Accept" always means *a decision* — possibly shipping with documented known-issues — never an automatic "all green."
+
+**Step 12 — VERIFY (objective).** When `/sprint-status` shows COMPLETE (`dev-report.md` landed + the Stop hook touched `.claude/COMPLETE`), and AFTER the tests have been re-run and (for user-facing surfaces) `/qa-ux <dir> --mode drive` has produced `qa-report.md`, run:
+
+```
+/sprint-verify <sprint-dir-path>
+```
+
+This maps each plan/PRD acceptance criterion to evidence and marks it **MET / NOT-MET / UNVERIFIED** (citing `test-results.md` / `qa-report.md` / `demo-output.md` or a targeted check it runs), writing `<sprint-dir>/conformance.md`. It makes **no** ship decision — it's the "did we actually build what the plan said" check, done objectively so the accept decision rests on facts, not the dev-report's prose.
+
+**Step 13 — ACCEPT (decision).** The CEO **explicitly types** (slash-only — formal sprint close):
 
 ```
 /sprint-accept <sprint-dir-path>
 ```
 
-The skill reads sprint-plan + dev-report + all Phase 1 VP review files, runs Phase 3 `/vp-review` on the dev-report (default: vp-prod + vp-eng; add `vp-datascience` for sprints with statistical claims, `vp-security` for security work, etc. — see "VP Review Composition" in `docs/personas/cto.md`), and synthesizes a final accept/reject decision written to `<sprint-dir>/cto-decision-<ts>.md`.
+The skill reads sprint-plan + dev-report + `conformance.md` + all Phase 1 VP review files, runs Phase 3 `/vp-review` on the dev-report (default: vp-prod + vp-eng; add `vp-datascience` for statistical claims, `vp-security` for security work, etc. — see "VP Review Composition" in `docs/personas/cto.md`), and synthesizes a final accept/reject decision to `<sprint-dir>/cto-decision-<ts>.md`. **It requires `conformance.md` to EXIST (no blind accept) but never requires it to PASS** — accepting with NOT-MET/UNVERIFIED items as documented known-issues is a CTO/CEO call, named explicitly in the decision.
 
-**Step 13. STOP.** Present evaluation summary to CEO. Ask for final verdict.
+**Step 14. STOP.** Present evaluation summary to CEO. Ask for final verdict.
 
-**Step 14.** After acceptance, CEO **explicitly types** (slash-only — irreversible):
+**Step 15.** After acceptance, CEO **explicitly types** (slash-only — irreversible):
 
 ```
 /close-window <repo>
