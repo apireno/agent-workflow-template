@@ -56,6 +56,18 @@ for f in "$TEMPLATE"/docs/personas/*.md; do
   sync_one "$f" "$TARGET/docs/personas/$(basename "$f")"
 done
 
+# Doc TEMPLATES are mechanism (the _templates/ dirs the project copies from), distinct from the
+# CTO home's actual IP (real sprint dirs, ADRs, PRDs). Sync every docs/*/_templates/ dir; the
+# IP siblings (docs/sprints/<sprint>, docs/architecture/decisions, docs/roadmap/prds, ...) are
+# never matched because they aren't under a _templates/ path.
+echo "== docs/*/_templates/ (sprint/qa/architecture/ideation doc templates — mechanism) =="
+for tdir in "$TEMPLATE"/docs/*/_templates; do
+  [ -d "$tdir" ] || continue
+  rel="docs/$(basename "$(dirname "$tdir")")/_templates"
+  mkdir -p "$TARGET/$rel" 2>/dev/null || true
+  sync_one "$tdir/" "$TARGET/$rel/"
+done
+
 echo "== settings templates + CLAUDE.devteam.md =="
 for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template CLAUDE.devteam.md; do
   [ -f "$TEMPLATE/$f" ] || continue
