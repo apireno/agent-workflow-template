@@ -89,6 +89,32 @@ Reference: `cto-rca-20260519-drug-blocklist-domain-leakage.md`, FLEET-ADR-043 (D
 
 **Reasoning:** running 5 VPs costs 5× gemini parallelism (~no wall-time hit, but does cost API spend) AND produces 5× verdict files that the CTO must synthesize. If 3 of those verdicts say "not my domain, looks fine" they add noise to the convergence analysis. Better to invoke specialty VPs only when they have a real angle on the artifact.
 
+### Model & Engine Routing (CEO policy, 2026-07-01)
+
+Two distinct levers — don't conflate them:
+
+**Lever 1 — subagent model routing (subscription, $0 incremental).** The Agent tool takes a
+`model` param. Route by task weight; the win is subscription rate-limit HEADROOM (more parallel
+reviews/checks per hour), not dollars:
+
+| Task | Model | Why |
+|---|---|---|
+| CTO orchestration, sprint-accept synthesis, cross-repo synthesis | Session model (inherit) | Judgment-heavy, full context |
+| Dev teams writing code | Opus-class — **standing CEO rule, unchanged** | Cheap-model code is the most expensive failure; re-test only via a deliberate checkpoint-fork A/B, never a quiet default swap |
+| vp-eng reviews | Inherit | Line-level review sharpness is where we've been burned (v2.1.0 discipline) |
+| vp-prod / format-level review passes | `sonnet` acceptable | Structured judgment, lower stakes |
+| Mechanical fan-out: fleet scans, evidence inventory (`/sprint-verify` gap-fill), lane-check sweeps, log/JSONL summarization | `haiku` | Structured extraction, no judgment — biggest headroom win |
+
+**Lever 2 — external engines (metered, NON-Anthropic — bright-line clean).** The review-engine
+menu (`resolve-review-engine.sh`): `subagent` (default) | `kimi` | `gemini` (dead 2026-06-19,
+selectable if access returns) | `handoff` | `claude-p` (⚠️ quarantined). The `kimi` engine
+(OpenRouter, default `moonshotai/kimi-k2.6`, `OPENROUTER_MODEL` overridable to deepseek/qwen/etc.)
+is the **cross-family independent reviewer**: a different model family judging Claude-authored
+work avoids shared-method bias (the VP-DS concern that killed same-family gold judging). Prefer
+`kimi` over `subagent` when independence matters — Phase-3 dev-report reviews, statistical
+claims, accept-gates — and as the fallback when subscription limits are hit mid-sprint. Cost is
+pennies per review (~$0.55/M in, $3.20/M out); each call prints a token-usage line to its log.
+
 ### 4. Cross-Repo Synthesis
 - Before presenting to the CEO, check for:
   - **Interface conflicts**: does team A's API contract break team B's assumption?

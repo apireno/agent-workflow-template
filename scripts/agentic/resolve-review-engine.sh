@@ -15,6 +15,12 @@
 #               script runs it inline). NOTE: gemini-CLI free tier was deprecated by
 #               Google 2026-06-19 (UNSUPPORTED_CLIENT); selectable again whenever access
 #               returns (paid tier / Antigravity-compatible client / different account).
+#   kimi      — OpenRouter chat API via `openrouter-chat.sh` (default model
+#               moonshotai/kimi-k2.6; override with OPENROUTER_MODEL — any OpenRouter slug,
+#               so deepseek/qwen panels ride the same executor). Metered but NON-Anthropic
+#               (pennies per review) — bright-line clean. The cross-FAMILY independent
+#               reviewer now that gemini-CLI is gone; also the fallback when Claude
+#               subscription limits are hit mid-sprint. Requires OPENROUTER_API_KEY.
 #   subagent  — the persona review runs via the Claude Code **Agent tool**, IN-SESSION.
 #               Subscription pool (NOT the metered Agent-SDK pool). A skill's bash body
 #               CANNOT spawn a subagent, so scripts emit the `DISPATCH=subagent` sentinel
@@ -59,7 +65,7 @@ case "$engine" in
   claude)        note "alias: 'claude' -> 'claude-p' (the old value always meant claude -p)"; engine="claude-p" ;;
   dual)          note "alias: 'dual' -> 'gemini' (claude-p half quarantined)"; engine="gemini" ;;
   none|"")       note "alias: '${engine:-empty}' -> 'subagent'"; engine="subagent" ;;
-  gemini|subagent|handoff|claude-p) : ;;
+  gemini|kimi|subagent|handoff|claude-p) : ;;
   *)             note "unknown engine '$engine' from $src -> falling back to 'subagent'"; engine="subagent" ;;
 esac
 
@@ -69,7 +75,7 @@ note "resolved '$engine' (from $src; raw='$raw')"
 # explicitly opted into metered API for THIS invocation.
 if [ "$engine" = "claude-p" ] && [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
   echo "ERROR: engine 'claude-p' is the METERED Anthropic API path (bright-line). It runs ONLY with" >&2
-  echo "  REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing. Pick gemini|subagent|handoff," >&2
+  echo "  REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing. Pick kimi|gemini|subagent|handoff," >&2
   echo "  or re-run with REVIEW_ALLOW_METERED=1 if you truly intend to spend API credit." >&2
   echo "claude-p-blocked"
   exit 3

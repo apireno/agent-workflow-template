@@ -14,6 +14,8 @@
 #
 # Engines:
 #   gemini  — pipes prompt to `gemini` CLI
+#   kimi    — pipes prompt to openrouter-chat.sh (OpenRouter, default moonshotai/kimi-k2.6;
+#             cross-family independent reviewer, non-Anthropic metered — pennies)
 #   claude  — pipes prompt to `claude -p --max-turns 1` (fresh process, no shared context)
 #   dual    — runs both and writes both outputs (primary: gemini, secondary: claude)
 #
@@ -32,7 +34,7 @@ REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 # --- Engine selection ---
 # Defer to the shared resolver (single source of truth: REVIEW_ENGINE env -> .review-engine
 # file -> default subagent; legacy aliasing; claude-p metered quarantine). This CLI executor
-# can only RUN the CLI engines (gemini, claude-p); subagent/handoff are orchestrator-driven
+# can only RUN the CLI engines (gemini, kimi, claude-p); subagent/handoff are orchestrator-driven
 # (the /vp-review skill fans them via the Agent tool / windows) and are rejected below.
 RESOLVER="$(dirname "$0")/resolve-review-engine.sh"
 if [ -x "$RESOLVER" ]; then
@@ -59,6 +61,9 @@ CLAUDE_CMD=""
 if command -v claude > /dev/null 2>&1; then
     CLAUDE_CMD="claude"
 fi
+
+# kimi engine executor (OpenRouter; ships with this repo's scripts)
+OPENROUTER_CHAT="$(cd "$(dirname "$0")" && pwd)/openrouter-chat.sh"
 
 # --- Argument parsing ---
 if [ $# -lt 3 ]; then
@@ -261,6 +266,21 @@ run_gemini() {
     return $rc
 }
 
+run_kimi() {
+    local out_file="$1"
+    local stderr_file="${out_file}.kimi-stderr.log"
+    cat "$PROMPT_FILE" | "$OPENROUTER_CHAT" > "$out_file" 2>"$stderr_file"
+    local rc=$?
+    # Surface the per-call usage line (spend visibility) even on success.
+    grep -h '^openrouter-chat: model=' "$stderr_file" >&2 || true
+    if [ "$rc" -ne 0 ]; then
+        echo "[vp-review] kimi (openrouter) exited with code $rc" >&2
+        [ -s "$stderr_file" ] && echo "[vp-review] kimi stderr (tail):" >&2 \
+            && tail -5 "$stderr_file" >&2
+    fi
+    return $rc
+}
+
 run_claude() {
     local out_file="$1"
     local stderr_file="${out_file}.claude-stderr.log"
@@ -366,6 +386,13 @@ case "$ENGINE" in
     gemini)
         run_with_retry run_gemini "$OUTPUT_FILE" "gemini"
         ;;
+    kimi)
+        if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+            echo "Error: engine 'kimi' requires OPENROUTER_API_KEY in the environment." >&2
+            exit 1
+        fi
+        run_with_retry run_kimi "$OUTPUT_FILE" "kimi"
+        ;;
     claude-p)
         # ⚠️ METERED Anthropic API (Agent-SDK credit pool). The shared resolver already
         # enforced REVIEW_ALLOW_METERED=1; this is a defense-in-depth second gate.
@@ -381,11 +408,11 @@ case "$ENGINE" in
         # this script directly with these engines is a usage error.
         echo "Error: engine '$ENGINE' is orchestrator-driven, not a CLI run." >&2
         echo "  Use the /vp-review skill (it fans subagent/handoff reviews via the Agent tool / windows)," >&2
-        echo "  or pick a CLI engine: REVIEW_ENGINE=gemini $0 $PERSONA $INPUT_FILE $OUTPUT_FILE" >&2
+        echo "  or pick a CLI engine: REVIEW_ENGINE=kimi $0 $PERSONA $INPUT_FILE $OUTPUT_FILE" >&2
         exit 2
         ;;
     *)
-        echo "Error: Unknown engine '$ENGINE'. Use: gemini | claude-p (metered) | subagent | handoff" >&2
+        echo "Error: Unknown engine '$ENGINE'. Use: kimi | gemini | claude-p (metered) | subagent | handoff" >&2
         exit 1
         ;;
 esac
