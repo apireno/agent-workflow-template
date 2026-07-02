@@ -133,10 +133,11 @@ OUTPUT REQUIREMENTS:
 EOF
 
   OUT_PLAN="$OUT/${REPO_NAME}-plan.md"
-  if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "claude-p" ]; then
+  if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
     # Stdin-only invocation — every CLI engine reads the prompt on stdin.
     if [ "$ENGINE" = "gemini" ]; then RUNCMD="cat '$PROMPT_FILE' | gemini"
     elif [ "$ENGINE" = "kimi" ]; then RUNCMD="cat '$PROMPT_FILE' | '$ROOT/scripts/agentic/openrouter-chat.sh'"
+    elif [ "$ENGINE" = "codex" ]; then RUNCMD="cat '$PROMPT_FILE' | '$ROOT/scripts/agentic/codex-exec.sh'"  # UNTESTED (2026-07-02)
     else RUNCMD="cat '$PROMPT_FILE' | claude -p --max-turns 1"; fi
     echo "  -> firing $ENGINE for $REPO_NAME (timeout 300s)..."
     ( gtimeout 300 sh -c "$RUNCMD" > "$OUT_PLAN" 2> "$OUT/${REPO_NAME}.log" \
@@ -150,7 +151,7 @@ EOF
 done < "$OUT/repos.tsv"
 
 wait
-if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "claude-p" ]; then
+if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
   echo "All $ENGINE calls done at $(date)"
 else
   echo "DISPATCH=$ENGINE — prompts staged; the CTO drafts each plan via the Agent tool (see Your task)."
@@ -210,7 +211,7 @@ fi
 
 **If `DISPATCH=subagent` (default) or `handoff`:** the plans were NOT drafted yet — you draft them now. For each `repo=… prompt=… plan=… dest=…` repo, launch one `Task`/Agent call in parallel (single message), instructing it to read the staged prompt file (`$OUT/<repo>-prompt.md`), draft the sprint plan exactly per the prompt's OUTPUT REQUIREMENTS (markdown only, this-repo-only, `NO_SCOPE_FOR_THIS_REPO` if it doesn't apply), and **write it to both `$OUT/<repo>-plan.md` and the dest `…/docs/sprints/sprint-<NN>/sprint-plan.md`** (unless `--dry-run`, then staging only). When all return, proceed to synthesize. (Engine is bright-line clean: in-session Agent = subscription pool.)
 
-**If the CLI engine ran (gemini/kimi/claude-p):** plans are already drafted + landed above.
+**If the CLI engine ran (gemini/kimi/codex/claude-p):** (note: `codex` is ⚠️ untested — sanity-check its output before trusting it the way you would gemini/kimi) plans are already drafted + landed above.
 
 Then, regardless of engine, synthesize:
 

@@ -46,6 +46,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
 else
   echo "  [note] OPENROUTER_API_KEY not set — kimi engine unavailable; subagent (in-session Agent) still works for all reviews"
 fi
+command -v codex >/dev/null 2>&1 && echo "  [note] codex CLI present — 'codex' review engine (⚠️ UNTESTED as of 2026-07-02) could be tried; verify its first real output before trusting a verdict" || echo "  [note] codex CLI absent — fine, it's an untested/optional engine, not required for anything"
 if [ -n "${ANTHROPIC_API_KEY:-}${ANTHROPIC_AUTH_TOKEN:-}" ]; then
   echo "  [WARN] ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN is set — verify intent, this repo's bright-line assumes subscription auth, not metered API"
 else

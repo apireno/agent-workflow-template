@@ -16,6 +16,9 @@
 #   gemini  — pipes prompt to `gemini` CLI
 #   kimi    — pipes prompt to openrouter-chat.sh (OpenRouter, default moonshotai/kimi-k2.6;
 #             cross-family independent reviewer, non-Anthropic metered — pennies)
+#   codex   — ⚠️ UNTESTED (2026-07-02, no live `codex` install to verify against) — pipes prompt
+#             to codex-exec.sh (OpenAI Codex CLI `codex exec`, non-interactive). A second
+#             cross-family independent reviewer alongside kimi. See codex-exec.sh header.
 #   claude  — pipes prompt to `claude -p --max-turns 1` (fresh process, no shared context)
 #   dual    — runs both and writes both outputs (primary: gemini, secondary: claude)
 #
@@ -34,7 +37,7 @@ REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 # --- Engine selection ---
 # Defer to the shared resolver (single source of truth: REVIEW_ENGINE env -> .review-engine
 # file -> default subagent; legacy aliasing; claude-p metered quarantine). This CLI executor
-# can only RUN the CLI engines (gemini, kimi, claude-p); subagent/handoff are orchestrator-driven
+# can only RUN the CLI engines (gemini, kimi, codex, claude-p); subagent/handoff are orchestrator-driven
 # (the /vp-review skill fans them via the Agent tool / windows) and are rejected below.
 RESOLVER="$(dirname "$0")/resolve-review-engine.sh"
 if [ -x "$RESOLVER" ]; then
@@ -62,8 +65,9 @@ if command -v claude > /dev/null 2>&1; then
     CLAUDE_CMD="claude"
 fi
 
-# kimi engine executor (OpenRouter; ships with this repo's scripts)
+# kimi/codex engine executors (ship with this repo's scripts)
 OPENROUTER_CHAT="$(cd "$(dirname "$0")" && pwd)/openrouter-chat.sh"
+CODEX_EXEC="$(cd "$(dirname "$0")" && pwd)/codex-exec.sh"
 
 # --- Argument parsing ---
 if [ $# -lt 3 ]; then
@@ -281,6 +285,20 @@ run_kimi() {
     return $rc
 }
 
+run_codex() {
+    # ⚠️ UNTESTED (2026-07-02) — see codex-exec.sh header.
+    local out_file="$1"
+    local stderr_file="${out_file}.codex-stderr.log"
+    cat "$PROMPT_FILE" | "$CODEX_EXEC" > "$out_file" 2>"$stderr_file"
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "[vp-review] codex exited with code $rc" >&2
+        [ -s "$stderr_file" ] && echo "[vp-review] codex stderr (tail):" >&2 \
+            && tail -20 "$stderr_file" >&2
+    fi
+    return $rc
+}
+
 run_claude() {
     local out_file="$1"
     local stderr_file="${out_file}.claude-stderr.log"
@@ -393,6 +411,16 @@ case "$ENGINE" in
         fi
         run_with_retry run_kimi "$OUTPUT_FILE" "kimi"
         ;;
+    codex)
+        # ⚠️ UNTESTED (2026-07-02) — see codex-exec.sh header. Not hard-requiring an env var:
+        # unlike kimi (OpenRouter needs a key, full stop), codex exec can also authenticate via
+        # a prior `codex login` OAuth session with no key present.
+        if [ -z "${CODEX_API_KEY:-}${OPENAI_API_KEY:-}" ]; then
+            echo "[vp-review] note: neither CODEX_API_KEY nor OPENAI_API_KEY set — proceeding on the" >&2
+            echo "  assumption a 'codex login' OAuth session is active. If this fails, set one of those." >&2
+        fi
+        run_with_retry run_codex "$OUTPUT_FILE" "codex"
+        ;;
     claude-p)
         # ⚠️ METERED Anthropic API (Agent-SDK credit pool). The shared resolver already
         # enforced REVIEW_ALLOW_METERED=1; this is a defense-in-depth second gate.
@@ -412,7 +440,7 @@ case "$ENGINE" in
         exit 2
         ;;
     *)
-        echo "Error: Unknown engine '$ENGINE'. Use: kimi | gemini | claude-p (metered) | subagent | handoff" >&2
+        echo "Error: Unknown engine '$ENGINE'. Use: kimi | codex (untested) | gemini | claude-p (metered) | subagent | handoff" >&2
         exit 1
         ;;
 esac

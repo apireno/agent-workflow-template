@@ -101,6 +101,7 @@ VP reviews run through one of several engines — a per-repo `.review-engine` fi
 |--------|----------------------|------|-------|
 | `subagent` (default) | Claude Code Agent tool, in-session | $0 incremental (subscription) | Bright-line clean; the safe default |
 | `kimi` | `moonshotai/kimi-k2.6` via OpenRouter | ~pennies/review | Cross-model-family independent reviewer; needs `OPENROUTER_API_KEY` |
+| `codex` | OpenAI Codex CLI (`codex exec`) | Subscription or metered API | ⚠️ **Untested** (added 2026-07-02, no live `codex` install to verify against) — a second independent reviewer; verify its first real output before trusting it |
 | `gemini` | Gemini CLI | Free tier (when available) | Selectable if/when access returns |
 | `handoff` | A real interactive Claude window per reviewer | $0 incremental (subscription) | Heavier; rarely needed |
 | `claude-p` | `claude -p` (metered Anthropic API) | ⚠️ Metered | Quarantined — requires explicit `REVIEW_ALLOW_METERED=1` opt-in, never a default |

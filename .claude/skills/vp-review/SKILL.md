@@ -1,15 +1,15 @@
 ---
 name: vp-review
-description: Run multi-VP review on a sprint plan, ADR, RCA, PRD, dev-report, or other artifact via parallel VP personas (engine configurable — subagent | kimi | gemini | handoff | claude-p), then have the CTO synthesize a verdict. Defaults to vp-prod + vp-eng (the always-relevant pair). Add specialty VPs (vp-security, vp-devops, vp-datascience) via the --vps flag when the artifact touches their domain — see docs/personas/cto.md "VP Review Composition" for the policy. Use when the CEO says "review this", "get VP feedback on X", "what would the VPs say about Y", or wants multi-perspective critique on a file path. Auto-fire whenever conversation references reviewing an artifact at a specific path.
+description: Run multi-VP review on a sprint plan, ADR, RCA, PRD, dev-report, or other artifact via parallel VP personas (engine configurable — subagent | kimi | codex (untested) | gemini | handoff | claude-p), then have the CTO synthesize a verdict. Defaults to vp-prod + vp-eng (the always-relevant pair). Add specialty VPs (vp-security, vp-devops, vp-datascience) via the --vps flag when the artifact touches their domain — see docs/personas/cto.md "VP Review Composition" for the policy. Use when the CEO says "review this", "get VP feedback on X", "what would the VPs say about Y", or wants multi-perspective critique on a file path. Auto-fire whenever conversation references reviewing an artifact at a specific path.
 allowed-tools: Bash(mkdir *) Bash(rm *) Bash(scripts/agentic/*) Bash(cat *) Bash(ls *) Read Write Task
-argument-hint: <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|gemini|handoff]
+argument-hint: <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|codex|gemini|handoff]
 ---
 
 # VP Review of: $ARGUMENTS
 
 Reviewing artifact at the path above. Each VP reads its persona file, applies it to the artifact, and emits a verdict. The CTO synthesizes a final decision.
 
-**Engine is configurable** (CEO 2026-06-19 — vendors change their minds, so the engine is a *choice*, not a hardcode). Resolved by `scripts/agentic/resolve-review-engine.sh`: `--engine` flag → `REVIEW_ENGINE` env → `<repo>/.review-engine` → default **`subagent`**. Engines: `subagent` (Agent tool, in-session, subscription — DEFAULT), `kimi` (OpenRouter kimi-k2.6 via `openrouter-chat.sh` — the CROSS-FAMILY independent reviewer; non-Anthropic metered, pennies/review; model overridable via `OPENROUTER_MODEL`), `gemini` (`$0` CLI fan-out, when available), `handoff` (interactive Claude windows), `claude-p` (⚠️ metered Anthropic API, break-glass only). **When independence matters** (Claude-authored work being judged, statistical claims, accept-gates), prefer `kimi` over `subagent` — a different model family reviewing avoids shared-method bias.
+**Engine is configurable** (CEO 2026-06-19 — vendors change their minds, so the engine is a *choice*, not a hardcode). Resolved by `scripts/agentic/resolve-review-engine.sh`: `--engine` flag → `REVIEW_ENGINE` env → `<repo>/.review-engine` → default **`subagent`**. Engines: `subagent` (Agent tool, in-session, subscription — DEFAULT), `kimi` (OpenRouter kimi-k2.6 via `openrouter-chat.sh` — a CROSS-FAMILY independent reviewer; non-Anthropic metered, pennies/review; model overridable via `OPENROUTER_MODEL`), `codex` (⚠️ **UNTESTED as of 2026-07-02** — OpenAI Codex CLI's `codex exec` via `codex-exec.sh`; a SECOND independent cross-family reviewer, built from OpenAI's published docs only, no live `codex` install available to verify against — treat the first real invocation as a smoke test, not a working feature), `gemini` (`$0` CLI fan-out, when available), `handoff` (interactive Claude windows), `claude-p` (⚠️ metered Anthropic API, break-glass only). **When independence matters** (Claude-authored work being judged, statistical claims, accept-gates), prefer `kimi` (proven) over `subagent` — a different model family reviewing avoids shared-method bias. `codex` is the same idea but unverified; don't rely on it for anything time-sensitive until it's been run for real at least once.
 
 **Default VP set:** `vp-prod,vp-eng` (the always-relevant pair). Pass `--vps=a,b,c` to override. `--vps=all` runs all 5. Add specialty VPs by content judgment per `docs/personas/cto.md` "VP Review Composition".
 
@@ -36,7 +36,7 @@ done
 
 if [ -z "$ART" ] || [ ! -f "$ART" ]; then
   echo "ERROR: artifact not found at $ART"
-  echo "Usage: /vp-review <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|gemini|handoff]"
+  echo "Usage: /vp-review <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|codex|gemini|handoff]"
   exit 1
 fi
 [ "$VPS" = "all" ] && VPS="vp-prod,vp-eng,vp-security,vp-devops,vp-datascience"
@@ -71,7 +71,7 @@ persona_file() {
 
 IFS=',' read -A VP_LIST <<< "$VPS" 2>/dev/null || IFS=',' read -ra VP_LIST <<< "$VPS"
 
-if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "claude-p" ]; then
+if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
   # CLI engines: the script CAN run these inline. Fire all VPs in parallel, then emit.
   for vp in "${VP_LIST[@]}"; do
     vp=$(echo "$vp" | tr -d '[:space:]'); [ -z "$vp" ] && continue
@@ -108,8 +108,8 @@ fi
 
 **First read the `ENGINE=` and `DISPATCH=` lines in the script output above** — they tell you whether the reviews already ran or whether YOU must fan them out.
 
-### If `DISPATCH=done` (engine = gemini, kimi, or claude-p)
-The VP verdicts are already printed above (CLI-authored, wrapped untrusted). Skip straight to **Synthesize**. For `kimi`, per-VP token usage lines are in `${VPR_DIR}/<vp>.log` if the CEO asks about spend.
+### If `DISPATCH=done` (engine = gemini, kimi, codex, or claude-p)
+The VP verdicts are already printed above (CLI-authored, wrapped untrusted). Skip straight to **Synthesize**. For `kimi`, per-VP token usage lines are in `${VPR_DIR}/<vp>.log` if the CEO asks about spend. For `codex` (⚠️ untested engine), if a verdict is missing or malformed, check `${VPR_DIR}/<vp>.log` and the `.codex-stderr.log` file for that VP before assuming the review content itself is at fault — this is the first engine's untested code path, so a plumbing failure is as likely as a bad review.
 
 ### If `DISPATCH=subagent` (the default)
 The bash body did NOT run the reviews — you run them now, in parallel, via the **Agent tool** (in-session, subscription pool — bright-line clean). For EACH `vp=… persona=… out=…` line above, launch one `Task`/Agent call (send them in a single message so they run concurrently) with a prompt like:

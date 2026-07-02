@@ -106,14 +106,24 @@ reviews/checks per hour), not dollars:
 | Mechanical fan-out: fleet scans, evidence inventory (`/sprint-verify` gap-fill), lane-check sweeps, log/JSONL summarization | `haiku` | Structured extraction, no judgment — biggest headroom win |
 
 **Lever 2 — external engines (metered, NON-Anthropic — bright-line clean).** The review-engine
-menu (`resolve-review-engine.sh`): `subagent` (default) | `kimi` | `gemini` (dead 2026-06-19,
-selectable if access returns) | `handoff` | `claude-p` (⚠️ quarantined). The `kimi` engine
-(OpenRouter, default `moonshotai/kimi-k2.6`, `OPENROUTER_MODEL` overridable to deepseek/qwen/etc.)
-is the **cross-family independent reviewer**: a different model family judging Claude-authored
-work avoids shared-method bias (the VP-DS concern that killed same-family gold judging). Prefer
-`kimi` over `subagent` when independence matters — Phase-3 dev-report reviews, statistical
-claims, accept-gates — and as the fallback when subscription limits are hit mid-sprint. Cost is
-pennies per review (~$0.55/M in, $3.20/M out); each call prints a token-usage line to its log.
+menu (`resolve-review-engine.sh`): `subagent` (default) | `kimi` | `codex` (⚠️ untested) |
+`gemini` (dead 2026-06-19, selectable if access returns) | `handoff` | `claude-p` (⚠️
+quarantined). The `kimi` engine (OpenRouter, default `moonshotai/kimi-k2.6`, `OPENROUTER_MODEL`
+overridable to deepseek/qwen/etc.) is the **cross-family independent reviewer**: a different
+model family judging Claude-authored work avoids shared-method bias (the VP-DS concern that
+killed same-family gold judging). Prefer `kimi` over `subagent` when independence matters —
+Phase-3 dev-report reviews, statistical claims, accept-gates — and as the fallback when
+subscription limits are hit mid-sprint. Cost is pennies per review (~$0.55/M in, $3.20/M out);
+each call prints a token-usage line to its log.
+
+The `codex` engine (OpenAI Codex CLI, `codex exec` via `scripts/agentic/codex-exec.sh`) is a
+**second** cross-family reviewer — GPT-family, a third distinct lineage alongside Claude and
+Moonshot/kimi, useful when you want maximum independence (e.g. a contested accept-gate where
+kimi and subagent already disagree). **⚠️ Added 2026-07-02 and never run against a live `codex`
+install** — built from OpenAI's published docs only. Treat the first real invocation as a smoke
+test: verify the output is a real review, not an error swallowed into the output file, before
+trusting a `codex`-engine verdict in any decision. Prefer `kimi` as the default independent
+engine until `codex` has a track record.
 
 ### 4. Cross-Repo Synthesis
 - Before presenting to the CEO, check for:

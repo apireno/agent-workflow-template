@@ -21,6 +21,14 @@
 #               (pennies per review) — bright-line clean. The cross-FAMILY independent
 #               reviewer now that gemini-CLI is gone; also the fallback when Claude
 #               subscription limits are hit mid-sprint. Requires OPENROUTER_API_KEY.
+#   codex     — ⚠️ UNTESTED (2026-07-02, no live `codex` install to verify against — built from
+#               OpenAI's published docs only, see codex-exec.sh header for specifics). OpenAI
+#               Codex CLI's non-interactive `codex exec` mode via `codex-exec.sh`. A SECOND
+#               independent cross-family reviewer alongside kimi (GPT-family vs. Moonshot-family
+#               vs. Claude — three genuinely different training lineages). Metered on OpenAI's
+#               side (API key) or draws on a ChatGPT subscription's included usage — bright-line
+#               clean either way (not Anthropic). Requires the `codex` CLI installed; treat the
+#               first real invocation as a smoke test.
 #   subagent  — the persona review runs via the Claude Code **Agent tool**, IN-SESSION.
 #               Subscription pool (NOT the metered Agent-SDK pool). A skill's bash body
 #               CANNOT spawn a subagent, so scripts emit the `DISPATCH=subagent` sentinel
@@ -65,7 +73,7 @@ case "$engine" in
   claude)        note "alias: 'claude' -> 'claude-p' (the old value always meant claude -p)"; engine="claude-p" ;;
   dual)          note "alias: 'dual' -> 'gemini' (claude-p half quarantined)"; engine="gemini" ;;
   none|"")       note "alias: '${engine:-empty}' -> 'subagent'"; engine="subagent" ;;
-  gemini|kimi|subagent|handoff|claude-p) : ;;
+  gemini|kimi|codex|subagent|handoff|claude-p) : ;;
   *)             note "unknown engine '$engine' from $src -> falling back to 'subagent'"; engine="subagent" ;;
 esac
 
@@ -75,7 +83,7 @@ note "resolved '$engine' (from $src; raw='$raw')"
 # explicitly opted into metered API for THIS invocation.
 if [ "$engine" = "claude-p" ] && [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
   echo "ERROR: engine 'claude-p' is the METERED Anthropic API path (bright-line). It runs ONLY with" >&2
-  echo "  REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing. Pick kimi|gemini|subagent|handoff," >&2
+  echo "  REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing. Pick kimi|codex|gemini|subagent|handoff," >&2
   echo "  or re-run with REVIEW_ALLOW_METERED=1 if you truly intend to spend API credit." >&2
   echo "claude-p-blocked"
   exit 3
