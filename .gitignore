@@ -163,6 +163,7 @@ docs/architecture/decisions/cto-*.md
 .mcp.json
 .claude/.domshell-token
 .domshell-token
+.claude/.setup-done
 *.domshell-token
 .qa-lane
 **/.qa-lane

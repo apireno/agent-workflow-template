@@ -24,7 +24,10 @@ ls -la .cto/projects.yaml
 ```
 
 - If it **exists**: load it and greet the CEO with a one-line summary: "Loaded N projects: [names]."
-- If it **does NOT exist**: tell the CEO: "No project registry found. Please copy `.cto/projects.yaml.example` to `.cto/projects.yaml` and fill in your repo paths before we proceed."
+- If it **does NOT exist**: this is a fresh clone — invoke the **`/setup`** skill now (it also
+  auto-fires from the `[FIRST-RUN]` preflight directive if the CEO doesn't type it explicitly).
+  `/setup` checks prerequisites, asks the onboarding questions, and writes `.cto/projects.yaml`
+  interactively — don't just point the CEO at the `.example` file and stop.
 
 **Step 4.** Scan for open sprint work across all registered repos:
 ```bash

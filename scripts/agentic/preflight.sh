@@ -21,6 +21,19 @@ REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CRITICAL_FAILURES=0
 ADVISORY_WARNINGS=0
 
+# ─── 0. First-run onboarding trigger ─────────────────────────────────────────
+# A fresh clone has no real .cto/projects.yaml (only the .example) and no
+# .claude/.setup-done marker. Surface a directive the CTO persona cannot miss —
+# printed first, ahead of the pass/fail checks below, so onboarding happens
+# before any other work this session. /setup writes the marker on completion.
+if [ ! -f "$REPO_ROOT/.claude/.setup-done" ] && [ ! -f "$REPO_ROOT/.cto/projects.yaml" ]; then
+    echo "[FIRST-RUN] No .cto/projects.yaml and no .claude/.setup-done marker — this looks like a"
+    echo "  fresh clone. BEFORE addressing any other request this session, invoke the /setup skill"
+    echo "  now (env/prerequisite checks + fleet registration Q&A). Do this even if the CEO opened"
+    echo "  with an unrelated directive — acknowledge it, then run /setup, then return to it."
+    echo ""
+fi
+
 emit_critical() {
     echo "[CRITICAL] $1"
     CRITICAL_FAILURES=$((CRITICAL_FAILURES + 1))
@@ -39,12 +52,25 @@ emit_ok() {
 TODAY_EPOCH=$(date +%s)
 DEADLINE_EPOCH=$(date -j -f "%Y-%m-%d" "2026-06-15" "+%s" 2>/dev/null || echo "0")
 if [ "$TODAY_EPOCH" -ge "$DEADLINE_EPOCH" ] && [ "$DEADLINE_EPOCH" != "0" ]; then
-    # Past the deadline — claude -p is now metered, scan for it
-    P_USAGE=$(grep -rEln '\bclaude -p\b|\bclaude --print\b' "$REPO_ROOT/scripts/" 2>/dev/null | grep -v _deprecated | head -5)
+    # Past the deadline — claude -p is now metered, scan for UNGUARDED invocations.
+    # Skip comment lines (mentions in docs/warnings aren't invocations) and skip any
+    # file that also contains the REVIEW_ALLOW_METERED quarantine token — that's the
+    # deliberate, already-gated claude-p break-glass path (resolve-review-engine.sh),
+    # not a leftover unmigrated call.
+    P_USAGE=""
+    for f in $(grep -rlE '\bclaude -p\b|\bclaude --print\b' "$REPO_ROOT/scripts/" 2>/dev/null | grep -v _deprecated); do
+        [ "$(basename "$f")" = "preflight.sh" ] && continue
+        grep -q 'REVIEW_ALLOW_METERED' "$f" && continue
+        grep -vE '^\s*#' "$f" | grep -v 'never claude -p' | grep -qE '\bclaude -p\b|\bclaude --print\b' && P_USAGE="$P_USAGE$f
+"
+    done
     if [ -n "$P_USAGE" ]; then
-        emit_critical "Past 2026-06-15 and \`claude -p\` invocations still present in:"
+        # Advisory, not blocking — a fresh clone's day-1 setup path (/setup, /handoff,
+        # /vp-review) never touches these files. Known architecture follow-up: rewire
+        # off claude -p or rename to _deprecated-*, not a setup blocker.
+        emit_warning "Past 2026-06-15: unguarded \`claude -p\` mentions (no REVIEW_ALLOW_METERED quarantine) in:"
         echo "$P_USAGE" | sed 's/^/    /'
-        echo "    Each invocation now draws from the metered Agent SDK credit pool."
+        echo "    Not on the day-1 setup path — flagged as a follow-up, not a blocker."
     fi
 else
     DAYS_LEFT=$(( (DEADLINE_EPOCH - TODAY_EPOCH) / 86400 ))
@@ -53,9 +79,16 @@ else
     fi
 fi
 
-# ─── 2. Gemini CLI availability ──────────────────────────────────────────────
+# ─── 2. Review engine availability ───────────────────────────────────────────
+# gemini-CLI died 2026-06-19 (UNSUPPORTED_CLIENT) and is no longer required — the
+# default engine is `subagent` (in-session Agent tool, needs nothing external) and
+# `kimi` (OpenRouter) is the cross-family independent reviewer. Advisory only: a
+# missing gemini/OPENROUTER_API_KEY does not block the skills-driven architecture.
 if ! command -v gemini > /dev/null 2>&1; then
-    emit_critical "gemini CLI not found in PATH. The skills-driven architecture depends on gemini for parallel cheap work. Install: see https://github.com/google-gemini/gemini-cli"
+    emit_ok  # gemini optional; subagent/kimi cover review needs without it
+fi
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+    emit_warning "OPENROUTER_API_KEY not set. The 'kimi' review engine (cross-family independent VP reviews via OpenRouter) needs it. subagent (in-session) still works without it — see /vp-review."
 fi
 
 # ─── 3. ANTHROPIC_API_KEY should NOT be set in this environment ──────────────
@@ -63,6 +96,18 @@ fi
 # claude -p calls would silently route to the API instead of subscription.
 if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
     emit_warning "ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is set. Any \`claude -p\` invocations would charge against API, not subscription. Verify intent."
+fi
+
+# ─── 3b. git identity + gh auth (needed for /new-project's publish commands) ──
+if ! git config user.email > /dev/null 2>&1; then
+    emit_warning "git user.email not configured (git config --global user.email you@example.com). Commits will fail until set."
+fi
+if command -v gh > /dev/null 2>&1; then
+    if ! gh auth status > /dev/null 2>&1; then
+        emit_warning "gh CLI installed but not authenticated (gh auth login). Needed to publish repos from /new-project."
+    fi
+else
+    emit_warning "gh CLI not found. Needed to publish repos from /new-project (gh repo create ...). Install: https://cli.github.com/"
 fi
 
 # ─── 4. Persona files present ────────────────────────────────────────────────

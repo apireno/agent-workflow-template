@@ -126,6 +126,8 @@ for repo in "${TARGETS[@]}"; do
     echo "      would write: $DEST/.claude/hooks/auto-paste-brief.sh"
     echo "      would write: $DEST/.claude/hooks/session-end-record.sh"
     echo "      would write: $DEST/.claude/hooks/check-complete.sh"
+    echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
+    [ -f "$DEST/.review-engine" ] || echo "      would write: $DEST/.review-engine = subagent"
     echo "      would add to .gitignore: .claude/current-session.id, .claude/CRASHED, .claude/COMPLETE, .claude/pending-prompt.md, .claude/used-prompts/, .claude/session.log, .claude/terminal-window.id"
     push_count=$((push_count + 1))
     continue
@@ -155,6 +157,21 @@ PYEOF
   cp "$TEMPLATE/.claude/hooks/check-complete.sh" "$DEST/.claude/hooks/"
   chmod +x "$DEST/.claude/hooks/"*.sh
   echo "      wrote $DEST/.claude/hooks/auto-paste-brief.sh + session-end-record.sh + check-complete.sh"
+
+  # 3b. scripts/agentic + persona defs + sprint doc templates. CLAUDE.devteam.md
+  # (just written above) explicitly instructs the dev team to run
+  # ./scripts/agentic/vp-review.sh etc. LOCALLY — without these files present,
+  # those instructions are dead on arrival. (Same gap that had to be patched
+  # by hand for the 2026-07-01 kimi-engine rollout; fixed here at the source.)
+  mkdir -p "$DEST/scripts/agentic" "$DEST/docs/personas" "$DEST/docs/sprints/_templates"
+  cp -r "$TEMPLATE/scripts/agentic/." "$DEST/scripts/agentic/"
+  chmod +x "$DEST/scripts/agentic/"*.sh 2>/dev/null || true
+  cp -r "$TEMPLATE/docs/personas/." "$DEST/docs/personas/"
+  [ -d "$TEMPLATE/docs/sprints/_templates" ] && cp -r "$TEMPLATE/docs/sprints/_templates/." "$DEST/docs/sprints/_templates/"
+  if [ ! -f "$DEST/.review-engine" ]; then
+    printf 'subagent\n' > "$DEST/.review-engine"
+  fi
+  echo "      wrote $DEST/scripts/agentic + docs/personas + docs/sprints/_templates ; .review-engine=$(cat "$DEST/.review-engine" 2>/dev/null)"
 
   # 4a. Pre-trust the workspace in ~/.claude.json so /handoff doesn't hit the
   # "Quick safety check: do you trust this folder?" dialog on first claude run.

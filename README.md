@@ -1,300 +1,172 @@
 # Agent Workflow Template
 
-A structured multi-agent development workflow using AI agents as VP of Engineering, VP of Product, VP of Security, VP of Compliance, VP of DevOps, and Dev Team. Designed for solo developers or small teams who use Claude Code + Gemini CLI to simulate a full engineering org — with support for parallel initiatives and multiple contributors.
+A structured multi-agent development workflow using AI agents as CTO, VP of Engineering, VP of
+Product, VP of Security, VP of Compliance, VP of DevOps, VP of Data Science, QA-UX, and Dev Team.
+Orchestrates one or many repos from a single CTO session — built for solo developers or small
+teams who want AI agents to simulate a full engineering org, with real process discipline instead
+of ad-hoc prompting.
 
 ## What Problem This Solves
 
-When you use AI agents for development, the hardest problems aren't technical — they're process. Agents skip steps, drift from scope, produce inconsistent artifacts, and don't coordinate well across branches. This template encodes your entire engineering workflow into files that ship with the repo. Every contributor's agent reads the same instructions, follows the same lifecycle, and gets reviewed against the same standards.
+When you use AI agents for development, the hardest problems aren't technical — they're process.
+Agents skip steps, drift from scope, produce inconsistent artifacts, and don't coordinate well
+across repos. This template encodes an entire engineering workflow into files and Claude Code
+**skills** that ship with the repo: plan → review → execute → verify → accept, enforced the same
+way every time, across as many repos as you're running.
 
 The process is the repo. Clone it and the engineering culture comes with it.
 
 ## Quick Start
 
 ```bash
-# Clone into your project (or use as a GitHub template)
 git clone https://github.com/YOUR_USERNAME/agent-workflow-template.git
 cd agent-workflow-template
-
-# Run setup
-chmod +x setup.sh
-./setup.sh "My Project Name"
-
-# Customize the persona files (see setup output for guidance)
 ```
+
+Open the folder in **Claude Code** (or Gemini's Antigravity extension) and say:
+
+> **please set up my environment**
+
+That's it. The agent checks prerequisites, asks the handful of setup questions it actually needs
+answered, discovers any repos you've already cloned nearby and offers to register them, and writes
+your project registry. This runs automatically on the very first session even if you don't type
+the prompt — a `[FIRST-RUN]` notice fires before anything else happens.
+
+Under the hood this invokes the **`/setup`** skill. Re-run it any time (just ask again) to add more
+repos to an already-configured setup.
 
 ### Prerequisites
 
-- **At least one LLM CLI** (for automated VP reviews):
-  - [Gemini CLI](https://github.com/google-gemini/gemini-cli) — `gemini --version`
-  - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) — `claude --version`
-  - Or both (for dual-engine mode)
-- **A dev session tool** (where the Dev Team agent runs):
-  - Claude Code (VS Code extension or CLI)
-  - Gemini in VS Code (Antigravity extension)
-  - Any AI coding assistant that reads CLAUDE.md / follows markdown instructions
-- Git
+- **Git**, and `git config user.name`/`user.email` set.
+- **A Claude Code (or Antigravity) session** — that's the only required "engine." No LLM CLI
+  install is required: VP reviews run in-session by default (`subagent` engine, $0 incremental).
+- **Optional:**
+  - [`gh` CLI](https://cli.github.com/), authenticated — needed to publish new repos from `/new-project`.
+  - An `OPENROUTER_API_KEY` — unlocks the `kimi` review engine (a genuinely independent,
+    cross-model-family reviewer; useful when you want a second opinion that isn't the same model
+    family as the one that wrote the code). Costs pennies per review; nothing works incorrectly
+    without it.
 
 ## Architecture
 
-### Three-Tier Development Lifecycle
+### CTO Home + Dev-Team Fleet
+
+This repo can operate two ways, and `/setup` asks which fits:
+
+- **In place** — this clone itself becomes your CTO operating home. Simplest; fine for a personal
+  setup or a private fork.
+- **Spawn a private `<project>-cto` home** — keep this clone as a clean, reusable template (e.g.
+  if it tracks a shared/public upstream) and scaffold a separate private repo that holds your
+  actual project IP (PRDs, ADRs, decisions) plus a copy of the mechanism. See `/new-project`.
+
+Either way, the CTO session orchestrates one or more **dev-team repos** registered in
+`.cto/projects.yaml`. Each dev-team repo gets its own `CLAUDE.md` (from `CLAUDE.devteam.md`),
+persona files, and `scripts/agentic/` — pushed there by `/setup` or `scripts/cto/push-to-repos.sh`.
+
+### Sprint Lifecycle (per dev-team repo, CTO-orchestrated)
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  TIER 1: INITIATIVE                                   │
-│  CEO + VP define a bounded piece of work.             │
-│  Creates a feature branch + initiative brief.         │
-│  → ./scripts/agentic/start-initiative.sh              │
-│                                                       │
-├──────────────────────────────────────────────────────┤
-│  TIER 2: SPRINT (one or more per initiative)          │
-│  Dev Team agent executes on the feature branch.       │
-│  Plan → VP Review → CEO Approval → Code → Eval       │
-│  → ./scripts/agentic/start-sprint.sh                  │
-│                                                       │
-├──────────────────────────────────────────────────────┤
-│  TIER 3: MERGE GATE                                   │
-│  All 5 VPs review cumulative changes before merge.    │
-│  CEO gives final merge approval.                      │
-│  → ./scripts/agentic/request-merge.sh                 │
-└──────────────────────────────────────────────────────┘
+Phase 0  DECOMPOSITION     CEO + CTO scope the work, propose before firing dev teams.
+Phase 1  SPRINT PLANNING   Dev team drafts sprint-plan.md -> VP review -> CEO approves.
+Phase 2  EXECUTION         Dev team implements on a Terminal-tab session (/handoff).
+Phase 3  EVALUATION        /sprint-verify (objective: did we build what the plan said?)
+                            -> /sprint-accept (decision: ship, ship-with-known-issues, or revise).
 ```
 
-### Six Agents, Strict Boundaries
+Verification and acceptance are deliberately separate steps: `/sprint-verify` produces
+`conformance.md` (facts — MET/NOT-MET/UNVERIFIED per acceptance criterion, no ship decision);
+`/sprint-accept` reads it and makes the call. Accepting with documented known-issues is a valid,
+explicit outcome — never a silent "all green."
 
-| Role | Signature | Engine | Does | Doesn't |
-|------|-----------|--------|------|---------|
-| **VP of Engineering** | `— Eng` | Gemini CLI or Claude | Reviews plans, writes ADRs, evaluates tests, does RCAs | Write code, fix bugs, author PRDs |
-| **VP of Product** | `— Prod` | Gemini CLI or Claude | Writes PRDs, owns roadmap, scopes sprints, writes initiative briefs | Write code, make architecture decisions |
-| **VP of Security** | `— Sec` | Gemini CLI or Claude | Threat models, security reviews, audit reports | Write code, implement security controls |
-| **VP of Compliance** | `— Comp` | Gemini CLI or Claude | Regulatory reviews, ToS compliance checks | Write code, provide legal advice |
-| **VP of DevOps** | `— DevOps` | Gemini CLI or Claude | Infra reviews, runbooks, monitoring recs, deployment readiness | Write code, write IaC or CI/CD YAML |
-| **Dev Team** | `— Dev` | Claude Code | Writes code, tests, sprint plans, dev reports | Write PRDs, ADRs, create initiatives |
+### Agents, Strict Boundaries
+
+| Role | Signature | Does | Doesn't |
+|------|-----------|------|---------|
+| **CTO** | `— CTO` | Orchestrates dev teams + VPs across repos, synthesizes decisions | Write code, write PRDs, review-and-not-orchestrate |
+| **VP of Engineering** | `— Eng` | Reviews plans, writes ADRs, evaluates tests, does RCAs | Write code, fix bugs, author PRDs |
+| **VP of Product** | `— Prod` | Writes PRDs, owns roadmap, scopes sprints | Write code, make architecture decisions |
+| **VP of Security** | `— Sec` | Threat models, security reviews | Write code, implement controls |
+| **VP of Compliance** | `— Comp` | Regulatory + ToS reviews | Write code, provide legal advice |
+| **VP of DevOps** | `— DevOps` | Infra reviews, deployment readiness | Write code, write IaC/CI YAML |
+| **VP of Data Science** | `— Data` | Statistical validity review, experiment design co-authorship | Write code, training scripts, author PRDs/ADRs solo |
+| **QA-UX** | `— QA` | Drives the live product (browser/CLI/MCP) as a skeptical user, routes defects | Fix bugs, write code, write plans |
+| **Dev Team** | `— Dev` | Writes code, tests, sprint plans, dev reports | Write PRDs, ADRs, create initiatives |
 
 ### Configurable Review Engine
 
-VP reviews are automated via CLI. Choose your engine:
+VP reviews run through one of several engines — a per-repo `.review-engine` file (or the
+`REVIEW_ENGINE` env var) picks which:
 
-| Engine | What Runs Reviews | Set Up |
-|--------|-------------------|--------|
-| `gemini` | Gemini CLI | Install [Gemini CLI](https://github.com/google-gemini/gemini-cli) |
-| `claude` | Claude CLI (`claude -p`) | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) |
-| `dual` | Both (two independent reviews) | Install both |
-
-Configure by creating `.review-engine` in the repo root:
-
-```bash
-echo "claude" > .review-engine   # Pure Claude
-echo "gemini" > .review-engine   # Pure Gemini
-echo "dual" > .review-engine     # Both engines
-```
-
-Or set per-command: `REVIEW_ENGINE=claude ./scripts/agentic/vp-review.sh ...`
-
-If not configured, auto-detects whichever CLI is installed.
-
-**Why `claude -p` works for reviews:** It spawns a fresh CLI process with zero shared context from your VS Code session. The review process only sees the persona + concerns + artifact piped in — same separation of concerns as calling a different model.
-
-**In-conversation personas** are also available via Claude Skills for interactive discussion.
-
-## How It Works
-
-### Starting an Initiative
-
-An initiative is a bounded piece of work: a feature, tech debt paydown, experiment, bug fix, or hardening effort. The CEO and a VP define it together.
+| Engine | What runs the review | Cost | Notes |
+|--------|----------------------|------|-------|
+| `subagent` (default) | Claude Code Agent tool, in-session | $0 incremental (subscription) | Bright-line clean; the safe default |
+| `kimi` | `moonshotai/kimi-k2.6` via OpenRouter | ~pennies/review | Cross-model-family independent reviewer; needs `OPENROUTER_API_KEY` |
+| `gemini` | Gemini CLI | Free tier (when available) | Selectable if/when access returns |
+| `handoff` | A real interactive Claude window per reviewer | $0 incremental (subscription) | Heavier; rarely needed |
+| `claude-p` | `claude -p` (metered Anthropic API) | ⚠️ Metered | Quarantined — requires explicit `REVIEW_ALLOW_METERED=1` opt-in, never a default |
 
 ```bash
-# Create the feature branch and scaffold the initiative
-./scripts/agentic/start-initiative.sh INIT-001 feature/tuner-v2 "Tuner V2 Overhaul"
+echo "kimi" > .review-engine       # this repo's default going forward
+REVIEW_ENGINE=subagent ./scripts/agentic/vp-review.sh vp-eng plan.md out.md   # one-off override
 ```
 
-This creates:
-- A feature branch (`feature/tuner-v2`)
-- An initiative directory (`docs/initiatives/INIT-001/`) with a brief template, amendments folder, sprint folder, and merge review folder
+## Key Skills
 
-Fill in the initiative brief with the VP, get CEO approval, then start sprinting.
+Everything below is a Claude Code skill (`.claude/skills/`) — invoke by asking naturally, or with
+the explicit slash command.
 
-### Running Sprints
-
-Each sprint follows a mandatory 3-phase sequence enforced by CLAUDE.md:
-
-```bash
-# Scaffold a sprint within the initiative
-./scripts/agentic/start-sprint.sh INIT-001 sprint-01
-```
-
-**Phase 1: Planning** — Dev writes sprint plan → VP Prod + VP Eng review via Gemini CLI → Dev addresses feedback → CEO approves.
-
-**Phase 2: Execution** — Dev implements → runs tests → writes dev report with demo steps → runs [AUTO] demos.
-
-**Phase 3: Evaluation** — VP Prod + VP Eng evaluate delivery via Gemini CLI → Dev presents results → CEO gives verdict.
-
-The agent cannot skip steps. CLAUDE.md contains explicit VERIFY steps, mandatory bash commands, and a COMMON MISTAKES section based on observed agent failures.
-
-### Merging to Main
-
-When all initiative exit criteria are met:
-
-```bash
-# Run Tier 3 merge review with ALL 5 VPs
-./scripts/agentic/request-merge.sh INIT-001
-```
-
-This generates a diff summary and runs comprehensive reviews:
-- **VP Engineering** — architecture coherence across all sprints
-- **VP Product** — feature acceptance against initiative brief
-- **VP Security** — cumulative security review of all changes
-- **VP Compliance** — regulatory and licensing review
-- **VP DevOps** — deployment readiness and operational review
-
-Nothing merges to main without passing all five VP gates and CEO approval.
-
-### Parallel Work
-
-Multiple initiatives can run simultaneously on separate branches. Each contributor:
-1. Checks out or creates their initiative branch
-2. Opens Claude Code — the agent reads CLAUDE.md and follows the protocol
-3. Runs sprints independently
-
-No real-time coordination needed. The merge gate handles integration.
-
-### Bug Handling
-
-When a dev team discovers a bug during a sprint:
-
-| Situation | Action |
-|-----------|--------|
-| Bug is within this initiative's scope | Fix it, note in dev report |
-| Bug is unrelated to this initiative | File `docs/backlog/bugs/BUG-XXX.md`, don't fix it here |
-| Bug blocks this initiative | File bug report AND escalate to CEO |
-
-### Scope Changes
-
-If new work is discovered that isn't in the initiative brief:
-1. Dev team writes a scope amendment (`docs/initiatives/INIT-XXX/amendments/NNN-description.md`)
-2. VP reviews the amendment
-3. CEO approves or rejects
-4. Amendment is logged in the initiative brief — no silent scope changes
-
-### IDEO Ideation Sprints
-
-Before defining an initiative, run a structured ideation session to explore the solution space. Based on the IDEO sprint methodology, adapted for AI personas:
-
-```bash
-# Write a goal file, then run the ideation sprint
-./scripts/agentic/ideo-sprint.sh docs/ideation/2025-01-15-caching/goal.md docs/ideation/2025-01-15-caching/
-```
-
-The script orchestrates four phases across all VP personas:
-
-| Phase | What Happens | Output |
-|-------|-------------|--------|
-| **1. Ideate** | Each VP independently generates 8-15+ ideas | `phase1-ideas-{persona}.md` per VP |
-| **2. Vote** | Each VP reviews others' ideas, votes with improvement suggestions | `phase2-votes-{persona}.md` per VP |
-| **3. Merge** | Facilitator consolidates similar ideas, tallies votes | `phase3-merged-results.md` |
-| **4. Produce** | VP Prod drafts PRDs/ADRs from top-voted ideas | `phase4-prds.md` |
-
-Each persona runs as a separate CLI process with zero shared context — ensuring truly independent creative thinking. The voting rule (you can't vote for your own ideas + every vote requires an improvement suggestion) drives cross-pollination.
-
-Top-voted PRD drafts go to the CEO for approval. Approved PRDs seed new initiatives.
+| Skill | What it does |
+|-------|---------------|
+| `/setup` | First-time onboarding — prerequisites, registry, repo deployment. Re-run to add repos. |
+| `/new-project` | Scaffold a private `<project>-cto` home, greenfield or adopting an existing fleet. |
+| `/vp-review` | Fan a sprint plan/ADR/dev-report out to VP personas in parallel, synthesize a verdict. |
+| `/sprint-fanout` | Draft per-repo sprint plans from a shared PRD/goal. |
+| `/handoff` | Launch a dev-team session per repo (Terminal tab, auto-briefed). |
+| `/peek` / `/send` | Watch / message a running dev-team session without spawning a new tab. |
+| `/sprint-status` | Fleet-wide at-a-glance: who's running, idle, crashed, or done. |
+| `/sprint-verify` | Objective conformance check — did the sprint deliver what the plan said? |
+| `/sprint-accept` | The ship decision — reads plan + report + reviews + `conformance.md`. |
+| `/qa-ux` | Drive the live product as a skeptical user; produce a defect report. |
+| `/close-window` / `/resume-dev-team` | Wind down a finished session / recover a crashed one. |
+| `/arch-map` / `/lane-check` | RACI + component map; enforce declared cross-repo import boundaries. |
+| `/digest` / `/escalate-drain` | Daily fleet status digest; drain pending escalations from dev teams. |
 
 ## What's Included
 
 ```
-CLAUDE.md                                    # Claude Code config — loaded automatically
-scripts/agentic/
-  vp-review.sh                               # Configurable VP review engine
-  start-initiative.sh                        # Create branch + scaffold initiative
-  start-sprint.sh                            # Scaffold sprint within initiative
-  request-merge.sh                           # Run Tier 3 merge reviews
-  ideo-sprint.sh                             # IDEO-style ideation sprint
+CLAUDE.md                     # CTO persona + orchestration protocol — loaded automatically
+CLAUDE.devteam.md             # Dev-team persona, pushed into each registered repo
+.claude/skills/               # Every skill listed above
+.claude/hooks/                # SessionStart preflight, session tracking, auto-paste-brief
+.cto/projects.yaml.example    # Copy to .cto/projects.yaml — your fleet registry (gitignored)
+scripts/agentic/               # vp-review.sh, resolve-review-engine.sh, openrouter-chat.sh, ...
+scripts/cto/                   # push-to-repos.sh, sync-cto-home.sh, orchestrate-sprint.sh, ...
 docs/
-  personas/                                  # Agent persona definitions
-    PROTOCOL.md                              # Three-tier lifecycle (v3)
-    vp-engineering.md                        # VP of Engineering persona
-    vp-product.md                            # VP of Product persona
-    vp-security.md                           # VP of Security persona
-    vp-compliance.md                         # VP of Compliance persona
-    vp-devops.md                             # VP of DevOps persona
-    vp-datascience.md                        # VP of Data Science persona
-    qa-ux.md                                 # QA-UX persona (drives the live app: browser/CLI/MCP)
-    qa-ux-runbook.md                         # QA-UX DOMShell setup + gemini drive + troubleshooting
-    dev-team.md                              # Dev Team persona
-    context/                                 # Private domain context (gitignored)
-      README.md
-    concerns/                                # Project-specific concerns (committed)
-      security.md                            # Security posture and attack surface
-      compliance.md                          # Regulatory landscape and ToS
-      devops.md                              # Infrastructure inventory and gaps
-  initiatives/
-    _templates/
-      initiative-brief.md                    # Initiative brief template
-      amendments/
-        scope-amendment.md                   # Scope change template
-      merge-review/
-        merge-checklist.md                   # Merge gate checklist template
-  sprints/
-    _templates/                              # Sprint artifact templates (8 files)
-  ideation/
-    _templates/
-      ideation-goal.md                       # IDEO sprint goal template
-  backlog/
-    bugs/
-      bug-report-template.md                 # Bug report template
-    ideas/                                   # Future initiative ideas
-.agents/workflows/                           # Antigravity adapter files (5 VPs)
-.claude/settings.json                        # Claude Code permissions
+  personas/                    # cto.md + every VP + dev-team + qa-ux persona definition
+    context/                   # Private domain context (gitignored)
+    concerns/                  # Project-specific concerns (security/compliance/devops)
+  roadmap/prds/                # Your PRDs live here
+  architecture/decisions/      # ADRs
+  sprints/_templates/          # scope.md, conformance.md, and other sprint doc templates
+  ideation/_templates/         # IDEO-sprint goal template
 ```
 
 ## Customization
 
-After running `setup.sh`, customize:
+1. **Project Concerns** — fill in `docs/personas/concerns/security.md`, `compliance.md`,
+   `devops.md` with your actual security posture, regulatory landscape, and infra inventory.
+2. **Persona Domain Knowledge** — fill in the `<!-- CUSTOMIZE -->` sections in each persona file.
+3. **Private Context** — `docs/personas/context/*.md` for deep project knowledge (gitignored).
+4. **VP Review Composition** — `docs/personas/cto.md` documents which VPs run by default vs. by
+   content judgment (default is `vp-prod` + `vp-eng`; add `vp-security`/`vp-devops`/
+   `vp-datascience` when the artifact touches their domain).
 
-1. **Initiative Brief** — The template at `docs/initiatives/_templates/initiative-brief.md` defines what information you require for every new piece of work. Adjust the sections to match your team's planning style.
+## IP Separation: Public Template vs. Private CTO Repo
 
-2. **Persona Domain Knowledge** — Fill in the `<!-- CUSTOMIZE -->` sections in each persona file with project-specific knowledge.
-
-3. **Project Concerns** — Fill in `docs/personas/concerns/security.md`, `compliance.md`, and `devops.md` with your project's actual security posture, regulatory landscape, and infrastructure inventory.
-
-4. **Private Context** — Create `docs/personas/context/vp-eng-context.md` and `vp-product-context.md` for deep project-specific knowledge (gitignored — won't leak to public repos).
-
-5. **Technical Standards** — Add your coding standards to the Technical Standards section in `CLAUDE.md`.
-
-6. **Anti-Pattern Watchlist** — Customize the watchlist table in `vp-engineering.md` with your project's specific anti-patterns.
-
-## Branch Naming Conventions
-
-| Initiative Type | Branch Prefix | Example |
-|----------------|--------------|---------|
-| Feature | `feature/` | `feature/tuner-v2` |
-| Tech Debt | `debt/` | `debt/test-coverage` |
-| Experiment | `experiment/` | `experiment/llm-caching` |
-| Bug Fix | `fix/` | `fix/graph-corruption` |
-| Hardening | `harden/` | `harden/api-security` |
-
-## Dev Session + Review Engine Combinations
-
-The template separates two concerns: **who writes the code** (dev session) and **who reviews it** (review engine). Mix and match:
-
-| Dev Session (writes code) | Review Engine (reviews artifacts) | Notes |
-|---------------------------|----------------------------------|-------|
-| Claude Code (VS Code) | Gemini CLI | Original dual-engine model |
-| Claude Code (VS Code) | Claude CLI (`claude -p`) | Pure Claude — review is a fresh process, no shared context |
-| Claude Code (VS Code) | Both (dual) | Two independent reviews per artifact |
-| Gemini (Antigravity/VS Code) | Claude CLI | Gemini writes code, Claude reviews |
-| Gemini (Antigravity/VS Code) | Gemini CLI | Pure Gemini — review is a fresh CLI invocation, stateless |
-| Any AI coding tool | Any CLI | Works if the tool reads CLAUDE.md-style instructions |
-
-The `CLAUDE.md` file is named for Claude Code (which auto-reads it), but the content is model-agnostic structured instructions. Gemini's Antigravity extension can also be pointed at this file for project instructions.
-
-## For New Contributors
-
-1. Clone the repo and pull latest main
-2. Ask the CEO which initiative to work on (or create one together)
-3. Check out the initiative's feature branch
-4. Open Claude Code — the agent reads CLAUDE.md and knows the workflow
-5. Start sprinting
-
-You don't need to learn the workflow — your agent knows it. The VP reviews enforce quality. The protocol handles consistency.
+If this clone tracks a public/shared template, keep it that way — mechanism only, no project IP.
+Real project PRDs, ADRs, strategy docs, and decisions belong in a private `<project>-cto` repo
+(see `/new-project`). `docs/personas/cto.md` has the full policy; the short version: a `git rm`
+does not remove history from a public repo, so keep IP out from the start.
 
 ## License
 
