@@ -8,7 +8,7 @@
 # live browser via domshell_execute and writes the artifacts. Bright-line clean: gemini, never claude -p.
 #
 # Usage: qa-drive-gemini.sh <sprint-dir> --url <non-prod-url>
-# Prereqs: DOMShell server running (Docker/ToolHive/native) + Chrome extension connected;
+# Prereqs: DOMShell server running (the CONTAINER — Docker/ToolHive — is canonical; never a native server alongside it) + Chrome extension connected;
 #          DOMSHELL_TOKEN resolvable (env, or the running proxy's --token arg).
 
 set -uo pipefail

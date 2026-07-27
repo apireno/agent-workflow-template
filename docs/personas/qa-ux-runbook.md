@@ -18,14 +18,28 @@
 
 ## 1. One-time DOMShell setup (per machine / UX repo)
 
-1. **Run the DOMShell server** — ToolHive/Docker (recommended; owns `:3001` MCP + `:9876` extension socket) or native `npx @apireno/domshell --allow-write`. Confirm: `thv list` shows `domshell-mcp-server` *running*, or `:3001/mcp` answers (a `401` means up-but-needs-token — that's expected).
+1. **Run the DOMShell server — the CONTAINER is the single canonical form** (ToolHive or plain Docker; owns `:3001` MCP + `:9876` extension socket). Confirm: `thv list` shows `domshell-mcp-server` *running* (or `docker ps` shows the container), and `:3001/mcp` answers an `initialize` with `serverInfo.name = "domshell"`.
+   > ⛔ **NEVER run a native `npx @apireno/domshell --allow-write` SERVER alongside the container.** Two servers collide *silently*: the native one binds `127.0.0.1` while the container binds `0.0.0.0` inside its own netns, so both look "running" while every proxy relays to whichever squatted the host port. **This caused a 9-day outage (RCA 2026-07)** — a native `--allow-write` spawn held the ports and every agent drove the wrong instance. A native server is a last-resort fallback ONLY if *all* of: `thv list` shows nothing **AND** no DOMShell container is running **AND** nothing is listening on `:9876`. `qa-standup.sh` now refuses to drive when it detects both (see §6).
 2. **Connect the Chrome extension** — open the DOMShell side panel → start session → `connect <token>`.
 3. **Make the token available** — `DOMSHELL_TOKEN` must be a **clean hex string in the env the launching session inherits**. `scripts/agentic/ensure-domshell-token.sh` checks env → local token files → the live proxy's `--token` arg, and rejects banner-contaminated values. **Never read the token via a login shell** (`zsh -lic` picks up "Restored session" banners → a bad token → `Disconnected`).
 4. **Registration is automatic** — you do *not* hand-edit config:
    - For an **interactive Claude** session: `qa-standup.sh` self-provisions the **proxy form** into the UX repo's `.mcp.json` (`domshell-proxy --port 3001 --token ${DOMSHELL_TOKEN}`) and tells you to restart (MCP loads at session start).
    - For the **gemini** engine: `qa-drive-gemini.sh` registers it via `gemini mcp add --scope user --trust …`.
 
-> **Why the proxy form, not a spawn or a direct URL:** when DOMShell already runs (Docker/ToolHive), a `--allow-write` *spawn* conflicts on `:3001`/`:9876`, and a direct `type:http` URL `401`s without the token. The `domshell-proxy` stdio entry **connects to** the running server and controls its existing instances — the only form that works against a running server.
+> **Why the proxy form, not a spawn or a direct URL:** when DOMShell already runs (Docker/ToolHive), a `--allow-write` *spawn* starts a SECOND SERVER that collides on `:3001`/`:9876` (see the ⛔ above — this is the 2026-07 outage), and a direct `type:http` URL `401`s without the token. The `domshell-proxy` stdio entry is a **client**: it connects to the running server and controls its existing instances — the only form that works against a running server, and the only one that can't create a duplicate bridge.
+
+### 1c. DOMShell ≥ 2.0.9 hardening (why the standup can now assert identity)
+
+The collision above is now defended on both sides:
+
+| Guard | Where | What it does |
+|---|---|---|
+| Interface-agnostic singleton | DOMShell server ≥ 2.0.9 | A second server **refuses to start** (earlier builds were blind to the native-`127.0.0.1` vs container-`0.0.0.0`-in-netns split). |
+| Version in `initialize` | DOMShell server ≥ 2.0.9 | `serverInfo.version` reports the **real** version (it was a hardcoded `"1.0.0"` before) — so a stale squatter is now detectable. |
+| Origin logging | `domshell-proxy` ≥ 2.0.9 | Logs `relaying to DOMShell v<version> at <origin>` at startup — read this when a drive behaves oddly. |
+| Duplicate-bridge preflight + version assert | `qa-standup.sh` (this template) | Refuses to drive on duplicate listeners / native+container, and fails if `serverInfo.version` < `DOMSHELL_MIN_VERSION` (default `2.0.9`). |
+
+The server-side singleton guard is the real fix; the standup checks exist because **an older server in the field won't have it**, and because the template must not hand out the instruction that creates the collision in the first place.
 
 ### 1b. Using DOMShell (or any stdio MCP server) from a non-Claude agent (gemini / Antigravity / Cursor)
 
@@ -103,7 +117,7 @@ This **self-orchestrates**: resolves the token, registers DOMShell for gemini, r
 
 | Script | Role |
 |---|---|
-| `qa-standup.sh` | Pre-drive guard: prod-endpoint refusal, reachability, provenance env, self-provision DOMShell (proxy form) into the UX/target repo's `.mcp.json`, flag a wrong-form entry. |
+| `qa-standup.sh` | Pre-drive guard: prod-endpoint refusal, reachability, provenance env, self-provision DOMShell (proxy form) into the UX/target repo's `.mcp.json`, flag a wrong-form entry, **duplicate-bridge preflight** (multiple listeners, or native server + container), and **identity+version assert** via `initialize` → `serverInfo` (`DOMSHELL_MIN_VERSION`, default `2.0.9`). |
 | `qa-drive-gemini.sh` | The drive engine: register DOMShell for gemini (`--scope user --trust`), single-lane protocol prompt, drive, on-exit lane sweep. |
 | `ensure-domshell-token.sh` | Resolve + **validate** `DOMSHELL_TOKEN` (clean hex; env → files → live proxy arg); guide first-time setup. |
 | `qa-redact.sh` | Strip secrets/PII from transcripts/reports **before** they land in `assets/` (harness control, not agent courtesy). |
@@ -126,7 +140,10 @@ This **self-orchestrates**: resolves the token, registers DOMShell for gemini, r
 |---|---|---|
 | Browser surface reported `BLOCKED`; only API/DB findings | `domshell_execute` not in the session's tool list | DOMShell not registered, or the session wasn't restarted after registering. Re-run standup, **restart the session**, re-drive. A server on `:3001` ≠ a wired tool. |
 | `401` / `Disconnected` | Missing or **contaminated** token | Export a clean hex `DOMSHELL_TOKEN` (not via a login shell); `ensure-domshell-token.sh` extracts the hex. |
-| Wrong-form `.mcp.json` (`type:http` url, or `--allow-write` spawn) | Direct URL `401`s; spawn conflicts on `:3001`/`:9876` | Use the **proxy form**; `qa-standup.sh` flags this (`PRESENT_WRONG`) and prints the correct block. |
+| Wrong-form `.mcp.json` (`type:http` url, or `--allow-write` spawn) | Direct URL `401`s; spawn starts a second, colliding server | Use the **proxy form**; `qa-standup.sh` flags this (`PRESENT_WRONG`) and prints the correct block. |
+| **Drive "works" but changes never appear / findings describe a stale app** | **Two servers.** A native `--allow-write` server squatted the host port; the container is up but nobody reaches it. This is the 2026-07 9-day outage. | `qa-standup.sh` now hard-fails with `TWO DOMSHELL SERVERS`. Kill the native process (`ps -axo pid,comm,command \| grep node \| grep domshell`), keep the container. Confirm the proxy's startup line names the expected origin/version. |
+| Standup: `STALE/WRONG DOMSHELL INSTANCE — reports vX, below vY` | An old server is squatting `:3001` | Stop it, start the current container, re-run. Pre-2.0.9 servers report a hardcoded `1.0.0`, so an old squatter *can* masquerade — trust the standup, not `docker ps`. |
+| Standup: `DUPLICATE BRIDGE — N distinct processes LISTENING` | Two listeners on `:3001`/`:9876` | Resolve down to one server before driving. Never "just pick one" — a wrong-instance drive yields confidently wrong QA findings. |
 | `gemini mcp list` shows domshell missing intermittently | `mcp list` re-spawns/reconnects every server per call (slow/non-deterministic) | **Never gate on `mcp list`**; register idempotently with `--scope user --trust` and let gemini connect at drive-time. |
 | Lots of spawned tab groups | LLM driver violated the single-lane protocol, or a drive was hard-killed | Run `qa-cleanup-groups.sh --list` then `--close`/`--all-agent`. The protocol + on-exit sweep reduce but don't eliminate this. |
 | Standup aborts with "prod-guard tripped" | The `--url` looks like production | Point at a preview/ephemeral non-prod env. QA never drives prod. |

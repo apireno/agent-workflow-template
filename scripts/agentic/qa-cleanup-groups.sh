@@ -10,7 +10,7 @@
 # NO gemini, NO claude -p. (gemini-CLI was deprecated by Google 2026-06-19, UNSUPPORTED_CLIENT;
 # the old gemini-shelling janitor was dead. This talks to DOMShell over HTTP itself.)
 # Auth: Bearer $DOMSHELL_TOKEN (the same token the proxy passes). The server is the one on
-# :3001 (Docker/ToolHive/native); this never starts a second server.
+# :3001 (the CONTAINER — Docker/ToolHive — is canonical; never a native server alongside it); this never starts a second server.
 #
 # Safety: DEFAULTS TO LIST — it never closes anything unless you ask. `--all-agent` is
 # deliberately separate + loud because it closes EVERY agent lane (other windows / Cowork too).

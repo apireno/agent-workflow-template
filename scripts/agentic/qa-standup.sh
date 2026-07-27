@@ -87,10 +87,11 @@ if "domshell" in s:
     print("PRESENT" if "domshell-proxy" in json.dumps(s["domshell"]) else "PRESENT_WRONG")
 else:
     # stdio PROXY that connects to the already-running DOMShell server on :3001
-    # (Docker/ToolHive/native) and authenticates with $DOMSHELL_TOKEN. This does
-    # NOT start a second server (no :3001/:9876 port conflict) — the spawn form
-    # (`--allow-write`) fails whenever a server is already up. Token via env so it
-    # is never written into the (committable) config file.
+    # (the CONTAINER — Docker/ToolHive — is canonical; NEVER a native server
+    # alongside it) and authenticates with $DOMSHELL_TOKEN. This does NOT start a
+    # second server (no :3001/:9876 port conflict) — the spawn form
+    # (`--allow-write`) starts a colliding second server. Token via env so it is
+    # never written into the (committable) config file.
     s["domshell"] = {"command": "npx", "args": ["-y", "-p", "@apireno/domshell",
         "domshell-proxy", "--port", "3001", "--token", "${DOMSHELL_TOKEN}"]}
     json.dump(d, open(p, "w"), indent=2)
@@ -107,7 +108,8 @@ PY
   fi
   if [ "$REG" = "ADDED" ]; then
     echo "qa-standup: self-provisioned DOMShell (stdio proxy -> :3001) into ${MCP_JSON} (UX/target repo; existing servers preserved)."
-    echo "  It CONNECTS to the already-running DOMShell server (Docker/ToolHive/native) via \$DOMSHELL_TOKEN — it does NOT start a conflicting server."
+    echo "  It CONNECTS to the already-running DOMShell server — the CONTAINER (Docker/ToolHive) is canonical,"
+    echo "  NEVER a native server alongside it — via \$DOMSHELL_TOKEN. It does NOT start a conflicting server."
     echo "  >>> Export DOMSHELL_TOKEN, then run the drive from a session ROOTED IN ${TARGET_ROOT} (open/restart claude there), connect the Chrome extension, and re-run --mode drive. <<<"
     exit 1
   elif [ "$REG" = "PRESENT_WRONG" ]; then
@@ -120,28 +122,99 @@ PY
     exit 1
   fi
   DS_PORT="${DOMSHELL_MCP_PORT:-3001}"
+  DS_EXT_PORT="${DOMSHELL_EXT_PORT:-9876}"
+  DS_MIN_VERSION="${DOMSHELL_MIN_VERSION:-2.0.9}"
+
+  # 4b. DUPLICATE-BRIDGE PREFLIGHT (RCA 2026-07 — the 9-day outage).
+  # Two DOMShell SERVERS can coexist invisibly: a native `--allow-write` spawn binding
+  # 127.0.0.1 and a container binding 0.0.0.0 inside its own netns. Whichever squatted the
+  # host port wins, and EVERY proxy silently relays to it — the container looks "running"
+  # the whole time. Refuse to drive on any duplicate signal; a wrong-instance drive
+  # produces confidently wrong QA findings, which is worse than no drive.
+  DUP=0
+  if command -v lsof >/dev/null 2>&1; then
+    for _p in "$DS_PORT" "$DS_EXT_PORT"; do
+      _n=$(lsof -nP -iTCP:"$_p" -sTCP:LISTEN -t 2>/dev/null | sort -u | grep -c '[0-9]')
+      if [ "${_n:-0}" -gt 1 ]; then
+        echo "qa-standup: DUPLICATE BRIDGE — ${_n} distinct processes are LISTENING on :${_p}."
+        lsof -nP -iTCP:"$_p" -sTCP:LISTEN 2>/dev/null | sed 's/^/    /' | head -6
+        DUP=1
+      fi
+    done
+  fi
+  # A NATIVE server process alongside a DOMShell CONTAINER is the exact RCA'd collision.
+  # Match ONLY a JS-runtime process (node/npx/bun/deno) running domshell — filtering on the
+  # executable (comm), not the raw command line: a bare `grep -i domshell` over argv also
+  # matches any shell/agent that merely MENTIONS domshell (e.g. an exported DOMSHELL_* var),
+  # which false-fails the standup. `domshell-proxy` is excluded — the proxy is a CLIENT, not
+  # a server, and is expected to be running. Containerized servers live in their own PID
+  # namespace and correctly do NOT appear here.
+  NATIVE_SRV=$(ps -axo pid,comm,command 2>/dev/null \
+    | awk '{c=$2; sub(/.*\//,"",c); if (c ~ /^(node|npx|bun|deno)/) print}' \
+    | grep -i 'domshell' | grep -v 'domshell-proxy' | cut -c1-160 | head -3)
+  CONTAINER_UP=0
+  command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | grep -qi domshell && CONTAINER_UP=1
+  command -v thv    >/dev/null 2>&1 && thv list 2>/dev/null | grep -qi domshell && CONTAINER_UP=1
+  if [ -n "$NATIVE_SRV" ] && [ "$CONTAINER_UP" -eq 1 ]; then
+    echo "qa-standup: TWO DOMSHELL SERVERS — a native server process is running WHILE a DOMShell"
+    echo "  container is up. They collide silently on :${DS_PORT}/:${DS_EXT_PORT}; proxies relay to"
+    echo "  whichever squatted the port first (this caused a 9-day outage, RCA 2026-07)."
+    echo "  Native process(es):"; printf '%s\n' "$NATIVE_SRV" | sed 's/^/    /'
+    echo "  FIX: kill the native server (the container is canonical), then re-run the standup."
+    DUP=1
+  fi
+  [ "$DUP" -eq 1 ] && { echo "qa-standup: refusing to drive until the duplicate bridge is resolved."; exit 1; }
+
   if command -v curl >/dev/null 2>&1; then
-    # Probe /mcp and INSPECT THE BODY. A real DOMShell server answers with a JSON-RPC
-    # envelope even unauthenticated (e.g. {"jsonrpc":"2.0","error":{...invalid or missing
-    # auth token...}}). A FOREIGN service squatting :3001 (e.g. a plain Docker container,
-    # the known collision) will NOT — it returns HTML / a non-jsonrpc body / nothing. So
-    # "reachable" is not enough; we must confirm it's actually DOMShell.
-    BODY=$(curl -s --max-time 4 -X POST "http://127.0.0.1:${DS_PORT}/mcp" \
+    # 4c. IDENTITY + VERSION assert (not just reachability). `initialize` answers
+    # UNAUTHENTICATED with {"result":{"serverInfo":{"name":"domshell","version":"X.Y.Z"}}}
+    # (SSE-framed: lines prefixed `data: `), so we can prove (a) it IS DOMShell, not a
+    # foreign service squatting the port, and (b) WHICH instance — a stale/wrong server
+    # reports an older version (pre-2.0.9 reported a hardcoded "1.0.0").
+    BODY=$(curl -s --max-time 6 -X POST "http://127.0.0.1:${DS_PORT}/mcp" \
              -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-             -d '{"jsonrpc":"2.0","id":0,"method":"ping"}' 2>/dev/null)
+             -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"qa-standup","version":"1"}}}' 2>/dev/null)
     if [ -z "$BODY" ] && ! curl -s -o /dev/null --max-time 4 "http://127.0.0.1:${DS_PORT}/mcp" 2>/dev/null; then
       echo "qa-standup: nothing answering on :${DS_PORT}."
-      echo "  Start DOMShell (npx @apireno/domshell --allow-write, or its Docker/ToolHive container), open the"
-      echo "  Chrome extension, and 'connect <token>'. (HITL: browser QA needs a live DOMShell session.)"
+      echo "  Start the DOMShell server — the CONTAINER is the canonical form:"
+      echo "      thv run domshell-mcp-server        # ToolHive"
+      echo "      docker start domshell-mcp-server   # or the equivalent docker run"
+      echo "  Then open the Chrome extension and 'connect <token>'. (HITL: browser QA needs a live session.)"
+      echo "  Do NOT also run a native 'npx @apireno/domshell --allow-write' SERVER — a native server and"
+      echo "  the container collide silently on :${DS_PORT}/:${DS_EXT_PORT} (RCA 2026-07, 9-day outage)."
+      echo "  Native server ONLY as a last resort, and ONLY if ALL of: 'thv list' shows nothing AND no"
+      echo "  DOMShell container is running AND nothing is listening on :${DS_EXT_PORT}. NEVER both."
       exit 1
-    elif printf '%s' "$BODY" | grep -q '"jsonrpc"'; then
-      echo "qa-standup: DOMShell confirmed on :${DS_PORT} (JSON-RPC endpoint responding)."
-    else
-      echo "qa-standup: PORT COLLISION — something is on :${DS_PORT} but it is NOT DOMShell"
-      echo "  (no JSON-RPC envelope on /mcp — likely a Docker container or other service squatting the port)."
-      echo "  Free :${DS_PORT} (stop the squatter), or point DOMShell elsewhere and set DOMSHELL_MCP_PORT."
+    fi
+    # Parse serverInfo out of the (possibly SSE-framed) body.
+    DS_NAME=$(printf '%s' "$BODY" | grep -o '"serverInfo"[^}]*}' | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+    DS_VER=$(printf  '%s' "$BODY" | grep -o '"serverInfo"[^}]*}' | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [ -z "$DS_NAME" ]; then
+      if printf '%s' "$BODY" | grep -q '"jsonrpc"'; then
+        # Speaks JSON-RPC but wouldn't identify itself (e.g. a future build gating
+        # `initialize` behind auth). Not proof of a wrong instance -> warn, don't block.
+        echo "qa-standup: WARN — :${DS_PORT} speaks JSON-RPC but returned no serverInfo; cannot assert"
+        echo "  identity/version. Proceeding, but verify you are driving the intended instance."
+      else
+        echo "qa-standup: PORT COLLISION — something is on :${DS_PORT} but it is NOT DOMShell"
+        echo "  (no JSON-RPC/serverInfo on /mcp — a foreign service is squatting the port)."
+        echo "  Free :${DS_PORT} (stop the squatter), or point DOMShell elsewhere and set DOMSHELL_MCP_PORT."
+        echo "  Detected listener:"; lsof -nP -iTCP:${DS_PORT} -sTCP:LISTEN 2>/dev/null | sed 's/^/    /' | head -4
+        exit 1
+      fi
+    elif ! printf '%s' "$DS_NAME" | grep -qi domshell; then
+      echo "qa-standup: WRONG SERVER on :${DS_PORT} — it identifies as '${DS_NAME}', not DOMShell."
+      echo "  Free the port or set DOMSHELL_MCP_PORT to where DOMShell actually listens."
+      exit 1
+    elif [ -n "$DS_VER" ] && [ "$(printf '%s\n%s\n' "$DS_MIN_VERSION" "$DS_VER" | sort -V | head -1)" != "$DS_MIN_VERSION" ]; then
+      echo "qa-standup: STALE/WRONG DOMSHELL INSTANCE — :${DS_PORT} reports v${DS_VER}, below the"
+      echo "  required v${DS_MIN_VERSION}. A stale instance squatting the port is the RCA'd failure mode"
+      echo "  (pre-2.0.9 also reported a hardcoded '1.0.0', so an old squatter can masquerade)."
+      echo "  Stop it, start the current CONTAINER, and re-run. (Override: DOMSHELL_MIN_VERSION=...)"
       echo "  Detected listener:"; lsof -nP -iTCP:${DS_PORT} -sTCP:LISTEN 2>/dev/null | sed 's/^/    /' | head -4
       exit 1
+    else
+      echo "qa-standup: DOMShell confirmed on :${DS_PORT} — name=${DS_NAME} version=${DS_VER:-unreported} (min ${DS_MIN_VERSION})."
     fi
   fi
 fi
