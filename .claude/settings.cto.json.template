@@ -19,7 +19,14 @@
       "mcp__codegram__traverse",
       "mcp__codegram__provenance",
       "mcp__domshell",
-      "mcp__domshell__domshell_execute"
+      "mcp__domshell__domshell_execute",
+      "Bash(bash $CTO_HOME/scripts/cto/qa-send.sh:*)",
+      "Bash(bash $CTO_HOME/scripts/cto/wait-for-artifact.sh:*)",
+      "Bash(bash $CTO_HOME/scripts/cto/watch-file-or-prompt.sh:*)",
+      "Bash(bash $CTO_HOME/scripts/cto/supervise-worker.sh:*)",
+      "Bash(bash $CTO_HOME/scripts/cto/window-peek.sh:*)",
+      "Bash(bash $CTO_HOME/scripts/cto/close-window-id.sh:*)",
+      "Bash(bash $CTO_HOME/scripts/cto/app-stack.sh:*)"
     ]
   },
   "_comment_skillBudget": "Default skill listing budget is 1% of context. With ~15 skills planned, raise to 2% to keep descriptions intact.",
