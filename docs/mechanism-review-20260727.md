@@ -207,17 +207,16 @@ the kgspin-cto session propagates on receipt, when its own fleet is quiet.
 
 ---
 
-## Open item for the CEO (not a template-team decision)
+## History exposure — **CEO ruling 2026-07-27: leave it alone. CLOSED.**
 
-**The revert does not remove the leak from public history.** `e3851e7` remains fetchable by
-SHA on the public repo and contains `kgspin-demo-app.*server`, `bringup-demo-stack`, and
-`surreal`. This is the exact scenario `CLAUDE.md`'s IP-separation section describes.
+The revert does not remove the leak from public history: `e3851e7` remains fetchable by SHA
+and contains `kgspin-demo-app.*server`, `bringup-demo-stack`, and `surreal`. Assessed **low
+severity** — repo names and a database choice, not strategy, PRDs, or corpora.
 
-Assessment: **low severity** — repo names and a database choice, not strategy, PRDs, or
-corpora. Recommendation: **accept and leave it.** A history rewrite is destructive, breaks
-every existing clone, and buys little here. Raising it because the standing policy is
-zero project strings in the public template, and that policy was breached; the call on
-whether to enforce it retroactively is the CEO's, not ours.
+**The CEO has ruled: no history rewrite.** The exposure is accepted as-is. No further action;
+do not re-raise this in future sessions. The forward-looking control is the standing rule in
+`scripts/cto/README.md` (a script must run once in a project-ignorant repo before it can be
+pushed here), which is what would have prevented it.
 
 Minor, unrelated: `docs/personas/concerns/dba.md` uses "SurrealDB 2.3.10" as a fill-in
 example. Harmless as template illustration, but it does name the fleet's actual stack.
