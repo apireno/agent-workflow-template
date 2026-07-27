@@ -38,7 +38,7 @@ case "$cmd" in
     ;;
   down)
     pkill -f "bringup-demo-stack" 2>/dev/null
-    pkill -f "kgspin-demo-app.*server" 2>/dev/null
+    [ -n "${STACK_SERVER_PATTERN:-}" ] && pkill -f "$STACK_SERVER_PATTERN" 2>/dev/null
     for p in $(lsof -t -i "${STACK_APP_PORT:-8080}" -sTCP:LISTEN 2>/dev/null) $(lsof -t -i "${STACK_DB_PORT:-8011}" -sTCP:LISTEN 2>/dev/null); do kill "$p" 2>/dev/null; done
     sleep 3
     echo "teardown done:"; "$0" health
