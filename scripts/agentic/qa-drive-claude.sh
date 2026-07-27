@@ -124,6 +124,15 @@ needed = [
 ]
 for n in needed:
     if n not in allow: allow.append(n)
+# DENY every OTHER browser driver. A drive session with a second browser MCP available
+# has driven the operator's REAL browser despite a brief naming domshell_execute
+# explicitly: instruction does not survive contact with tool availability. The wrong
+# engine must be mechanically uncallable, not merely discouraged.
+# Generalizes: a launcher-scoped session gets a deny-list for every tool class its
+# persona forbids — QA-UX drives an isolated lane, never the human's browser.
+deny = perms.setdefault('deny', [])
+for n in ['mcp__claude-in-chrome']:
+    if n not in deny: deny.append(n)
 s.setdefault('enableAllProjectMcpServers', True)
 sp.parent.mkdir(parents=True, exist_ok=True)
 sp.write_text(json.dumps(s, indent=2))

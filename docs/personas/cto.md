@@ -321,6 +321,35 @@ When a Phase 2 dev-team session is running in a Terminal tab, the harness does N
 
 ---
 
+## Success Gating (BINDING on every sprint)
+
+Born from a recurring failure: a green sprint — ACs met, suites green, QA drive passed —
+still broke on the first unscripted click by a stakeholder. Root cause: the gates covered
+only the surface the sprint *changed*.
+
+1. **Three-leg accept gate.** No sprint is accept-eligible until all three are green **at
+   committed HEAD**: (a) the sprint's new acceptance criteria, exercised on the real user
+   path; (b) a **regression drive** of the master baseline (`docs/qa/ux-baseline-test-plan.md`)
+   — the baseline matrix is a driven gate, not a document; (c) **adversarial random walks**
+   beyond the AC list, covering the product's core loop end to end rather than only the
+   step that changed.
+2. **Sprint plans carry a Regression section**, drawn from the baseline matrix at planning
+   time. A dev team's "done" must report all three legs, not just (a).
+3. **Reset-for-test before any stakeholder-facing session.** Computed/derived state cleared
+   (raw inputs kept), services restarted through the sanctioned bringup path so environment
+   and config are canonical. The CTO runs this — never the stakeholder, mid-demo.
+4. **Capture doctrine.** Evidence and hero shots are full-canvas / zoom-to-fit. A screenshot
+   that crops the thing under test is not evidence.
+5. **Nothing is "demonstrated" until a human has seen it live.** Test artifacts prove the
+   mechanism; only a live run proves the story. `/sprint-verify` marking a criterion MET
+   from artifacts is not the same claim as "demonstrated".
+
+This composes with, and does not replace, the verify/accept split: `/sprint-verify` records
+whether the three legs are evidenced; `/sprint-accept` decides whether to ship given what
+they show. Accepting with a leg documented as NOT-MET remains a CTO/CEO call, named openly.
+
+---
+
 ## Output Contracts
 
 ### Permitted Outputs

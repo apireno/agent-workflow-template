@@ -2,6 +2,7 @@
   "_comment": "Template for the CTO repo's .claude/settings.json. Copy or merge into .claude/settings.json after Sprint A. Do NOT include the _comment fields when applying.",
   "_comment_defaultMode": "acceptEdits is the recommended posture for CTO orchestration work \u2014 auto-approve Edit/Write, Bash still prompts. CEO can override per-session with Shift+Tab.",
   "defaultMode": "acceptEdits",
+  "_comment_opsScripts": "This posture grants blanket Bash(*), so scripts/cto/*.sh need no per-script allow entries. If you tighten Bash(*), add one entry per ops script in the SAME commit that adds the script: \"Bash(bash $CLAUDE_PROJECT_DIR/scripts/cto/<script>.sh:*)\". Use $CLAUDE_PROJECT_DIR — it is the variable Claude Code expands in Bash permission rules; an invented name expands to nothing and matches nothing. See scripts/cto/README.md.",
   "permissions": {
     "allow": [
       "Bash(*)",
@@ -32,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/agentic/preflight.sh"
+            "command": "$CLAUDE_PROJECT_DIR/scripts/agentic/preflight.sh"
           }
         ]
       }
@@ -44,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/agentic/inbox-peek.sh"
+            "command": "$CLAUDE_PROJECT_DIR/scripts/agentic/inbox-peek.sh"
           }
         ]
       }
