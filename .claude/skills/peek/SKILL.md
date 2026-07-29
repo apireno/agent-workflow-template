@@ -11,7 +11,17 @@ Tails the named repo's Phase 2 session JSONL to show what the dev team is doing 
 
 ```!
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
+# CTO-HOME ANCHORING: the fleet registry lives in the CTO home, but `git rev-parse`
+# returns whatever repo the SHELL sits in — a lingering cd into a project repo makes
+# this skill read the wrong tree (or none). $CLAUDE_PROJECT_DIR is the session's project
+# root regardless of cwd drift; git root is the fallback.
+ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "$ROOT" || { echo "ERROR: cannot enter $ROOT"; exit 1; }
+CTO_REGISTRY="$ROOT/.cto/projects.yaml"
+if [ ! -f "$CTO_REGISTRY" ]; then
+  echo "ERROR: fleet registry not found at $CTO_REGISTRY — run this from the CTO home."
+  exit 1
+fi
 REPO_NAME="$ARGUMENTS"
 
 if [ -z "$REPO_NAME" ]; then
@@ -21,7 +31,7 @@ if [ -z "$REPO_NAME" ]; then
   python3 - <<'PYEOF'
 import re, os
 from pathlib import Path
-with open('.cto/projects.yaml') as f:
+with open('$CTO_REGISTRY') as f:
     text = f.read()
 for b in re.split(r'(?=- name:)', text):
     m = re.search(r'- name:\s*(\S+)', b)
@@ -43,7 +53,7 @@ fi
 # ("tuner" -> "acme-service-a", "morphology" -> "acme-service-b").
 REPO_PATH=$(python3 - <<PYEOF
 import re
-with open('.cto/projects.yaml') as f:
+with open('$CTO_REGISTRY') as f:
     text = f.read()
 arg = "$REPO_NAME"
 # First pass: exact match

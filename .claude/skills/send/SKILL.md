@@ -1,8 +1,8 @@
 ---
 name: send
-description: Send a message to a running Phase 2 dev-team Claude Code session by injecting it into the recorded Terminal window via osascript. Use when /peek shows the dev team asking a question, when VP review feedback needs to reach a running session, or when you want to pass a follow-up instruction without spawning a new tab. Auto-fire when the CEO says things like "tell the tuner team to X", "respond to the morphology dev team with Y", "ask the dev team to Z". Cheaper than /resume-dev-team because there is no new session, no conversation-history reload, no token cost.
+description: Send a message to a running Phase 2 dev-team Claude Code session by injecting it into the recorded Terminal window via osascript. Use when /peek shows the dev team asking a question, when VP review feedback needs to reach a running session, or when you want to pass a follow-up instruction without spawning a new tab. Auto-fire when the CEO says things like "tell the tuner team to X", "respond to the morphology dev team with Y", "ask the dev team to Z". Cheaper than /resume-dev-team because there is no new session, no conversation-history reload, no token cost. A bare NUMERIC first argument is treated as a Terminal window id and addressed directly — use that for windows the repo registry cannot name: a second sprint on the same repo (handoff overwrites the single recorded id slot), a QA drive window, or another orchestration session with no repo binding.
 allowed-tools: Bash(*) Read
-argument-hint: <repo-name> <message>
+argument-hint: <repo-name|window-id> <message>
 ---
 
 # Send to dev team: $ARGUMENTS
@@ -11,7 +11,20 @@ Injects a message into the live Claude Code session running in the repo's record
 
 ```!
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
+# CTO-HOME ANCHORING. These skills read the fleet registry, which lives in the CTO home
+# — but `git rev-parse` returns whatever repo the SHELL happens to sit in. A lingering cd
+# into a project repo made /handoff report "no target repos found" and made vp-review
+# resolve personas against the wrong tree. $CLAUDE_PROJECT_DIR is the session's project
+# root regardless of cwd drift, so it is the correct anchor; git root is the fallback.
+ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "$ROOT" || { echo "ERROR: cannot enter $ROOT"; exit 1; }
+CTO_REGISTRY="$ROOT/.cto/projects.yaml"
+if [ ! -f "$CTO_REGISTRY" ]; then
+  echo "ERROR: fleet registry not found at $CTO_REGISTRY"
+  echo "  This skill must run from the CTO home (the repo holding .cto/projects.yaml)."
+  echo "  If you are in a project repo, the session project dir is wrong — reopen in the CTO home."
+  exit 1
+fi
 [ -n "${ZSH_VERSION:-}" ] && setopt sh_word_split
 
 # Capture the skill arguments via a single-quoted heredoc so the message body
@@ -29,14 +42,29 @@ read -r REPO_NAME MESSAGE <<< "$ARGS"
 
 if [ -z "$REPO_NAME" ] || [ -z "$MESSAGE" ]; then
   echo "Usage: /send <repo-name> <message>"
+  echo "       /send <window-id>  <message>      # id-direct, see below"
   echo "Example: /send acme-service-a please switch to validating PRD-114 first"
   exit 1
 fi
 
+# ID-DIRECT ADDRESSING. A repo's terminal-window.id is a SINGLE SLOT that /handoff
+# overwrites, so a second sprint against the same repo silently steals the first
+# window's address — and some windows (a QA drive, another CTO session) have no repo
+# binding at all. A bare numeric first token addresses that window directly, skipping
+# registry + slot resolution entirely. `window-peek.sh list` enumerates ids.
+case "$REPO_NAME" in
+  ''|*[!0-9]*) ID_DIRECT=0 ;;
+  *)           ID_DIRECT=1 ;;
+esac
+
+if [ "$ID_DIRECT" -eq 1 ]; then
+  WIN_ID="$REPO_NAME"
+  REPO_NAME="window $WIN_ID"
+else
 # Resolve repo path. Accepts exact name OR suffix alias ("tuner" -> "acme-service-a").
 REPO_PATH=$(python3 - <<PYEOF
 import re, sys
-with open('.cto/projects.yaml') as f:
+with open('$CTO_REGISTRY') as f:
     text = f.read()
 arg = "$REPO_NAME"
 for b in re.split(r'(?=- name:)', text):
@@ -58,7 +86,7 @@ PYEOF
 )
 
 if [ -z "$REPO_PATH" ]; then
-  echo "ERROR: repo '$REPO_NAME' not found in .cto/projects.yaml (tried exact + suffix-alias match)"
+  echo "ERROR: repo '$REPO_NAME' not found in $CTO_REGISTRY (tried exact + suffix-alias match)"
   exit 1
 fi
 
@@ -66,10 +94,11 @@ WIN_ID_FILE="$REPO_PATH/.claude/terminal-window.id"
 if [ ! -f "$WIN_ID_FILE" ]; then
   echo "ERROR: no recorded window id for $REPO_NAME at $WIN_ID_FILE"
   echo "Either the session was not launched via /handoff, or handoff predates the window-id tracking patch."
-  echo "Manual fix: find the window id (e.g., from earlier handoff output) and write it to $WIN_ID_FILE"
+  echo "Fix: run  bash scripts/cto/window-peek.sh list  and send id-direct:  /send <window-id> <message>"
   exit 1
 fi
 WIN_ID=$(cat "$WIN_ID_FILE" | tr -d '[:space:]')
+fi
 
 # Write the message to a temp file so we don't have to shell-escape it through
 # osascript. AppleScript will read the file content via `do shell script`.
@@ -133,6 +162,6 @@ The message has been injected into the dev-team session. Tell the CEO:
    message is sitting unsubmitted in the dev team's input box, the CEO must press Enter in
    that Terminal window. This is a known `/send` limitation, not a one-off — do not claim
    the message "sent" or "delivered" as if it auto-submitted.
-3. **Next step:** once submitted, `/peek $REPO_NAME` to see the response.
+3. **Next step:** once submitted, `/peek $REPO_NAME` to see the response (id-direct sends have no repo to peek — use `bash scripts/cto/window-peek.sh <id>` instead).
 
 Sign as: — CTO

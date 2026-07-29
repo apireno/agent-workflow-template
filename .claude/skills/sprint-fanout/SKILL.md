@@ -13,7 +13,20 @@ Drafts a sprint-plan.md per active repo by feeding the PRD/goal + per-repo CLAUD
 
 ```!
 set -uo pipefail
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
+# CTO-HOME ANCHORING. These skills read the fleet registry, which lives in the CTO home
+# — but `git rev-parse` returns whatever repo the SHELL happens to sit in. A lingering cd
+# into a project repo made /handoff report "no target repos found" and made vp-review
+# resolve personas against the wrong tree. $CLAUDE_PROJECT_DIR is the session's project
+# root regardless of cwd drift, so it is the correct anchor; git root is the fallback.
+ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "$ROOT" || { echo "ERROR: cannot enter $ROOT"; exit 1; }
+CTO_REGISTRY="$ROOT/.cto/projects.yaml"
+if [ ! -f "$CTO_REGISTRY" ]; then
+  echo "ERROR: fleet registry not found at $CTO_REGISTRY"
+  echo "  This skill must run from the CTO home (the repo holding .cto/projects.yaml)."
+  echo "  If you are in a project repo, the session project dir is wrong — reopen in the CTO home."
+  exit 1
+fi
 
 # zsh doesn't word-split unquoted parameter expansion by default. Skills run
 # in whatever shell the harness uses (zsh on macOS). This makes `for tok in $ARGS`
@@ -61,7 +74,7 @@ echo ""
 # Read active repos
 python3 - <<PYEOF > "$OUT/repos.tsv"
 import re
-with open('.cto/projects.yaml') as f:
+with open('$CTO_REGISTRY') as f:
     text = f.read()
 blocks = re.split(r'(?=- name:)', text)
 filter_set = set("$REPOS_FILTER".split(',')) if "$REPOS_FILTER" else None

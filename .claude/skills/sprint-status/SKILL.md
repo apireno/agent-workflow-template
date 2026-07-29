@@ -9,7 +9,17 @@ allowed-tools: Bash(cat *) Bash(ls *) Bash(stat *) Bash(date *) Bash(test *) Bas
 ## Read the active repo registry
 
 ```!
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || { echo "ERROR: not in a repo"; exit 1; }
+# CTO-HOME ANCHORING: the fleet registry lives in the CTO home, but `git rev-parse`
+# returns whatever repo the SHELL sits in — a lingering cd into a project repo makes
+# this skill read the wrong tree (or none). $CLAUDE_PROJECT_DIR is the session's project
+# root regardless of cwd drift; git root is the fallback.
+ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+cd "$ROOT" || { echo "ERROR: cannot enter $ROOT"; exit 1; }
+CTO_REGISTRY="$ROOT/.cto/projects.yaml"
+if [ ! -f "$CTO_REGISTRY" ]; then
+  echo "ERROR: fleet registry not found at $CTO_REGISTRY — run this from the CTO home."
+  exit 1
+fi
 ART=.cto/projects.yaml
 if [ ! -f "$ART" ]; then
   echo "ERROR: .cto/projects.yaml not found at $ART"
@@ -18,7 +28,7 @@ fi
 
 python3 - <<'PYEOF'
 import re
-with open('.cto/projects.yaml') as f:
+with open('$CTO_REGISTRY') as f:
     text = f.read()
 blocks = re.split(r'(?=- name:)', text)
 active = []
@@ -45,7 +55,7 @@ python3 - <<'PYEOF'
 import os, re, json, time
 from pathlib import Path
 
-with open('.cto/projects.yaml') as f:
+with open('$CTO_REGISTRY') as f:
     text = f.read()
 blocks = re.split(r'(?=- name:)', text)
 repos = []
