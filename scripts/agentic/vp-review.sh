@@ -121,15 +121,39 @@ case "$PERSONA" in
         ;;
 esac
 
-# Resolve to absolute paths
-PERSONA_FILE="$REPO_ROOT/$PERSONA_FILE"
+# Resolve to absolute paths.
+#
+# Persona definitions travel WITH this script, so resolve them against the script's own
+# location first and fall back to the cwd repo only if that misses. Resolving against
+# `git rev-parse` alone silently couples the review to wherever the operator happens to
+# stand: run from a project repo that carries no vp-datascience.md and the review fails,
+# even though the CTO home two directories away has it. A reviewer's identity must not
+# depend on the caller's shell.
+SCRIPT_HOME="$(cd "$(dirname "$0")/../.." && pwd)"
+resolve_asset() {
+    # $1 = repo-relative path (e.g. docs/personas/vp-product.md); echoes the first hit.
+    if [ -f "$SCRIPT_HOME/$1" ]; then echo "$SCRIPT_HOME/$1"
+    elif [ -f "$REPO_ROOT/$1" ]; then echo "$REPO_ROOT/$1"
+    else echo "$SCRIPT_HOME/$1"; fi   # report the canonical path in the not-found error
+}
+
+PERSONA_FILE="$(resolve_asset "$PERSONA_FILE")"
+
+# Concerns and context are PROJECT-specific by design (a project's real security posture,
+# its private domain knowledge), so those prefer the cwd repo and fall back to the script
+# home — the opposite precedence to the persona, deliberately.
+resolve_project_asset() {
+    if [ -f "$REPO_ROOT/$1" ]; then echo "$REPO_ROOT/$1"
+    elif [ -f "$SCRIPT_HOME/$1" ]; then echo "$SCRIPT_HOME/$1"
+    else echo "$REPO_ROOT/$1"; fi
+}
 
 if [ -n "$CONCERNS_FILE" ]; then
-    CONCERNS_FILE="$REPO_ROOT/$CONCERNS_FILE"
+    CONCERNS_FILE="$(resolve_project_asset "$CONCERNS_FILE")"
 fi
 
 if [ -n "$CONTEXT_FILE" ]; then
-    CONTEXT_FILE="$REPO_ROOT/$CONTEXT_FILE"
+    CONTEXT_FILE="$(resolve_project_asset "$CONTEXT_FILE")"
 fi
 
 # Validate files exist
@@ -350,6 +374,20 @@ run_with_retry() {
     done
 
     echo "[vp-review] ${label}: FAILED after $VP_REVIEW_MAX_ATTEMPTS attempts (last diag=$diag)" >&2
+    # Deliberately NO automatic fallback to another engine. Engines are not
+    # interchangeable evidence: the reason to run kimi or codex is that a DIFFERENT model
+    # family reviewed the work, and silently substituting one would leave a verdict
+    # labelled with an engine that never ran it. Fail loudly, name the override, let a
+    # human choose the substitute knowingly.
+    {
+        # $* here would be the FUNCTION's args, not the script's — reconstruct from the
+        # parsed positionals so the suggested command is actually runnable.
+        echo "[vp-review] engine '${label}' is unavailable. Re-run naming a different engine explicitly:"
+        echo "    REVIEW_ENGINE=kimi     $0 ${PERSONA:-<vp>} ${INPUT_FILE:-<artifact>} ${OUTPUT_FILE:-<out.md>}   # OpenRouter, needs OPENROUTER_API_KEY"
+        echo "    REVIEW_ENGINE=subagent ...          # in-session Agent tool, via the /vp-review skill"
+        echo "  Or change this repo's default:  echo <engine> > .review-engine"
+        echo "  NOT auto-substituted on purpose — a verdict must name the engine that actually produced it."
+    } >&2
     rm -f "$out_file"
     return 1
 }

@@ -222,4 +222,32 @@ Minor, unrelated: `docs/personas/concerns/dba.md` uses "SurrealDB 2.3.10" as a f
 example. Harmless as template illustration, but it does name the fleet's actual stack.
 Flagged, not changed.
 
+---
+
+# Addendum — batch rulings, 2026-07-29
+
+Nine further findings arrived through `docs/template-sync/` (the correct channel), all hit
+live. Ruled and mostly shipped same-day rather than queued: seven were contained, and three
+were active governance or safety defects where waiting costs more than fixing.
+
+| # | Finding | Ruling | What shipped |
+|---|---|---|---|
+| P1 | Handoff KICKOFF's blanket pre-approval read as satisfying a **signature gate** — a dev team self-signed a pre-registration and ran a scored audit | **FIXED** | The carve-out now travels *inside the sentence that grants the authority*. Authority stated in a brief loses to blanket authority stated in the kickoff — same lesson as the CiC deny. |
+| — | `sprint-watch`: single-shot, no window liveness, no multi-trigger | **FIXED** | `--stream` on `watch-file-or-prompt.sh`: tagged `FILE_UPDATED`/`PROMPT_BLOCK`/`PATTERN_HIT`/`WINDOW_GONE`, self-re-arming baseline, `--pattern`. Single-shot output unchanged. |
+| P1 | `vp-review.sh` persona lookup was cwd-dependent | **FIXED** | Personas resolve against the *script's* home (they travel with it); concerns/context still prefer the cwd repo, because those are genuinely project-specific. A reviewer's identity must not depend on the caller's shell. |
+| P1 | Handoff self-heal wired tracking hooks but not `deny-self-commit` | **FIXED** | Hook authored into the template (it existed only in stamped repos), wired as `PreToolUse`/`Bash` by both the self-heal and `settings.devteam.json.template`. |
+| P0-res | qa-drive session hit the relative hook-path stop-hook error | **FIXED — root cause was deeper than reported** | The **handoff self-heal itself wrote relative paths at runtime**; the earlier P0 fix only corrected the static templates. Both generators now anchor to `$CLAUDE_PROJECT_DIR` *and migrate existing relative entries in place* — so every self-heal or drive launch repairs a stale repo instead of stamping the bug forward. |
+| P1 | Skill-body inline engine calls die at the harness shell cap; a 0-byte plan staged as drafted | **PARTIAL — mitigated, redesign queued** | Timeout dropped under the cap (`FANOUT_TIMEOUT`, default 90s) with a `gtimeout`/`timeout` fallback, and **a zero-exit-with-no-output is now `FAILED-EMPTY`, never `SUCCESS`** — the dangerous part was an empty plan landing as if drafted. Full detach-and-poll redesign is queued, not done. |
+| P2 | No engine fallback when an engine's auth died | **RULED: no auto-fallback, by design** | Engines are not interchangeable evidence — the point of kimi/codex is that a *different model family* reviewed, so silently substituting would leave a verdict labelled with an engine that never ran it. Ships a crisp, copy-pasteable override instead. |
+| MINOR | `close-window-id.sh <id> --yes` silently dry-ran | **FIXED** | Flags accepted in any position; non-numeric args are a hard error, not a phantom window. This one was ours, introduced in the re-land. |
+| — | `Monitor`/`TaskStop`/`PushNotification` prompting despite `Bash(*)` | **FIXED** | Added to `settings.cto.json.template` with a comment explaining that harness-native tools are not Bash and are not covered by `Bash(*)`. |
+| MINOR | `/send` auto-submit Return unreliable | **QUEUED — keep the caveat** | Not worth a speculative hardening pass; the documented caveat is honest and the failure is visible. |
+| P2 | Stamped `ci.yml` sibling-checkout list diverges from each repo's lockfile (filed 2026-07-28) | **QUEUED** | Real; needs design (derive checkouts from lockfile path-deps vs. stamp per-repo). Not started. |
+
+**Pattern worth recording:** every item in this batch came through `docs/template-sync/`, and
+every one was actionable. Two of them (the signature-gate carve-out and the self-heal path
+generator) were defects the template team could not have found from inside the template —
+they only appear under live multi-repo orchestration. The routing rule is not overhead; it
+is the only channel through which this class of bug reaches us.
+
 — Template team

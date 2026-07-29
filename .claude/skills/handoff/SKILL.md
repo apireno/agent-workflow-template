@@ -106,7 +106,7 @@ while IFS=$'\t' read -r REPO_NAME REPO_PATH PLAN_PATH; do
   # Install the latest hooks, merge their wiring into the repo's settings.json
   # (idempotent), and record the active sprint for the completion hooks' scope.
   mkdir -p "$REPO_PATH/.claude/hooks"
-  for h in auto-paste-brief check-complete session-end-record; do
+  for h in auto-paste-brief check-complete session-end-record deny-self-commit; do
     cp "$ROOT/.claude/hooks/$h.sh" "$REPO_PATH/.claude/hooks/$h.sh" 2>/dev/null && chmod +x "$REPO_PATH/.claude/hooks/$h.sh"
   done
   echo "sprint-$SPRINT" > "$REPO_PATH/.claude/current-sprint"
@@ -130,15 +130,39 @@ for srv in servers:
     if rule not in allow: allow.append(rule)
 if servers: s["enableAllProjectMcpServers"] = True
 hooks = s.setdefault("hooks", {})
-def ensure(event, cmd):
+
+def anchor(cmd):
+    # Hooks run from whatever cwd the harness happens to use, so a repo-relative
+    # command yields "No such file or directory" at hook time — silently, since a
+    # failing Stop hook just logs. $CLAUDE_PROJECT_DIR is the documented anchor.
+    if cmd.startswith(".claude/") or cmd.startswith("scripts/"):
+        return "$CLAUDE_PROJECT_DIR/" + cmd
+    return cmd
+
+# Migrate any relative hook command already in this repo's settings — repos stamped
+# before the fix carry the latent form, and self-heal is the moment we can see them.
+for _ev, _groups in hooks.items():
+    if not isinstance(_groups, list): continue          # skip _comment_* string entries
+    for _g in _groups:
+        for _h in _g.get("hooks", []):
+            _h["command"] = anchor(_h.get("command", ""))
+
+def ensure(event, cmd, matcher="*"):
+    target = anchor(cmd)
     arr = hooks.setdefault(event, [])
     for g in arr:
         for h in g.get("hooks", []):
-            if h.get("command","").endswith(cmd): return
-    arr.append({"matcher":"*","hooks":[{"type":"command","command":cmd}]})
+            if h.get("command","").endswith(cmd):
+                h["command"] = target
+                return
+    arr.append({"matcher":matcher,"hooks":[{"type":"command","command":target}]})
 ensure("SessionStart", ".claude/hooks/auto-paste-brief.sh")
 ensure("Stop", ".claude/hooks/check-complete.sh")
 ensure("SessionEnd", ".claude/hooks/session-end-record.sh")
+# The no-self-commit guard: dev teams write artifacts; the CTO commits after the
+# independent Phase-3 review. Without this wired, a repo silently permits self-commit
+# AND self-review, which collapses the gate the whole sprint lifecycle rests on.
+ensure("PreToolUse", ".claude/hooks/deny-self-commit.sh", matcher="Bash")
 json.dump(s, open(p,"w"), indent=2)
 print("  self-heal: wired hooks + pre-trusted MCP servers %s in %s" % (servers or "(none)", p))
 PYWIRE

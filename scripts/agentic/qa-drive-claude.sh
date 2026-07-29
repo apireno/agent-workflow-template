@@ -134,6 +134,18 @@ deny = perms.setdefault('deny', [])
 for n in ['mcp__claude-in-chrome']:
     if n not in deny: deny.append(n)
 s.setdefault('enableAllProjectMcpServers', True)
+# Anchor any repo-relative hook command already wired in this repo. A drive session
+# launched into a repo stamped before the hook-path fix hits
+#   "Stop hook error: .claude/hooks/check-complete.sh: No such file or directory"
+# because hooks run from an arbitrary cwd. It fails silently (a broken Stop hook just
+# logs), so the drive looks fine while its completion signal never fires.
+for _ev, _groups in (s.get('hooks') or {}).items():
+    if not isinstance(_groups, list): continue          # skip _comment_* string entries
+    for _g in _groups:
+        for _h in _g.get('hooks', []):
+            _c = _h.get('command', '')
+            if _c.startswith('.claude/') or _c.startswith('scripts/'):
+                _h['command'] = '$CLAUDE_PROJECT_DIR/' + _c
 sp.parent.mkdir(parents=True, exist_ok=True)
 sp.write_text(json.dumps(s, indent=2))
 print("qa-drive-claude: pre-authorized — trust + domshell MCP + drive permissions (qa-ux skill intentionally NOT allowed)")

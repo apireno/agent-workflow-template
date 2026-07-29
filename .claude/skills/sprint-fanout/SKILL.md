@@ -139,10 +139,27 @@ EOF
     elif [ "$ENGINE" = "kimi" ]; then RUNCMD="cat '$PROMPT_FILE' | '$ROOT/scripts/agentic/openrouter-chat.sh'"
     elif [ "$ENGINE" = "codex" ]; then RUNCMD="cat '$PROMPT_FILE' | '$ROOT/scripts/agentic/codex-exec.sh'"  # UNTESTED (2026-07-02)
     else RUNCMD="cat '$PROMPT_FILE' | claude -p --max-turns 1"; fi
-    echo "  -> firing $ENGINE for $REPO_NAME (timeout 300s)..."
-    ( gtimeout 300 sh -c "$RUNCMD" > "$OUT_PLAN" 2> "$OUT/${REPO_NAME}.log" \
-        && echo "SUCCESS" > "$OUT/${REPO_NAME}.status" \
-        || echo "ERROR($?)" > "$OUT/${REPO_NAME}.status" ) &
+    # TIMEOUT MUST STAY UNDER THE HARNESS SHELL CAP. A skill body's shell is reaped at
+    # roughly two minutes; an engine call with a longer internal timeout dies WITH its
+    # parent, leaving a 0-byte plan in the staging dir and no status file. Keep this
+    # below the cap so every call resolves to a real SUCCESS or ERROR while the body
+    # still lives. (Queued redesign: detach via nohup + status file and poll from "Your
+    # task", the way the subagent path already avoids the cap entirely.)
+    FANOUT_TIMEOUT="${FANOUT_TIMEOUT:-90}"
+    TIMEOUT_BIN=""
+    command -v gtimeout >/dev/null 2>&1 && TIMEOUT_BIN="gtimeout"
+    [ -z "$TIMEOUT_BIN" ] && command -v timeout >/dev/null 2>&1 && TIMEOUT_BIN="timeout"
+    echo "  -> firing $ENGINE for $REPO_NAME (timeout ${FANOUT_TIMEOUT}s)..."
+    ( if [ -n "$TIMEOUT_BIN" ]; then "$TIMEOUT_BIN" "$FANOUT_TIMEOUT" sh -c "$RUNCMD" > "$OUT_PLAN" 2> "$OUT/${REPO_NAME}.log"
+      else sh -c "$RUNCMD" > "$OUT_PLAN" 2> "$OUT/${REPO_NAME}.log"; fi
+      RC=$?
+      # A zero exit with no output is NOT success. An engine that dies, refuses, or is
+      # reaped can exit 0 having written nothing; marking that SUCCESS is what lets an
+      # empty file land in a sprint dir and be read as a drafted plan.
+      SZ=$(wc -c < "$OUT_PLAN" 2>/dev/null || echo 0)
+      if [ "$RC" -ne 0 ]; then echo "ERROR($RC)" > "$OUT/${REPO_NAME}.status"
+      elif [ "${SZ:-0}" -lt 200 ]; then echo "FAILED-EMPTY(${SZ}b)" > "$OUT/${REPO_NAME}.status"
+      else echo "SUCCESS" > "$OUT/${REPO_NAME}.status"; fi ) &
   else
     # subagent / handoff: a skill body can't draft via an Agent/window — the CTO does (Your task).
     echo "  -> staged prompt for $REPO_NAME (engine=$ENGINE: CTO drafts via the Agent tool)"

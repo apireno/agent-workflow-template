@@ -20,13 +20,23 @@
 
 set -uo pipefail
 
+# Accept --yes in ANY position. Positional-only parsing made `close-window-id.sh <id> --yes`
+# treat the flag as a window id, report "not found", and dry-run — the operator reads that
+# as "done" and the window stays open. Anything that is not a flag and not numeric is a
+# hard error rather than a phantom window.
 CONFIRM=0
-case "${1:-}" in
-    --yes|-y) CONFIRM=1; shift ;;
-esac
-[ $# -gt 0 ] || { echo "usage: close-window-id.sh [--yes] <window-id> [<window-id>...]" >&2; exit 1; }
+WINDOWS=""
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y) CONFIRM=1 ;;
+        -*) echo "unknown flag: $arg (usage: close-window-id.sh [--yes] <window-id>...)" >&2; exit 1 ;;
+        *[!0-9]*|"") echo "not a window id: '$arg' — ids are numeric (see: window-peek.sh list)" >&2; exit 1 ;;
+        *) WINDOWS="$WINDOWS $arg" ;;
+    esac
+done
+[ -n "$WINDOWS" ] || { echo "usage: close-window-id.sh [--yes] <window-id> [<window-id>...]" >&2; exit 1; }
 
-for WIN in "$@"; do
+for WIN in $WINDOWS; do
     NAME=$(osascript -e "tell application \"Terminal\" to get name of window id $WIN" 2>/dev/null || true)
     TTY=$(osascript -e "tell application \"Terminal\" to get tty of window id $WIN" 2>/dev/null || true)
     if [ -z "$NAME" ] && [ -z "$TTY" ]; then
