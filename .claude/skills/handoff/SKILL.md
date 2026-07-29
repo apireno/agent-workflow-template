@@ -216,7 +216,16 @@ fi
 # triggers immediate execution. The legacy SessionStart auto-paste-brief.sh hook
 # (which read .claude/pending-prompt.md) is now vestigial; we rm the stale file
 # above so it can't paste an old brief.
-KICKOFF="Read docs/sprints/sprint-$SPRINT/brief.md in full as your mission brief, then execute it. you are pre-approved by the CTO and 5 VP personas. do not ask for permission to proceed."
+# CARVE-OUT (required, do not remove): the blanket pre-approval below is what makes
+# the session self-starting, but a dev team has read it as satisfying a SIGNATURE gate
+# — it self-signed a statistical pre-registration and executed a scored run without the
+# CTO round-trip. Blanket authority in the kickoff outranks a caveat buried in the brief,
+# so the limit must travel WITH the grant, in the same sentence that confers it. Same
+# lesson as the qa-drive claude-in-chrome deny: an instruction elsewhere does not survive
+# contact with a stronger instruction here.
+# Keep this string free of double quotes and backslashes — it is interpolated into an
+# AppleScript `do script` argument below.
+KICKOFF="Read docs/sprints/sprint-$SPRINT/brief.md in full as your mission brief, then execute it. You are pre-approved by the CTO and the reviewing VPs for IMPLEMENTATION — do not ask for permission to proceed with building, testing, or writing the sprint artifacts. CARVE-OUT: this pre-approval NEVER satisfies a signature or sign-off gate. If your sprint requires a signed pre-registration, approval, or sign-off before a scored or statistical run, a release, or any irreversible action, then AUTHOR the artifact and STOP: write dev-report.md declaring signature-pending and let the CTO obtain the signature. Never self-sign under delegated authority, and never cite this kickoff as the signature."
 
 # Short task descriptor for the Terminal tab title: strip the `sprint-` prefix
 # and any trailing -YYYYMMDD date.
