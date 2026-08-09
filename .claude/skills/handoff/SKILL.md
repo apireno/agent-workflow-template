@@ -119,7 +119,7 @@ while IFS=$'\t' read -r REPO_NAME REPO_PATH PLAN_PATH; do
   # Install the latest hooks, merge their wiring into the repo's settings.json
   # (idempotent), and record the active sprint for the completion hooks' scope.
   mkdir -p "$REPO_PATH/.claude/hooks"
-  for h in auto-paste-brief check-complete session-end-record deny-self-commit; do
+  for h in auto-paste-brief check-complete session-end-record deny-self-commit deny-generated-edit; do
     cp "$ROOT/.claude/hooks/$h.sh" "$REPO_PATH/.claude/hooks/$h.sh" 2>/dev/null && chmod +x "$REPO_PATH/.claude/hooks/$h.sh"
   done
   echo "sprint-$SPRINT" > "$REPO_PATH/.claude/current-sprint"
@@ -176,6 +176,9 @@ ensure("SessionEnd", ".claude/hooks/session-end-record.sh")
 # independent Phase-3 review. Without this wired, a repo silently permits self-commit
 # AND self-review, which collapses the gate the whole sprint lifecycle rests on.
 ensure("PreToolUse", ".claude/hooks/deny-self-commit.sh", matcher="Bash")
+# Generated artifacts change through their generator, never by hand. INERT unless the
+# repo declares globs in .claude/generated-paths — see CLAUDE.md "Generated artifacts".
+ensure("PreToolUse", ".claude/hooks/deny-generated-edit.sh", matcher="Edit|Write|NotebookEdit")
 json.dump(s, open(p,"w"), indent=2)
 print("  self-heal: wired hooks + pre-trusted MCP servers %s in %s" % (servers or "(none)", p))
 PYWIRE

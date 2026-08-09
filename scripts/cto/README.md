@@ -44,7 +44,22 @@ The rule:
    > process names. If a script needs project knowledge to be useful, the honest move is
    > to leave it downstream and upstream the convention instead.
 
-4. **No inventory list in this file.** A hand-maintained list of what's in this directory
+4. **Anything that emits keystrokes routes through `qa-send.sh`, and any new keystroke
+   tool MUST carry a focus guard.** macOS delivers synthetic keystrokes to whatever app is
+   **focused**, not to the window you addressed. When focus fails to land — the operator is
+   using the machine, another app is frontmost, the window id is stale — the entire message
+   *including the trailing Return* types into that app. This is not hypothetical: an
+   orchestration message once landed in an operator's personal messaging app and may have
+   auto-sent.
+
+   So a keystroke path must verify, immediately before typing, that the target app is
+   frontmost **and** that its front window is the target window — and on mismatch abort
+   loudly having sent **nothing**. Retrying the *raise* is fine; retrying the *keystroke*
+   blind is exactly the failure. `qa-send.sh` implements this; call it rather than writing a
+   second copy, because a second copy of the logic is a second copy of the risk. Treat a
+   missing focus guard as an automatic BLOCKER in review.
+
+5. **No inventory list in this file.** A hand-maintained list of what's in this directory
    goes stale the first time someone forgets to update it, and a stale inventory is worse
    than none — it gets read as authoritative. Every script's own header says what it does
    and why it exists; `ls scripts/cto/` is the inventory.

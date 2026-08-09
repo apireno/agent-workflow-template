@@ -100,8 +100,8 @@ fi
 WIN_ID=$(cat "$WIN_ID_FILE" | tr -d '[:space:]')
 fi
 
-# Write the message to a temp file so we don't have to shell-escape it through
-# osascript. AppleScript will read the file content via `do shell script`.
+# Write the message to a temp file — qa-send.sh reads it from there so neither the
+# message text nor any osascript braces land on the scanned command line.
 MSG_FILE=$(mktemp /tmp/cto-send-msg-XXXXXX)
 trap "rm -f '$MSG_FILE'" EXIT
 printf '%s' "$MESSAGE" > "$MSG_FILE"
@@ -110,42 +110,24 @@ echo "Sending to $REPO_NAME (window id $WIN_ID):"
 echo "  $MESSAGE" | head -c 200
 echo ""
 
-# Use System Events keystroke. `do script in window N` writes to the shell
-# context, NOT to a TUI program's stdin — confirmed empirically 2026-05-18:
-# message landed as empty `system` JSONL events, never reached claude's input.
-# System Events keystroke writes to the active window's input event stream,
-# which TUI apps DO see correctly. Requires Accessibility permission for
-# Terminal (System Settings → Privacy & Security → Accessibility → enable
-# Terminal). Granted once; persists.
-osascript <<APPLESCRIPT 2>&1 | tail -5
-set msgContent to do shell script "cat " & quoted form of "$MSG_FILE"
-
-tell application "Terminal"
-    activate
-    set frontmost of window id $WIN_ID to true
-end tell
-
-delay 0.3
-
-tell application "System Events"
-    tell process "Terminal"
-        keystroke msgContent
-        -- Wait for the FULL keystroke stream to be ingested and the input box
-        -- to settle BEFORE sending Return. A fixed 0.1s is far too short for a
-        -- long message: the System Events keystroke call returns before the OS finishes
-        -- delivering all events, so the Return arrives mid-paste and is
-        -- absorbed as a literal newline in the input box — the message then
-        -- sits UNSUBMITTED. Scale the wait to message length (~1.5s base +
-        -- ~0.0015s/char): a 2000-char message waits ~4.5s, then Return submits.
-        delay (1.5 + (count of characters of msgContent) * 0.0015)
-        key code 36 -- Return (submit)
-    end tell
-end tell
-
-return "sent " & (length of msgContent) & " chars to window id $WIN_ID"
-APPLESCRIPT
+# DELEGATE to the single keystroke path. This skill used to carry its own copy of the
+# osascript, and that copy had no FOCUS GUARD: `set frontmost of window id N to true` can
+# fail (-10006 observed live) and the keystroke fired anyway — into whatever app was
+# focused. A downstream incident had an orchestration message land in the operator's
+# personal messaging app that way. qa-send.sh verifies Terminal is frontmost AND its front
+# window is the target id before typing a single character, and aborts sending NOTHING
+# otherwise. Do not reinstate an inline osascript here.
+bash "$ROOT/scripts/cto/qa-send.sh" "$WIN_ID" "$MSG_FILE"
+SEND_RC=$?
 
 echo ""
+if [ "$SEND_RC" -ne 0 ]; then
+  echo "NOT SENT to $REPO_NAME (window id $WIN_ID) — see the FOCUS-GUARD reason above."
+  echo "Nothing was typed anywhere. Common causes: the machine is in use by the operator,"
+  echo "the window id is stale (run: bash scripts/cto/window-peek.sh list), or Accessibility"
+  echo "permission is not granted to Terminal."
+  exit "$SEND_RC"
+fi
 echo "Message injected into $REPO_NAME (window id $WIN_ID)."
 echo "NOTE: the trailing Return does NOT reliably submit — when the dev team is mid-task"
 echo "the keystrokes buffer and the Return replays as a newline, not a submit. If the"
@@ -157,7 +139,10 @@ echo "Then /peek $REPO_NAME to see the response."
 
 The message has been injected into the dev-team session. Tell the CEO:
 
-1. **Confirmation:** "Injected N chars into $REPO_NAME (window id $WIN_ID)."
+1. **Confirmation:** "Injected N chars into $REPO_NAME (window id $WIN_ID)." **If the script
+   aborted with a FOCUS-GUARD error, say NOTHING WAS SENT** — do not describe the message as
+   delivered, and relay the guard's reason (machine in use / stale window id / missing
+   Accessibility permission) so the CEO knows what to fix before a retry.
 2. **Submit caveat — state this EVERY time:** the auto-submit Return is unreliable. If the
    message is sitting unsubmitted in the dev team's input box, the CEO must press Enter in
    that Terminal window. This is a known `/send` limitation, not a one-off — do not claim

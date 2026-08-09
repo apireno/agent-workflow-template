@@ -57,7 +57,7 @@
         ]
       }
     ],
-    "_comment_PreToolUse": "Block dev-team self-commit/self-push. The CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on.",
+    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand — INERT unless the repo declares globs in .claude/generated-paths.",
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -65,6 +65,15 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-self-commit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-generated-edit.sh"
           }
         ]
       }

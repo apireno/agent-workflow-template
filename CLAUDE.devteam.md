@@ -229,9 +229,53 @@ The README must cover:
 
 If the repo already has a README, update it to reflect what was built this sprint.
 
+### Generated artifacts change through their generator — never by hand (BINDING)
+
+Some files in a repo are **build outputs**: produced by a generator, a tuning/derivation
+workflow, a compiler, or a training run. Config bundles, compiled manifests, lockfiles,
+generated clients, model cards, fixture corpora. For these, **the generator is the product** —
+the artifact is only trustworthy if it is reproducible from the process that makes it.
+
+**The rule binds at the ARTIFACT PATH, not at the agent lane.** Whatever repo you are in and
+whichever persona you are wearing, a diff that hand-edits a declared generated artifact is an
+**automatic sprint REJECT** — *including* when you are implementing an explicit CEO or CTO
+ruling. The correct move is to route the ruling to the team that owns the generator and let the
+change come out of the workflow.
+
+**Why it binds at the path:** a downstream RCA found this rule already existed, but only inside
+the generating team's own lane — so it was bypassed the moment a different team touched the
+file. A lane-scoped rule protects nothing; only a path-scoped one does.
+
+**Declare your generated paths.** List them in `.claude/generated-paths` (one glob per line,
+`#` comments allowed). The `deny-generated-edit.sh` PreToolUse hook reads that file and blocks
+Edit/Write against matching paths, while leaving generator runs (which write via Bash) free. No
+file, no enforcement — the rule is inert until the project declares what is generated.
+
+Related: **no instance-level tokens in generic vocabulary.** Where a generated artifact carries
+vocabulary meant to be generic (stoplists, keyword lists, type signatures), proper nouns and
+instance identifiers — specific company/product/person names, tickers, registry IDs — must
+never be introduced into it. Generic classes only. If a sprint appears to need one, STOP and
+escalate to the CTO.
+
+### Engine repos carry zero domain content (BINDING where declared)
+
+A repo declared **domain-agnostic** — an engine, a library, a framework any consumer can adopt —
+must carry, *in production code*: no instance names from any one consumer's domain, no embedded
+domain vocabularies or gazetteers, no domain-literal branching, no domain-specific identifiers.
+Domain content is **injected from configuration with empty defaults**, so the engine works
+identically for a consumer the authors never met.
+
+Enforce it with a repo-wide lint test, and treat **exempting a file from that lint to get the
+build green as itself a violation** of this rule — the exemption is the defect, not the fix.
+
+Declare the status in this file's project header (e.g. `Domain-agnostic: yes`). Application and
+integration repos are legitimately domain-bearing; this rule does not apply to them.
+
 <!-- CUSTOMIZE: Add project-specific technical standards below -->
 ### Technical Standards
 - Add your project's coding standards here
+- Generated-artifact paths for this repo: declare them in `.claude/generated-paths`
+- Domain-agnostic: yes / no  (drives the engine-purity rule above)
 
 ---
 

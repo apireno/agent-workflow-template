@@ -180,10 +180,18 @@ fi
 QA_SEND="$ROOT/scripts/cto/qa-send.sh"
 if [ -n "$WIN_ID" ] && [ -x "$QA_SEND" ]; then
   KICK=$(mktemp -t qa-kickoff); printf 'go' > "$KICK"
+  KICKLOG="$ROOT/.claude/qa-kickoff.log"
   # settle ~12s for claude to boot to its input prompt, then inject the kickoff.
-  ( i=0; while [ $i -lt 12 ]; do sleep 1; i=$((i+1)); done; "$QA_SEND" "$WIN_ID" "$KICK" >/dev/null 2>&1; rm -f "$KICK" ) &
+  # Keep the output: qa-send's FOCUS GUARD will refuse to type if the operator has taken
+  # focus during the settle, and a silently-swallowed abort looks identical to a drive that
+  # started and then hung. The log says which it was.
+  ( i=0; while [ $i -lt 12 ]; do sleep 1; i=$((i+1)); done
+    "$QA_SEND" "$WIN_ID" "$KICK" >"$KICKLOG" 2>&1
+    rm -f "$KICK" ) &
   echo "qa-drive-claude: auto-kickoff scheduled (sends 'go' to window $WIN_ID after a ~12s settle)."
-  echo "  If the drive doesn't start (Accessibility perm not granted for Terminal), type 'go' + Enter in the tab."
+  echo "  Leave Terminal frontmost during the settle — the focus guard aborts the kickoff if"
+  echo "  another app takes focus (it will NOT type into it). Result: $KICKLOG"
+  echo "  If the drive doesn't start, type 'go' + Enter in the tab yourself."
 else
   echo "qa-drive-claude: >>> type 'go' then Enter ONCE in the new tab to start (a BARE Enter submits nothing). <<<"
 fi
