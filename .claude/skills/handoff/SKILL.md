@@ -179,7 +179,7 @@ ensure("PreToolUse", ".claude/hooks/deny-self-commit.sh", matcher="Bash")
 # Generated artifacts change through their generator, never by hand. INERT unless the
 # repo declares globs in .claude/generated-paths — see CLAUDE.md "Generated artifacts".
 ensure("PreToolUse", ".claude/hooks/deny-generated-edit.sh", matcher="Edit|Write|NotebookEdit")
-json.dump(s, open(p,"w"), indent=2)
+open(p,"w").write(json.dumps(s, indent=2) + "\n")   # trailing newline: json.dump omits it
 print("  self-heal: wired hooks + pre-trusted MCP servers %s in %s" % (servers or "(none)", p))
 PYWIRE
 
@@ -201,7 +201,7 @@ if cj.exists() and servers:
         en = proj.setdefault("enabledMcpjsonServers", [])
         for srv in servers:
             if srv not in en: en.append(srv)
-        cj.write_text(json.dumps(d, indent=2))
+        cj.write_text(json.dumps(d, indent=2) + "\n")
         print("  self-heal: pre-trusted MCP in ~/.claude.json:", servers)
     except Exception as e:
         print("  WARN: could not pre-trust MCP in ~/.claude.json:", e)

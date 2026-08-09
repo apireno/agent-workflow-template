@@ -106,7 +106,7 @@ if cj.exists():
     proj['enableAllProjectMcpServers'] = True
     en = proj.setdefault('enabledMcpjsonServers', [])
     if 'domshell' not in en: en.append('domshell')
-    cj.write_text(json.dumps(d, indent=2))
+    cj.write_text(json.dumps(d, indent=2) + "\n")
 # (b) <repo>/.claude/settings.json — tool/skill permissions for the drive (NOT the qa-ux skill)
 sp = Path(root)/'.claude'/'settings.json'
 s = {}
@@ -147,7 +147,7 @@ for _ev, _groups in (s.get('hooks') or {}).items():
             if _c.startswith('.claude/') or _c.startswith('scripts/'):
                 _h['command'] = '$CLAUDE_PROJECT_DIR/' + _c
 sp.parent.mkdir(parents=True, exist_ok=True)
-sp.write_text(json.dumps(s, indent=2))
+sp.write_text(json.dumps(s, indent=2) + "\n")
 print("qa-drive-claude: pre-authorized — trust + domshell MCP + drive permissions (qa-ux skill intentionally NOT allowed)")
 PY
 
