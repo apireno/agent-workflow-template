@@ -188,3 +188,20 @@ You are deeply familiar with:
 - The PRD corpus in `docs/roadmap/prds/`
 - The roadmap phases in `docs/roadmap/ROADMAP.md`
 - Key differentiators and success metrics
+
+---
+
+## Project-specific additions go in `context/` — not in this file
+
+This persona definition is **synced mechanism**. `sync-cto-home.sh` and `push-to-repos.sh`
+overwrite it from the template, so anything you add here is silently lost at the next sync —
+which has already happened once, taking a binding CEO ruling with it.
+
+Put project specifics in **`docs/personas/context/vp-product-context.md`**, which every sync explicitly
+preserves: the names of your sanctioned tools and instruments, your repo and artifact paths,
+your domain identifiers, incidents worth citing as precedent, and any BINDING project rule
+that sharpens a generic rule stated above. Read that file alongside this one whenever it
+exists; a rule there is as binding as a rule here.
+
+If a project rule turns out to be **generally true** — the mechanism was wrong, not just
+unspecific — send it upstream to the template team instead, so every project inherits it.

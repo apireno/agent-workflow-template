@@ -102,3 +102,20 @@ Read `docs/personas/concerns/dba.md` for project-specific database context. You 
 - Index inventory and which queries each index serves
 - The re-index / re-embed / migration triggers and their cost
 - Concurrency model (single-writer? embedded? networked?) and the backup/restore story (coordinate with VP DevOps)
+
+---
+
+## Project-specific additions go in `context/` — not in this file
+
+This persona definition is **synced mechanism**. `sync-cto-home.sh` and `push-to-repos.sh`
+overwrite it from the template, so anything you add here is silently lost at the next sync —
+which has already happened once, taking a binding CEO ruling with it.
+
+Put project specifics in **`docs/personas/context/vp-dba-context.md`**, which every sync explicitly
+preserves: the names of your sanctioned tools and instruments, your repo and artifact paths,
+your domain identifiers, incidents worth citing as precedent, and any BINDING project rule
+that sharpens a generic rule stated above. Read that file alongside this one whenever it
+exists; a rule there is as binding as a rule here.
+
+If a project rule turns out to be **generally true** — the mechanism was wrong, not just
+unspecific — send it upstream to the template team instead, so every project inherits it.
