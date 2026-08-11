@@ -48,19 +48,108 @@ fi
 
 # Parse args
 DRY_RUN=0
+FORCE_UPSTREAM=0
 TARGETS=()
 for arg in "$@"; do
   case "$arg" in
     --dry-run)   DRY_RUN=1 ;;
+    --upstream)  FORCE_UPSTREAM=1 ;;
     --help|-h)
-      echo "Usage: $0 [--dry-run] [repo1 repo2 ...]"
+      echo "Usage: $0 [--dry-run] [--upstream] [repo1 repo2 ...]"
       echo "If no repos given, pushes to all active repos in .cto/projects.yaml."
       echo "CTO-home repos (*-cto / the template) get a mechanism sync via sync-cto-home.sh."
+      echo ""
+      echo "  --upstream   Force UPSTREAM MODE: the repo is a clone of a project we do not own"
+      echo "               (a public OSS fork). No tracked file is touched — the contract goes to"
+      echo "               CLAUDE.devteam.md instead of CLAUDE.md, and the scaffolding is excluded"
+      echo "               via .git/info/exclude instead of the tracked .gitignore. Auto-detected"
+      echo "               when the repo tracks a CLAUDE.md that isn't ours, or was installed this"
+      echo "               way before."
       exit 0
       ;;
     *) TARGETS+=("$arg") ;;
   esac
 done
+
+# ── Upstream mode ────────────────────────────────────────────────────────────
+# Paths the workflow owns inside a target repo. In upstream mode these are written
+# to .git/info/exclude so the scaffolding never appears in `git status` and can
+# never ride along in a PR sent upstream. Broader than what this script installs:
+# a running dev team also creates sprint dirs, ADRs, PRDs and bug reports.
+WORKFLOW_PATHS=(
+  '/CLAUDE.devteam.md' '/GEMINI.md' '/setup.sh'
+  '/.claude/' '/.agents/' '/.skills/' '/.cto/' '/.cto-path' '/.cto-path.example'
+  '/.review-engine'
+  '/scripts/agentic/' '/scripts/cto/'
+  '/docs/personas/' '/docs/sprints/' '/docs/roadmap/' '/docs/architecture/'
+  '/docs/backlog/' '/docs/ideation/' '/docs/initiatives/' '/docs/operations/'
+  '/docs/security/' '/docs/compliance/' '/docs/memos/'
+)
+EXCLUDE_BEGIN='# >>> agent-workflow-template: local scaffolding (LOCAL ONLY, managed block) >>>'
+EXCLUDE_END='# <<< agent-workflow-template: end managed block <<<'
+OWN_CONTRACT_MARKER='Your default role is \*\*Dev Team\*\*'
+
+# Is this repo somebody else's? Three signals, any one is enough.
+detect_upstream() {
+  local dest="$1" gitdir
+  [ "$FORCE_UPSTREAM" -eq 1 ] && return 0
+  gitdir="$(git -C "$dest" rev-parse --absolute-git-dir 2>/dev/null || true)"
+  # Sticky: already installed in upstream mode.
+  [ -n "$gitdir" ] && grep -qF "$EXCLUDE_BEGIN" "$gitdir/info/exclude" 2>/dev/null && return 0
+  # A TRACKED CLAUDE.md that is not our contract belongs to the upstream project.
+  if git -C "$dest" ls-files --error-unmatch CLAUDE.md >/dev/null 2>&1; then
+    grep -qE "$OWN_CONTRACT_MARKER" "$dest/CLAUDE.md" 2>/dev/null || return 0
+  fi
+  return 1
+}
+
+# Rewrite the managed block in .git/info/exclude. Idempotent; preserves the
+# operator's own lines (personal scratch files etc.) and drops legacy hand-written
+# duplicates of the paths we now manage.
+write_git_exclude() {
+  local dest="$1"; shift
+  local gitdir; gitdir="$(git -C "$dest" rev-parse --absolute-git-dir 2>/dev/null)" || return 1
+  mkdir -p "$gitdir/info"
+
+  # Never exclude a path the upstream project TRACKS. Our path list is generic
+  # ('/.agents/', '/docs/roadmap/' …) and an upstream repo may legitimately own one
+  # of those names — lancedb ships its own tracked /.agents/. Excluding it would not
+  # touch the tracked files, but it WOULD hide any new untracked file upstream adds
+  # there, so `git status` would quietly stop telling the truth about their tree.
+  local -a safe=() bare
+  for p in "$@"; do
+    bare="${p#/}"; bare="${bare%/}"
+    if [ -n "$(git -C "$dest" ls-files -- "$bare" 2>/dev/null | head -1)" ]; then
+      echo "      note: '$p' is TRACKED upstream — left out of the exclude block (upstream owns that path)"
+      continue
+    fi
+    safe+=("$p")
+  done
+
+  python3 - "$gitdir/info/exclude" "$EXCLUDE_BEGIN" "$EXCLUDE_END" "${safe[@]}" <<'PYEOF'
+import sys, os
+path, begin, end = sys.argv[1], sys.argv[2], sys.argv[3]
+managed = sys.argv[4:]
+old = open(path).read().splitlines() if os.path.exists(path) else []
+kept, in_block = [], False
+for line in old:
+    if line.strip() == begin: in_block = True;  continue
+    if line.strip() == end:   in_block = False; continue
+    if in_block: continue
+    # legacy hand-written copies of paths this block now owns
+    if line.strip() in managed: continue
+    if line.strip().startswith('# --- agent-workflow-template'): continue
+    if 'must not be committed. Kept in .git/info/exclude' in line: continue
+    kept.append(line)
+while kept and not kept[-1].strip(): kept.pop()
+out = kept + ['', begin,
+    '# Written by scripts/cto/push-to-repos.sh --upstream. This repo is a clone of a',
+    '# project we do not own: the agent workflow scaffolding stays LOCAL. Excluded here',
+    "# rather than in .gitignore so the tracked tree stays byte-identical to upstream.",
+    ] + managed + [end, '']
+open(path, 'w').write('\n'.join(out))
+PYEOF
+}
 
 # Default to all active if no targets
 if [ ${#TARGETS[@]} -eq 0 ]; then
@@ -82,6 +171,7 @@ required_files=(
   "$TEMPLATE/.claude/hooks/check-complete.sh"
   "$TEMPLATE/.claude/hooks/deny-self-commit.sh"
   "$TEMPLATE/.claude/hooks/deny-generated-edit.sh"
+  "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh"
 )
 for f in "${required_files[@]}"; do
   if [ ! -f "$f" ]; then
@@ -118,25 +208,44 @@ for repo in "${TARGETS[@]}"; do
       ;;
   esac
 
-  echo "  -> $repo"
+  UPSTREAM=0
+  if detect_upstream "$DEST"; then
+    UPSTREAM=1
+    echo "  -> $repo  [UPSTREAM MODE — clone of a project we don't own; no tracked file is touched]"
+  else
+    echo "  -> $repo"
+  fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "      would write: $DEST/CLAUDE.md"
-    [ -f "$DEST/CLAUDE.md" ] && echo "        (overwrites existing — $(wc -l < "$DEST/CLAUDE.md") lines)"
+    if [ "$UPSTREAM" -eq 1 ]; then
+      echo "      would write: $DEST/CLAUDE.devteam.md (tracked CLAUDE.md left alone)"
+      echo "      would exclude ${#WORKFLOW_PATHS[@]} scaffolding paths via .git/info/exclude"
+    else
+      echo "      would write: $DEST/CLAUDE.md"
+      [ -f "$DEST/CLAUDE.md" ] && echo "        (overwrites existing — $(wc -l < "$DEST/CLAUDE.md") lines)"
+      echo "      would add to .gitignore: .claude/current-session.id, .claude/CRASHED, .claude/COMPLETE, .claude/pending-prompt.md, .claude/used-prompts/, .claude/session.log, .claude/terminal-window.id"
+    fi
     echo "      would write: $DEST/.claude/settings.json (from template, _comment_* stripped)"
     [ -f "$DEST/.claude/settings.json" ] && echo "        (overwrites existing)"
-    echo "      would write: $DEST/.claude/hooks/ (5: auto-paste-brief, session-end-record,"
-    echo "                     check-complete, deny-self-commit, deny-generated-edit)"
+    echo "      would write: $DEST/.claude/hooks/ (6: inject-devteam-contract, auto-paste-brief,"
+    echo "                     session-end-record, check-complete, deny-self-commit, deny-generated-edit)"
     echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
     [ -f "$DEST/.review-engine" ] || echo "      would write: $DEST/.review-engine = subagent"
-    echo "      would add to .gitignore: .claude/current-session.id, .claude/CRASHED, .claude/COMPLETE, .claude/pending-prompt.md, .claude/used-prompts/, .claude/session.log, .claude/terminal-window.id"
     push_count=$((push_count + 1))
     continue
   fi
 
-  # 1. CLAUDE.md
-  cp "$TEMPLATE/CLAUDE.devteam.md" "$DEST/CLAUDE.md"
-  echo "      wrote $DEST/CLAUDE.md"
+  # 1. The dev-team contract. In upstream mode the root CLAUDE.md is the upstream
+  #    project's own file (often a symlink to AGENTS.md) and is TRACKED — writing
+  #    over it dirties their tree and can ride along in a PR. Install beside it and
+  #    let the SessionStart hook load it as context instead.
+  if [ "$UPSTREAM" -eq 1 ]; then
+    cp "$TEMPLATE/CLAUDE.devteam.md" "$DEST/CLAUDE.devteam.md"
+    echo "      wrote $DEST/CLAUDE.devteam.md (loaded by the inject-devteam-contract SessionStart hook)"
+  else
+    cp "$TEMPLATE/CLAUDE.devteam.md" "$DEST/CLAUDE.md"
+    echo "      wrote $DEST/CLAUDE.md"
+  fi
 
   # 2. .claude/settings.json — strip _comment_* keys from template
   mkdir -p "$DEST/.claude"
@@ -162,8 +271,9 @@ PYEOF
   cp "$TEMPLATE/.claude/hooks/check-complete.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/deny-self-commit.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/deny-generated-edit.sh" "$DEST/.claude/hooks/"
+  cp "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh" "$DEST/.claude/hooks/"
   chmod +x "$DEST/.claude/hooks/"*.sh
-  echo "      wrote $DEST/.claude/hooks/ (5: brief, session-end, complete, deny-self-commit, deny-generated-edit)"
+  echo "      wrote $DEST/.claude/hooks/ (6: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit)"
 
   # 3b. scripts/agentic + persona defs + sprint doc templates. CLAUDE.devteam.md
   # (just written above) explicitly instructs the dev team to run
@@ -223,14 +333,31 @@ else:
     print(f'      ~/.claude.json not found; skipping workspace pre-trust')
 PYEOF
 
-  # 4b. .gitignore entries for runtime state
-  GITIGNORE="$DEST/.gitignore"
-  for entry in '.claude/current-session.id' '.claude/CRASHED' '.claude/COMPLETE' '.claude/pending-prompt.md' '.claude/used-prompts/' '.claude/session.log' '.claude/terminal-window.id'; do
-    if ! grep -qxF "$entry" "$GITIGNORE" 2>/dev/null; then
-      echo "$entry" >> "$GITIGNORE"
+  # 4b. Keep the scaffolding out of the repo's history.
+  if [ "$UPSTREAM" -eq 1 ]; then
+    # Not .gitignore — that file is tracked upstream, so editing it is itself a
+    # diff we'd have to carry forever and strip out of every PR.
+    if write_git_exclude "$DEST" "${WORKFLOW_PATHS[@]}"; then
+      echo "      excluded ${#WORKFLOW_PATHS[@]} scaffolding paths in .git/info/exclude (tracked .gitignore untouched)"
+      DIRTY="$(git -C "$DEST" status --porcelain | wc -l | tr -d ' ')"
+      if [ "$DIRTY" != "0" ]; then
+        echo "      WARN: $repo has $DIRTY entries in git status — expected 0 after an upstream-mode push."
+        git -C "$DEST" status --short | sed 's/^/        /' | head -10
+      else
+        echo "      verified: git status clean — nothing we installed is visible to git"
+      fi
+    else
+      echo "      ERROR: could not write .git/info/exclude for $repo — scaffolding is NOT hidden from git" >&2
     fi
-  done
-  echo "      ensured .gitignore entries for runtime state"
+  else
+    GITIGNORE="$DEST/.gitignore"
+    for entry in '.claude/current-session.id' '.claude/CRASHED' '.claude/COMPLETE' '.claude/pending-prompt.md' '.claude/used-prompts/' '.claude/session.log' '.claude/terminal-window.id'; do
+      if ! grep -qxF "$entry" "$GITIGNORE" 2>/dev/null; then
+        echo "$entry" >> "$GITIGNORE"
+      fi
+    done
+    echo "      ensured .gitignore entries for runtime state"
+  fi
 
   push_count=$((push_count + 1))
 done

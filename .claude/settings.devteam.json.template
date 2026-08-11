@@ -21,11 +21,15 @@
     ]
   },
   "hooks": {
-    "_comment_SessionStart": "Auto-paste the brief from .claude/pending-prompt.md into Claude's session context. Also record session_id for /peek and /resume-dev-team.",
+    "_comment_SessionStart": "inject-devteam-contract: loads CLAUDE.devteam.md as context in upstream/public clones where the tracked CLAUDE.md belongs to the upstream project (inert everywhere else). auto-paste-brief: pastes .claude/pending-prompt.md into context and records session_id for /peek and /resume-dev-team.",
     "SessionStart": [
       {
         "matcher": "*",
         "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/inject-devteam-contract.sh"
+          },
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auto-paste-brief.sh"

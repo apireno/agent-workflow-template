@@ -416,6 +416,32 @@ echo "Add the new project to .cto/projects.yaml"
 
 Then add the project to `.cto/projects.yaml`.
 
+### Repos we don't own (public OSS clones)
+
+When the target is a clone of somebody else's project — an OSS repo we contribute to, not one
+we control — the normal install is wrong twice over: it overwrites their tracked `CLAUDE.md`
+and appends our runtime paths to their tracked `.gitignore`. Both show up in `git status` and
+can ride along in a PR sent upstream. Use **upstream mode**:
+
+```bash
+./scripts/cto/push-to-repos.sh <repo>              # auto-detected, or force with --upstream
+```
+
+It is detected automatically when the repo tracks a `CLAUDE.md` that isn't our contract (or
+was installed this way before). In that mode the script:
+
+- writes the contract to **`CLAUDE.devteam.md`** and leaves the tracked `CLAUDE.md` alone —
+  `.claude/hooks/inject-devteam-contract.sh` (a SessionStart hook) loads it as context instead,
+  so the upstream `CLAUDE.md`/`AGENTS.md` still governs build/test/PR mechanics;
+- excludes all scaffolding via **`.git/info/exclude`**, never the tracked `.gitignore`, in an
+  idempotent sentinel-delimited block that preserves the operator's own lines;
+- **skips any path the upstream project tracks** (lancedb ships its own `/.agents/`) — excluding
+  it would hide new upstream files from `git status`;
+- asserts `git status` is clean afterwards and warns loudly if it isn't.
+
+The acceptance test is exactly that: after an upstream-mode push, `git status --porcelain` is
+empty. Anything else means we are about to hand somebody else our scaffolding.
+
 **For UX-focused repos (anything with a browser UI, CLI, or its own MCP that QA-UX will drive):** the `cp -r docs/personas/` + `cp -r scripts/` above already deliver the QA-UX persona + `qa-redact.sh`/`qa-standup.sh`. Additionally copy the **skill** so the browser drive can run from a session rooted in that repo, and let the standup provision the browser MCP itself:
 ```bash
 mkdir -p /path/to/ux-repo/.claude/skills
