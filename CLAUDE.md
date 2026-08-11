@@ -75,7 +75,7 @@ Then WAIT. Do not proceed without CEO approval.
 [CTO auto-fires]        /sprint-fanout PRD-042 --repos=acme-service-a,acme-service-b --sprint=NN
 ```
 
-Or the CEO can type the slash explicitly. The skill fans out parallel gemini calls (one per target repo), each fed the PRD + that repo's CLAUDE.devteam.md as context. Plans land at each repo's `docs/sprints/sprint-XX/sprint-plan.md`. **Zero `claude -p`.**
+Or the CEO can type the slash explicitly. The skill fans out one call per target repo through the **resolved review engine** (`scripts/agentic/resolve-review-engine.sh`; default `subagent` = in-session Agent calls, subscription pool), each fed the PRD + that repo's CLAUDE.devteam.md as context. Plans land at each repo's `docs/sprints/sprint-XX/sprint-plan.md`. **Zero `claude -p`.**
 
 **Step 6.** Read each drafted plan from disk. If gemini produced `NO_SCOPE_FOR_THIS_REPO` for a repo (sentinel in the first 5 lines), that repo is correctly excluded. For repos with real plans, proceed to VP reviews (Step 7). For unexplained gemini failures (see `/tmp/cto/sprint-fanout-<ts>/<repo>.log`), retry or escalate to CEO.
 
@@ -86,7 +86,7 @@ Or the CEO can type the slash explicitly. The skill fans out parallel gemini cal
 [CTO auto-fires]        /vp-review /Users/.../acme-service-a/docs/sprints/sprint-NN/sprint-plan.md
 ```
 
-Skill body fans out parallel gemini calls (default: vp-prod + vp-eng), pipes each verdict through `wrap-untrusted.sh`, and CTO synthesizes the result into a `cto-decision-<ts>.md` next to the artifact. To raise specialty VPs explicitly: `/vp-review <path> --vps=vp-prod,vp-eng,vp-security` (any comma-separated subset) or `--vps=all`. **Direct `vp-review.sh` invocation is still supported** for scripting (the skill is a wrapper) but the skill is the recommended interface.
+Skill body fans out one call per VP through the resolved review engine (default: vp-prod + vp-eng), pipes each verdict through `wrap-untrusted.sh`, and CTO synthesizes the result into a `cto-decision-<ts>.md` next to the artifact. To raise specialty VPs explicitly: `/vp-review <path> --vps=vp-prod,vp-eng,vp-security` (any comma-separated subset) or `--vps=all`. **Direct `vp-review.sh` invocation is still supported** for scripting (the skill is a wrapper) but the skill is the recommended interface.
 
 **VP composition policy (CEO 2026-05-18):** default `/vp-review` set is `vp-prod + vp-eng`. Add specialty VPs by content judgment:
 - `vp-security` — auth/secrets/vendor data/PII/attack surface
@@ -388,7 +388,9 @@ cp .gitignore /path/to/new-repo/.gitignore
 # copy fails and the team falls back to prompting on every (un-analyzable) command.
 mkdir -p /path/to/new-repo/.claude/hooks
 cp .claude/settings.permissive.json /path/to/new-repo/.claude/settings.permissive.json
-printf 'gemini\n' > /path/to/new-repo/.claude/.review-engine   # $0 review engine, not claude -p
+printf 'subagent\n' > /path/to/new-repo/.review-engine   # $0 in-session review; NOT claude -p
+# Menu: subagent (default, free) | kimi (OpenRouter, cross-family, ~pennies) | codex | handoff.
+# NOT gemini — no CLI access on this plan since 2026-06-19, and the API path is not in use.
 
 # Session-tracking hooks — REQUIRED for /peek, /sprint-status, /resume-dev-team.
 # Install the hook scripts + the settings.json that WIRES them (settings.permissive.json

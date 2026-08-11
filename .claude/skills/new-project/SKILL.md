@@ -136,7 +136,9 @@ if [ "$ADOPT" -eq 0 ] && [ -n "$REPOS" ]; then
     python3 -c "import json; d=json.load(open('$TPL/.claude/settings.devteam.json.template')); d.pop('_comment',None); h=d.get('hooks',{});
 [h.pop(k) for k in list(h) if k.startswith('_comment')]; json.dump(d, open('$RD/.claude/settings.json','w'), indent=2)" 2>/dev/null \
       || cp "$TPL/.claude/settings.devteam.json.template" "$RD/.claude/settings.json"
-    printf 'subagent\n' > "$RD/.claude/.review-engine"   # default review engine: in-session Agent (subscription, bright-line clean). Switch to kimi (OpenRouter, cross-family)/gemini/handoff per repo; claude-p is metered/quarantined.
+    # REPO ROOT, not .claude/ — resolve-review-engine.sh reads "$REPO_ROOT/.review-engine";
+    # a file under .claude/ is silently ignored and the repo quietly runs the default.
+    printf 'subagent\n' > "$RD/.review-engine"   # in-session Agent (subscription, bright-line clean). Switch to kimi (OpenRouter, cross-family)/codex/handoff per repo; gemini is unavailable, claude-p is metered/quarantined.
     echo "  scaffolded $RD"
     DEV_SCAFFOLD="$DEV_SCAFFOLD $r"
   done
@@ -168,7 +170,7 @@ elif [ "$ADOPT" -eq 1 ]; then
   echo "#      cp -r $TPL/docs/personas <repo>/docs/personas"
   echo "#      cp -r $TPL/docs/sprints/_templates <repo>/docs/sprints/_templates"
   echo "#      mkdir -p <repo>/.claude && cp $TPL/.claude/settings.permissive.json <repo>/.claude/"
-  echo "#      printf 'subagent\\n' > <repo>/.claude/.review-engine"
+  echo "#      printf 'subagent\\n' > <repo>/.review-engine        # repo ROOT, not .claude/"
   echo "#    (or run /new-project's dev-scaffold against a copy first to diff before committing.)"
   echo ""
   echo "#    If this project's IP currently lives in a PUBLIC repo, scrub it: move IP to ${PROJECT}-cto,"

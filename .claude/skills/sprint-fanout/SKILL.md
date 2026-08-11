@@ -1,6 +1,6 @@
 ---
 name: sprint-fanout
-description: Draft per-repo sprint plans via parallel gemini for a given PRD or goal. Each plan lands at the target repo's docs/sprints/sprint-XX/sprint-plan.md path. Use when the CEO wants to start a multi-repo sprint based on a PRD or shared goal, wants to see how the dev teams would scope a piece of work, or says things like "draft plans for X across these repos" or "let's scope work for this PRD". Auto-fire when the CEO references a PRD/goal path and asks for sprint planning. CEO can still type the slash for explicit gating.
+description: Draft per-repo sprint plans in parallel through the resolved review engine for a given PRD or goal. Each plan lands at the target repo's docs/sprints/sprint-XX/sprint-plan.md path. Use when the CEO wants to start a multi-repo sprint based on a PRD or shared goal, wants to see how the dev teams would scope a piece of work, or says things like "draft plans for X across these repos" or "let's scope work for this PRD". Auto-fire when the CEO references a PRD/goal path and asks for sprint planning. CEO can still type the slash for explicit gating.
 allowed-tools: Bash(*) Read Write
 argument-hint: <prd-or-goal-path> [--repos repo1,repo2] [--sprint NN] [--dry-run]
 ---

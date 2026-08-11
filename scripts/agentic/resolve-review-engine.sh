@@ -11,10 +11,12 @@
 #   3. built-in default = subagent  (bright-line clean, in-session)
 #
 # ENGINE MENU:
-#   gemini    — `cat <prompt> | gemini` CLI fan-out. $0. Self-contained (the calling
-#               script runs it inline). NOTE: gemini-CLI free tier was deprecated by
-#               Google 2026-06-19 (UNSUPPORTED_CLIENT); selectable again whenever access
-#               returns (paid tier / Antigravity-compatible client / different account).
+#   gemini    — ⛔ UNAVAILABLE. `cat <prompt> | gemini` CLI fan-out. Google deprecated the
+#               gemini-CLI free tier 2026-06-19 (UNSUPPORTED_CLIENT) and the CEO's plan does
+#               not carry CLI access; the API path is not used either (2026-08-11). Selecting
+#               it now FALLS BACK to subagent with a loud warning rather than failing at the
+#               call site, because a dead engine resolves as a successful review that never
+#               ran. Force it with REVIEW_ALLOW_GEMINI=1 if access ever returns.
 #   kimi      — OpenRouter chat API via `openrouter-chat.sh` (default model
 #               moonshotai/kimi-k2.6; override with OPENROUTER_MODEL — any OpenRouter slug,
 #               so deepseek/qwen panels ride the same executor). Metered but NON-Anthropic
@@ -72,10 +74,21 @@ engine="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
 case "$engine" in
   claude)        note "alias: 'claude' -> 'claude-p' (the old value always meant claude -p)"; engine="claude-p" ;;
   dual)          note "alias: 'dual' -> 'gemini' (claude-p half quarantined)"; engine="gemini" ;;
+  # 'gemini' kept on the menu so a returning vendor is a one-line change, but it must never
+  # resolve silently: the CLI is gone, so the call site would emit an empty verdict that
+  # reads as a passed review. Warn on stderr (NOT stdout — callers capture stdout) and
+  # degrade to the built-in default so the review still actually happens.
   none|"")       note "alias: '${engine:-empty}' -> 'subagent'"; engine="subagent" ;;
   gemini|kimi|codex|subagent|handoff|claude-p) : ;;
   *)             note "unknown engine '$engine' from $src -> falling back to 'subagent'"; engine="subagent" ;;
 esac
+
+if [ "$engine" = "gemini" ] && [ "${REVIEW_ALLOW_GEMINI:-0}" != "1" ]; then
+  echo "WARNING: engine 'gemini' (from $src) is UNAVAILABLE — no CLI access on this plan, and the" >&2
+  echo "  API path is not in use. Falling back to 'subagent' so the review actually runs." >&2
+  echo "  Fix the source: set that .review-engine to subagent|kimi|codex|handoff." >&2
+  engine="subagent"
+fi
 
 note "resolved '$engine' (from $src; raw='$raw')"
 

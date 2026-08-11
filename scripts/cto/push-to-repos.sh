@@ -175,8 +175,26 @@ PYEOF
   chmod +x "$DEST/scripts/agentic/"*.sh 2>/dev/null || true
   cp -r "$TEMPLATE/docs/personas/." "$DEST/docs/personas/"
   [ -d "$TEMPLATE/docs/sprints/_templates" ] && cp -r "$TEMPLATE/docs/sprints/_templates/." "$DEST/docs/sprints/_templates/"
+  # .review-engine lives at the REPO ROOT — resolve-review-engine.sh reads
+  # "$REPO_ROOT/.review-engine". A copy under .claude/ is read by nothing, so it silently
+  # disagrees with the real one; remove it rather than leave the trap.
+  if [ -f "$DEST/.claude/.review-engine" ]; then
+    echo "      removing unread $DEST/.claude/.review-engine (=$(tr -d '[:space:]' < "$DEST/.claude/.review-engine")); the real one is at the repo root"
+    rm -f "$DEST/.claude/.review-engine"
+  fi
   if [ ! -f "$DEST/.review-engine" ]; then
     printf 'subagent\n' > "$DEST/.review-engine"
+  else
+    # Self-heal a dead engine. 'gemini' (and the legacy 'dual' alias that resolves to it) has
+    # no CLI access on this plan since 2026-06-19 and the API path is unused, so leaving the
+    # value in place just defers the surprise to review time.
+    cur="$(tr -d '[:space:]' < "$DEST/.review-engine" | tr '[:upper:]' '[:lower:]')"
+    case "$cur" in
+      gemini|dual)
+        printf 'subagent\n' > "$DEST/.review-engine"
+        echo "      .review-engine was '$cur' (UNAVAILABLE) -> reset to 'subagent'; switch to kimi for a cross-family reviewer"
+        ;;
+    esac
   fi
   echo "      wrote $DEST/scripts/agentic + docs/personas + docs/sprints/_templates ; .review-engine=$(cat "$DEST/.review-engine" 2>/dev/null)"
 
