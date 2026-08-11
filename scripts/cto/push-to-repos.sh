@@ -80,6 +80,8 @@ required_files=(
   "$TEMPLATE/.claude/hooks/auto-paste-brief.sh"
   "$TEMPLATE/.claude/hooks/session-end-record.sh"
   "$TEMPLATE/.claude/hooks/check-complete.sh"
+  "$TEMPLATE/.claude/hooks/deny-self-commit.sh"
+  "$TEMPLATE/.claude/hooks/deny-generated-edit.sh"
 )
 for f in "${required_files[@]}"; do
   if [ ! -f "$f" ]; then
@@ -123,9 +125,8 @@ for repo in "${TARGETS[@]}"; do
     [ -f "$DEST/CLAUDE.md" ] && echo "        (overwrites existing — $(wc -l < "$DEST/CLAUDE.md") lines)"
     echo "      would write: $DEST/.claude/settings.json (from template, _comment_* stripped)"
     [ -f "$DEST/.claude/settings.json" ] && echo "        (overwrites existing)"
-    echo "      would write: $DEST/.claude/hooks/auto-paste-brief.sh"
-    echo "      would write: $DEST/.claude/hooks/session-end-record.sh"
-    echo "      would write: $DEST/.claude/hooks/check-complete.sh"
+    echo "      would write: $DEST/.claude/hooks/ (5: auto-paste-brief, session-end-record,"
+    echo "                     check-complete, deny-self-commit, deny-generated-edit)"
     echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
     [ -f "$DEST/.review-engine" ] || echo "      would write: $DEST/.review-engine = subagent"
     echo "      would add to .gitignore: .claude/current-session.id, .claude/CRASHED, .claude/COMPLETE, .claude/pending-prompt.md, .claude/used-prompts/, .claude/session.log, .claude/terminal-window.id"
@@ -152,11 +153,17 @@ PYEOF
 
   # 3. Hook scripts
   mkdir -p "$DEST/.claude/hooks"
+  # Every hook settings.devteam.json.template WIRES must be installed here. A settings file
+  # referencing a hook script that does not exist is a silently broken guard — the two
+  # PreToolUse deny-hooks were wired in the template but never copied, so a repo onboarded
+  # through this script (rather than self-healed by /handoff) had the rule without the guard.
   cp "$TEMPLATE/.claude/hooks/auto-paste-brief.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/session-end-record.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/check-complete.sh" "$DEST/.claude/hooks/"
+  cp "$TEMPLATE/.claude/hooks/deny-self-commit.sh" "$DEST/.claude/hooks/"
+  cp "$TEMPLATE/.claude/hooks/deny-generated-edit.sh" "$DEST/.claude/hooks/"
   chmod +x "$DEST/.claude/hooks/"*.sh
-  echo "      wrote $DEST/.claude/hooks/auto-paste-brief.sh + session-end-record.sh + check-complete.sh"
+  echo "      wrote $DEST/.claude/hooks/ (5: brief, session-end, complete, deny-self-commit, deny-generated-edit)"
 
   # 3b. scripts/agentic + persona defs + sprint doc templates. CLAUDE.devteam.md
   # (just written above) explicitly instructs the dev team to run
