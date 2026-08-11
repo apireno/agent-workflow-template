@@ -427,6 +427,13 @@ At the start of every CTO session, run these steps **as the first response, befo
    Tell the CEO to toggle with **Shift+Tab** if they want a different mode than what `defaultMode` in settings.json provides. Do NOT skip this even when the CEO opens with an immediate work directive.
 2. **Check `.claude/settings.json` vs `.claude/settings.cto.json.template`** — if drifted (e.g., missing SessionStart preflight hook, missing `skillListingBudgetFraction`, missing `defaultMode`), ask whether to apply the template. The preflight hook is the CTO repo's safety net for the 2026-06-15 SDK billing change — don't run orchestration sessions without it for long.
    - **Sub-check (one-time setup):** if the CEO ever plans to use `/send` during a sprint, Terminal must have **Accessibility permission** (System Settings → Privacy & Security → Accessibility). Granted once per machine; persists. If unsure, defer until first `/send` fails with `(1002)` — at that point direct the CEO to System Settings.
+2a. **Report the review engine** — `bash scripts/agentic/resolve-review-engine.sh --explain`, one
+   line. This is a **project-start** choice (made in `/new-project` or `/setup`, stored in the CTO
+   home's `.review-engine`), so state it rather than re-asking each session. Ask the CEO only when
+   it is actually broken: the resolver prints a WARNING (dead/quarantined value), or `kimi`/`codex`
+   is set without `OPENROUTER_API_KEY` / the `codex` CLI. Both cases mean reviews are failing or
+   silently degrading to a same-family reviewer. Change it with
+   `bash scripts/agentic/set-review-engine.sh <repo> <engine>` (menu: `--menu`).
 3. **Check `.cto/projects.yaml`** — load your project registry. If missing, prompt the CEO.
 4. **Check for open sessions** — any sprint plans in progress? Any dev reports awaiting evaluation?
 5. **Surface any preflight warnings** that came back (ANTHROPIC env vars set; deadline countdowns; unsent compliance tickets). Ask whether to address now or park.

@@ -131,6 +131,29 @@ exists, and a list of candidate sibling repos. Walk the CEO through onboarding:
    repo's README`, `language` (infer from the repo if obvious, e.g. `pyproject.toml` → python,
    `package.json` → typescript/javascript), `active: true`.
 
+4a. **Settle the review engine** — a project-start choice, like the permissions posture, and
+   worth one question now rather than a surprise at the first accept gate. Every VP review,
+   sprint fan-out and accept-gate runs through it. Skip only if this clone's `.review-engine`
+   already holds a selectable value. `bash scripts/agentic/set-review-engine.sh --menu` prints
+   the live menu; ask via `AskUserQuestion` (header: "Review engine"):
+
+   - **kimi (recommended)** — OpenRouter `moonshotai/kimi-k2.6`. Cross-**family**, so a VP
+     verdict is genuinely independent of the model that wrote the work. Pennies per review,
+     non-Anthropic; needs `OPENROUTER_API_KEY` (the prerequisite check above reports it).
+   - **subagent** — in-session Agent calls. $0, no API key. Same-family: Claude reviewing
+     Claude, a weaker accept-gate.
+   - **handoff** — review runs in its own interactive Claude window. $0, slowest.
+
+   Apply it to **this clone** (the CTO home) — that file is what makes it the project default:
+
+   ```
+   bash scripts/agentic/set-review-engine.sh . <engine>
+   ```
+
+   `push-to-repos.sh` then seeds and heals every dev repo from it in step 5. If the CEO picks
+   `kimi` without `OPENROUTER_API_KEY` set, say plainly that reviews will fail until it is
+   exported, and offer `subagent` as the no-key option.
+
 5. **Ask whether to deploy the template's dev-team mechanism into the selected repos now.** If
    yes, run:
    ```

@@ -134,11 +134,13 @@ if [ "$ADOPT" -eq 0 ] && [ -n "$REPOS" ]; then
     # (from settings.devteam.json.template, _comment fields stripped) so the repo
     # is tracked from its first session — /handoff also self-heals this at dispatch.
     python3 -c "import json; d=json.load(open('$TPL/.claude/settings.devteam.json.template')); d.pop('_comment',None); h=d.get('hooks',{});
-[h.pop(k) for k in list(h) if k.startswith('_comment')]; json.dump(d, open('$RD/.claude/settings.json','w'), indent=2)" 2>/dev/null \
+[h.pop(k) for k in list(h) if k.startswith('_comment')]; open('$RD/.claude/settings.json','w').write(json.dumps(d, indent=2) + '\n')" 2>/dev/null \
       || cp "$TPL/.claude/settings.devteam.json.template" "$RD/.claude/settings.json"
-    # REPO ROOT, not .claude/ — resolve-review-engine.sh reads "$REPO_ROOT/.review-engine";
-    # a file under .claude/ is silently ignored and the repo quietly runs the default.
-    printf 'subagent\n' > "$RD/.review-engine"   # in-session Agent (subscription, bright-line clean). Switch to kimi (OpenRouter, cross-family)/codex/handoff per repo; gemini is unavailable, claude-p is metered/quarantined.
+    # Review engine: provisional seed only. The CEO is asked for the project's choice in
+    # "Your task as CTO" below, and set-review-engine.sh then rewrites this across the CTO
+    # home + every dev repo. Written through that script so the value is validated and
+    # lands at the repo ROOT (resolve-review-engine.sh never reads a .claude/ copy).
+    bash "$TPL/scripts/agentic/set-review-engine.sh" "$RD" "$(bash "$TPL/scripts/agentic/set-review-engine.sh" --fleet-default)" >/dev/null 2>&1
     echo "  scaffolded $RD"
     DEV_SCAFFOLD="$DEV_SCAFFOLD $r"
   done
@@ -183,10 +185,36 @@ echo "MODE=$MODE HOME_DIR=$HOME_DIR"
 
 ## Your task as CTO
 
-The CTO home (and, in greenfield mode, the dev repos) are scaffolded **on disk** — nothing
-has been pushed or created on GitHub. Summarize for the CEO:
+**First, settle the review engine** — a project-start choice, like the permissions posture.
+Every VP review, sprint fan-out and accept-gate runs through it, so it is worth one question
+now rather than a surprise at the first accept gate. Run
+`bash scripts/agentic/set-review-engine.sh --menu` for the live menu, then ask via
+`AskUserQuestion` (header: "Review engine"), offering:
+
+- **kimi (recommended)** — OpenRouter `moonshotai/kimi-k2.6`. Cross-**family** reviewer, so a
+  VP verdict is genuinely independent of the model that wrote the work. Metered but
+  non-Anthropic (pennies per review); needs `OPENROUTER_API_KEY`.
+- **subagent** — in-session Agent calls. $0, no API key, no external CLI. Same-family: Claude
+  reviewing Claude, which is a weaker accept-gate.
+- **handoff** — the review runs in its own interactive Claude window. $0, slowest; use when a
+  review needs tools.
+
+State the tradeoff plainly — independence versus pennies — and recommend `kimi` for any
+project whose accept gates matter. Then apply the answer to the CTO home **and every
+scaffolded dev repo**:
+
+```
+bash scripts/agentic/set-review-engine.sh <repo-path> <engine>    # once per repo, + the CTO home
+```
+
+Setting it on the CTO home is what makes it the project default: `push-to-repos.sh` reads that
+file to seed and heal every dev repo from then on. Changing it later is the same one command.
+
+Then summarize for the CEO. The CTO home (and, in greenfield mode, the dev repos) are
+scaffolded **on disk** — nothing has been pushed or created on GitHub:
 
 1. **Headline:** "Scaffolded `<project>-cto` (mode: greenfield|adopt-existing) — local only."
+1a. **Review engine:** the chosen engine, and that it is now the project default for syncs.
 2. **What's on disk:** the CTO-home path, that its CLAUDE.md is title-adapted (the `-cto`
    detection is already generic), the seeded `.cto/projects.yaml`, and (greenfield) the dev-repo dirs.
 3. **The publish commands** printed above — present them as the CEO's explicit next step

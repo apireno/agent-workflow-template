@@ -175,27 +175,29 @@ PYEOF
   chmod +x "$DEST/scripts/agentic/"*.sh 2>/dev/null || true
   cp -r "$TEMPLATE/docs/personas/." "$DEST/docs/personas/"
   [ -d "$TEMPLATE/docs/sprints/_templates" ] && cp -r "$TEMPLATE/docs/sprints/_templates/." "$DEST/docs/sprints/_templates/"
-  # .review-engine lives at the REPO ROOT — resolve-review-engine.sh reads
-  # "$REPO_ROOT/.review-engine". A copy under .claude/ is read by nothing, so it silently
-  # disagrees with the real one; remove it rather than leave the trap.
-  if [ -f "$DEST/.claude/.review-engine" ]; then
-    echo "      removing unread $DEST/.claude/.review-engine (=$(tr -d '[:space:]' < "$DEST/.claude/.review-engine")); the real one is at the repo root"
-    rm -f "$DEST/.claude/.review-engine"
-  fi
-  if [ ! -f "$DEST/.review-engine" ]; then
-    printf 'subagent\n' > "$DEST/.review-engine"
-  else
-    # Self-heal a dead engine. 'gemini' (and the legacy 'dual' alias that resolves to it) has
-    # no CLI access on this plan since 2026-06-19 and the API path is unused, so leaving the
-    # value in place just defers the surprise to review time.
-    cur="$(tr -d '[:space:]' < "$DEST/.review-engine" | tr '[:upper:]' '[:lower:]')"
-    case "$cur" in
-      gemini|dual)
-        printf 'subagent\n' > "$DEST/.review-engine"
-        echo "      .review-engine was '$cur' (UNAVAILABLE) -> reset to 'subagent'; switch to kimi for a cross-family reviewer"
-        ;;
-    esac
-  fi
+  # Review engine: seed unset repos with the PROJECT's choice and heal dead values to it.
+  # The choice is made once at project start (/new-project, /setup) and stored in the CTO
+  # home's own .review-engine; set-review-engine.sh --fleet-default reports it. Writing goes
+  # through that script so validation and the .claude/ stray-file cleanup live in one place.
+  SETENG="$TEMPLATE/scripts/agentic/set-review-engine.sh"
+  FLEET_ENG="$(bash "$SETENG" --fleet-default 2>/dev/null || echo subagent)"
+  cur=""
+  [ -f "$DEST/.review-engine" ] && cur="$(tr -d '[:space:]' < "$DEST/.review-engine" | tr '[:upper:]' '[:lower:]')"
+  case "$cur" in
+    "")
+      bash "$SETENG" "$DEST" "$FLEET_ENG" >/dev/null 2>&1
+      echo "      .review-engine unset -> seeded project default '$FLEET_ENG'" ;;
+    gemini|dual|claude|claude-p)
+      # Dead or quarantined. Leaving it defers the surprise to review time, where a missing
+      # engine reads as a review that passed.
+      bash "$SETENG" "$DEST" "$FLEET_ENG" >/dev/null 2>&1
+      echo "      .review-engine was '$cur' (unavailable/quarantined) -> reset to project default '$FLEET_ENG'" ;;
+    *)
+      # A deliberate per-repo choice. Leave it; just clear the unread stray copy if present.
+      [ -f "$DEST/.claude/.review-engine" ] && {
+        echo "      removing unread $DEST/.claude/.review-engine (=$(tr -d '[:space:]' < "$DEST/.claude/.review-engine"))"
+        rm -f "$DEST/.claude/.review-engine"; } ;;
+  esac
   echo "      wrote $DEST/scripts/agentic + docs/personas + docs/sprints/_templates ; .review-engine=$(cat "$DEST/.review-engine" 2>/dev/null)"
 
   # 4a. Pre-trust the workspace in ~/.claude.json so /handoff doesn't hit the

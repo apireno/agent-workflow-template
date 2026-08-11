@@ -18,6 +18,17 @@ At the start of every session, run these steps **as your first response, before 
 
 **Step 2 — Settings drift check.** Compare `.claude/settings.json` against `.claude/settings.cto.json.template`. If drifted (missing SessionStart preflight, missing `skillListingBudgetFraction`, missing `defaultMode`), ask whether to apply the template now. The preflight is the CTO's safety net for the 2026-06-15 SDK billing change — important.
 
+**Step 2b — Review engine.** Report the resolved engine in one line:
+```bash
+bash scripts/agentic/resolve-review-engine.sh --explain
+```
+State it, don't re-ask — it is a project-start choice (`/new-project`, `/setup`), not a
+per-session one. **Do ask** only if it prints a WARNING (a dead or quarantined value), or if
+`kimi`/`codex` is configured without its key/CLI present: in those cases reviews are broken or
+silently degraded, and the CEO needs to pick. Change it any time with
+`bash scripts/agentic/set-review-engine.sh <repo> <engine>`; setting it on this CTO home makes
+it the default that `push-to-repos.sh` seeds and heals dev repos to.
+
 **Step 3.** Check whether `.cto/projects.yaml` exists:
 ```bash
 ls -la .cto/projects.yaml
