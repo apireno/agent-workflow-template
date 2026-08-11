@@ -8,9 +8,11 @@
 # to an output file.
 #
 # Engine selection (in priority order):
-#   1. REVIEW_ENGINE env var (gemini | claude | dual)
-#   2. .review-engine file in repo root (contains one word: gemini | claude | dual)
-#   3. Auto-detect: uses whichever CLI is installed (prefers dual if both found)
+#   Delegated entirely to scripts/agentic/resolve-review-engine.sh — the single source of
+#   truth. Precedence: REVIEW_ENGINE env > <repo-root>/.review-engine > built-in 'subagent'.
+#   Menu: subagent (default) | kimi | codex | handoff. 'gemini' is UNAVAILABLE (no CLI access
+#   since 2026-06-19) and degrades to subagent with a warning; 'claude-p' is metered and
+#   quarantined behind REVIEW_ALLOW_METERED=1.
 #
 # Engines:
 #   gemini  — pipes prompt to `gemini` CLI

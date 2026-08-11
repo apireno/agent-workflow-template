@@ -41,13 +41,16 @@ VP reviews are automated via CLI tools. Configure once — all scripts use it.
 
 | Engine | CLI Used | Best For |
 |--------|----------|----------|
-| `gemini` | Gemini CLI | Claude for dev, Gemini for independent reviews |
-| `claude` | `claude -p` | Claude only — review runs as a fresh process, no shared context |
-| `dual` | Both | Maximum coverage — two independent reviews per artifact |
+| `subagent` | Claude Code Agent tool, in-session | **DEFAULT.** Subscription pool, no API key, no external CLI |
+| `kimi` | OpenRouter (`moonshotai/kimi-k2.6`) | Cross-FAMILY independent reviewer. Metered but non-Anthropic (pennies). Needs `OPENROUTER_API_KEY` |
+| `codex` | OpenAI Codex CLI (`codex exec`) | A second cross-family reviewer. ⚠️ untested |
+| `handoff` | Interactive Claude window | Subscription pool; the review runs in its own Terminal session |
+| ~~`gemini`~~ | ~~Gemini CLI~~ | ⛔ UNAVAILABLE — no CLI access on this plan since 2026-06-19, API path unused. Resolves to `subagent` with a warning |
+| ~~`claude-p`~~ | ~~`claude -p`~~ | ⛔ METERED Anthropic API. Quarantined: needs `REVIEW_ALLOW_METERED=1` per invocation |
 
-**Configure:** Create `.review-engine` in repo root with one word: `gemini`, `claude`, or `dual`.  
-**Override:** `REVIEW_ENGINE=claude ./scripts/agentic/vp-review.sh ...`  
-**Auto-detect:** If neither is set, script finds whichever CLI is installed.
+**Configure:** Create `.review-engine` in the **repo root** — not under `.claude/`, which nothing reads — containing one word: `subagent`, `kimi`, `codex`, or `handoff`.  
+**Override:** `REVIEW_ENGINE=kimi ./scripts/agentic/vp-review.sh ...`  
+**Default:** if neither is set, `subagent`. Full precedence and aliases: `scripts/agentic/resolve-review-engine.sh`.
 
 ---
 
