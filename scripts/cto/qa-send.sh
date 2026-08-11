@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# qa-send.sh <window-id> <message-file> [--no-return]
+# qa-send.sh <window-id> <message-file> [--no-return] [--verify-submit [tries]]
 #
 # Inject the contents of <message-file> as keystrokes into the Terminal window with the
 # given id (the proven osascript + System Events mechanism). Reads the message from a FILE
@@ -19,22 +19,68 @@
 # into this file means only `bash scripts/cto/qa-send.sh <id> <file>` (plain positional args)
 # is scanned — clean — while the braces/quotes live harmlessly in the script body.
 #
-# Note: needs Accessibility permission for Terminal (System Settings → Privacy & Security →
-# Accessibility). The trailing Return may not auto-submit when the target is mid-task — if the
-# text sits unsent, press Enter in that window (the known /send limitation).
+# TWO INDEPENDENT FAILURE MODES, TWO GUARDS. Delivery and submission are not the same event:
 #
-# Exit codes:  0 sent (check stderr for a mid-type focus warning) · 1 usage/IO · 4 FOCUS GUARD abort
+#   FOCUS GUARD (always on)   — did the keystrokes reach the right window? Without it they
+#                               go to whatever app is frontmost. See the guard body below.
+#   --verify-submit (opt-in)  — did the target actually SUBMIT the message, or is it sitting
+#                               in the input box? The trailing Return is absorbed as a literal
+#                               newline when the session is mid-task (the Return-replay gap).
+#                               Delivery succeeds, the ruling is never read. In one day this
+#                               silently swallowed three orchestration rulings downstream.
+#
+# Use --verify-submit for anything the sprint depends on being READ (rulings, STOP orders,
+# corrections). It costs up to ~<tries>×6s of wall clock and only when the send did not take.
+#
+# Note: needs Accessibility permission for Terminal (System Settings → Privacy & Security →
+# Accessibility).
+#
+# Exit codes:  0 sent (check stderr for a mid-type focus warning) · 1 usage/IO
+#              4 FOCUS GUARD abort (nothing typed) · 5 --verify-submit could not confirm
 
 set -uo pipefail
-WIN="${1:?usage: qa-send.sh <window-id> <message-file> [--no-return]}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+WIN="${1:?usage: qa-send.sh <window-id> <message-file> [--no-return] [--verify-submit [tries]]}"
 MSGFILE="${2:?need a message file (keeps message + osascript off the scanned command line)}"
+shift 2
 [ -f "$MSGFILE" ] || { echo "ERROR: message file not found: $MSGFILE"; exit 1; }
 case "$WIN" in ''|*[!0-9]*) echo "ERROR: window id must be numeric, got '$WIN'"; exit 1 ;; esac
-NORETURN="0"; [ "${3:-}" = "--no-return" ] && NORETURN="1"
+
+NORETURN="0"; VERIFY=0; TRIES=5
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-return)     NORETURN="1"; shift ;;
+        --verify-submit) VERIFY=1; shift
+                         case "${1:-}" in ''|*[!0-9]*) ;; *) TRIES="$1"; shift ;; esac ;;
+        *) echo "ERROR: unknown argument '$1'"; exit 1 ;;
+    esac
+done
+if [ "$VERIFY" = 1 ] && [ "$NORETURN" = "1" ]; then
+    echo "ERROR: --verify-submit is meaningless with --no-return (nothing is submitted to verify)."; exit 1
+fi
+
 MSG="$(cat "$MSGFILE")"
 [ -n "$MSG" ] || { echo "ERROR: message file is empty: $MSGFILE"; exit 1; }
 
-OUT=$(osascript - "$WIN" "$MSG" "$NORETURN" <<'OSA' 2>&1
+# Marker that the target session is BUSY. Tracks a vendor's TUI, so it is overridable and
+# shared with watch-file-or-prompt.sh — set it once for both. A watcher that silently stops
+# matching is worse than one that never matched.
+#
+# Derived from observed screens, not from documentation. The discriminator is a
+# present-tense spinner carrying a LIVE ELAPSED TIMER — "✶ Moseying… (5m 2s · ↓ 12.2k
+# tokens)" — versus the past-tense line an idle session leaves behind, "✻ Worked for 3m
+# 48s". Matching the spinner GLYPH alone reports an idle session as busy, because the idle
+# line carries one too. "esc to interrupt" is present in some states only; it is kept as an
+# alternative, never as the sole marker.
+WORKING_RE="${AGENTIC_WORKING_RE:-esc to interrupt|ctrl\+b to run in background|… \([0-9]+[hms]}"
+
+# --- the guarded keystroke primitive -----------------------------------------------------
+# $1 = payload, $2 = "1" to suppress the trailing Return. Echoes the osascript result,
+# returns the osascript exit status. Every keystroke in this file goes through here, so the
+# nudges below are focus-guarded exactly like the message.
+keystroke_guarded() {
+osascript - "$WIN" "$1" "$2" <<'OSA' 2>&1
 on run argv
   set winId to (item 1 of argv) as integer
   set theMsg to item 2 of argv
@@ -125,15 +171,17 @@ on run argv
   return "OK"
 end run
 OSA
-)
-RC=$?
+}
 
-if [ "$RC" -ne 0 ]; then
-    echo "qa-send: ABORTED — $OUT" >&2
+report_focus_abort() {
+    echo "qa-send: ABORTED — $1" >&2
     echo "qa-send: nothing was typed. Re-run once Terminal can take focus, or re-resolve the window id:" >&2
     echo "  bash scripts/cto/window-peek.sh list" >&2
-    exit 4
-fi
+}
+
+# --- send --------------------------------------------------------------------------------
+OUT=$(keystroke_guarded "$MSG" "$NORETURN"); RC=$?
+if [ "$RC" -ne 0 ]; then report_focus_abort "$OUT"; exit 4; fi
 
 case "$OUT" in
     FOCUS-LOST-MIDSEND:*)
@@ -143,3 +191,48 @@ case "$OUT" in
 esac
 
 echo "qa-send: injected $(wc -c < "$MSGFILE" | tr -d ' ') chars into window $WIN (return=$([ "$NORETURN" = "1" ] && echo no || echo yes))"
+[ "$VERIFY" = 1 ] || exit 0
+
+# --- verify submission -------------------------------------------------------------------
+# THE AUTHORITATIVE SIGNAL IS THE INPUT BOX, not the spinner. A busy session proves nothing:
+# the whole failure being guarded against is a message sitting unsubmitted WHILE the target
+# works. So the question is only ever "is our text still in the box?"
+#
+#   box no longer holds our text → submitted (processing now, or queued for turn end). Done.
+#   box still holds our text     → the Return replayed as a literal newline. Nudge with a
+#                                  single SPACE plus Return: the space is the smallest
+#                                  payload that makes the box register a fresh edit, and
+#                                  anything longer appends garbage to the pending message.
+#
+# Our text is identified by the head of its first line, which is what the box renders even
+# when a long message wraps.
+MSGHEAD="$(printf '%s' "$MSG" | head -1 | cut -c1-24)"
+
+for i in $(seq 1 "$TRIES"); do
+    sleep 5
+    PENDING="$(bash "$HERE/window-peek.sh" "$WIN" --input 2>/dev/null)"; PRC=$?
+
+    if [ "$PRC" -ne 0 ]; then
+        BUSY_NOTE="queued for turn end"
+        bash "$HERE/window-peek.sh" "$WIN" 25 2>/dev/null | grep -qE "$WORKING_RE" && BUSY_NOTE="target is processing"
+        echo "qa-send: SUBMITTED — input box cleared on attempt $i ($BUSY_NOTE)."
+        exit 0
+    fi
+
+    if ! printf '%s' "$PENDING" | grep -qF "$MSGHEAD"; then
+        echo "qa-send: SUBMITTED — our message left the input box on attempt $i." >&2
+        echo "  NOTE: the box is not empty; it now holds unrelated text:" >&2
+        echo "    $(printf '%s' "$PENDING" | cut -c1-80)" >&2
+        echo "  That is stray input queued ahead of the next send — clear it in window $WIN." >&2
+        exit 0
+    fi
+
+    echo "qa-send: attempt $i/$TRIES — still unsubmitted (\"$(printf '%s' "$PENDING" | cut -c1-60)\"), nudging…" >&2
+    NOUT=$(keystroke_guarded " " "0"); NRC=$?
+    if [ "$NRC" -ne 0 ]; then report_focus_abort "$NOUT"; exit 4; fi
+done
+
+echo "qa-send: NOT CONFIRMED — after $TRIES nudges the message is still in window $WIN's input box." >&2
+echo "  It has NOT been read. Press Enter in that window, or check it for a blocking dialog:" >&2
+echo "    bash scripts/cto/window-peek.sh $WIN" >&2
+exit 5

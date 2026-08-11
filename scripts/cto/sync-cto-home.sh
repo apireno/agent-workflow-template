@@ -80,6 +80,9 @@ if [ "$APPLY" = 0 ]; then
   echo ">>> DRY-RUN — nothing written. Re-run with --apply to sync, then:"
   echo "    git -C \"$TARGET\" status   # review, then commit + push the CTO home"
 else
-  echo ">>> APPLIED. Review + commit:"
-  echo "    git -C \"$TARGET\" status && git -C \"$TARGET\" add -A && git -C \"$TARGET\" commit -m 'sync template mechanism' && git -C \"$TARGET\" push"
+  echo ">>> APPLIED. Review, then stage ONLY the mechanism paths — never 'git add -A' here:"
+  echo "    git -C \"$TARGET\" status"
+  echo "    git -C \"$TARGET\" add .claude scripts docs/personas CLAUDE.devteam.md"
+  echo "    git -C \"$TARGET\" commit -m 'sync template mechanism' && git -C \"$TARGET\" push"
+  echo "    (a CTO home usually has its own uncommitted IP in flight; -A sweeps it into your commit)"
 fi

@@ -216,3 +216,12 @@ exists; a rule there is as binding as a rule here.
 
 If a project rule turns out to be **generally true** — the mechanism was wrong, not just
 unspecific — send it upstream to the template team instead, so every project inherits it.
+
+**The same rule covers every mechanism file, not just this one.** `scripts/`, `.claude/skills/`,
+`.claude/hooks/`, the settings templates and `CLAUDE.devteam.md` are template-team jurisdiction
+in **every** repo — including a CTO home that otherwise owns its own contents. When one of them
+has a gap: work around it for this session, and report it as a memo to `docs/memos/` in the
+template repo. Editing it is a lane violation however urgent or obvious the fix looks, because
+the next sync either destroys the edit or preserves it as a divergent copy — and a
+safety-critical gap is the strongest reason to fix it *everywhere at once*, upstream, rather
+than here. (CEO ruling 2026-08-11.)

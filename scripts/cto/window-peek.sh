@@ -1,13 +1,30 @@
 #!/usr/bin/env bash
 # window-peek.sh — read what is ON SCREEN in a Terminal window (or list all windows).
 #
-#   window-peek.sh list              # every Terminal window: "<id> | <title>"
-#   window-peek.sh <window-id> [N]   # last N (default 15) non-blank on-screen lines
+#   window-peek.sh list                # every Terminal window: "<id> | <title>"
+#   window-peek.sh <window-id> [N]     # last N (default 15) non-blank on-screen lines
+#   window-peek.sh <window-id> --input # ONLY the pending input line (the ❯ row)
 #
 # Companion to /peek, NOT a replacement. /peek tails the session JSONL — the model's
 # thinking and tool calls. This shows the SCREEN: permission dialogs, queued-but-
 # unsubmitted input, and shell output the JSONL never records. When a session looks
 # hung, /peek shows the last thing it did; this shows what it is waiting on.
+#
+# --input MODE (stray-input hygiene). Text sitting UNSUBMITTED in a session's input box
+# is invisible to every other tool: it produces no JSONL, no artifact, no screen change.
+# It stays invisible until something submits it — at which point it lands ahead of, or
+# concatenated with, the next real message. Check before sending. Contract:
+#
+#     prints the pending text, exit 0     — something is queued
+#     prints nothing,        exit 3       — box is empty (the clean state)
+#
+# so callers can branch on the exit code:
+#     if bash scripts/cto/window-peek.sh "$WIN" --input; then echo "stray input — clear it first"; fi
+#
+# The pending text is matched by the LAST '❯' on screen. That heuristic prefers the input
+# box (bottom of the viewport) over a shell prompt using the same glyph, and it reads only
+# the FIRST line of a wrapped multi-line message — enough to tell "queued" from "clean",
+# not a faithful transcript of the whole draft.
 #
 # macOS + Terminal.app only, like the rest of the window-orchestration layer
 # (/handoff, /send, /close-window). Read-only: it never sends keystrokes.
@@ -27,13 +44,36 @@ if [ "${1:-}" = "list" ]; then
     exit 0
 fi
 
-WIN="${1:?usage: window-peek.sh list | window-peek.sh <window-id> [lines]}"
-N="${2:-15}"
+# Accept --input on either side of the window id so both orderings work.
+WIN=""; N=""; INPUT_MODE=0
+for a in "$@"; do
+    case "$a" in
+        --input) INPUT_MODE=1 ;;
+        *) if [ -z "$WIN" ]; then WIN="$a"; else N="$a"; fi ;;
+    esac
+done
+: "${WIN:?usage: window-peek.sh list | window-peek.sh <window-id> [lines] | window-peek.sh <window-id> --input}"
+N="${N:-15}"
 
 CONTENTS="$(osascript -e "tell application \"Terminal\" to get contents of window id $WIN" 2>/dev/null)"
 if [ -z "$CONTENTS" ]; then
     echo "window-peek: no contents for window id $WIN (closed, or wrong id — try 'window-peek.sh list')" >&2
     exit 1
+fi
+
+if [ "$INPUT_MODE" -eq 1 ]; then
+    # Last ❯ line → strip everything through the marker, then the box's right border and
+    # trailing padding. What survives is the queued text, or nothing.
+    PENDING="$(printf '%s\n' "$CONTENTS" \
+        | grep '❯' \
+        | tail -1 \
+        | sed -e 's/.*❯[[:space:]]*//' -e 's/[[:space:]]*[│|][[:space:]]*$//' -e 's/[[:space:]]*$//')"
+    if [ -z "$PENDING" ]; then
+        echo "window-peek: input box empty for window $WIN" >&2
+        exit 3
+    fi
+    printf '%s\n' "$PENDING"
+    exit 0
 fi
 
 # Drop blank lines, keep the tail. grep exiting 1 on an all-blank window is not an

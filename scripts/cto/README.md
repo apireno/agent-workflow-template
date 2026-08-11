@@ -59,6 +59,18 @@ The rule:
    second copy, because a second copy of the logic is a second copy of the risk. Treat a
    missing focus guard as an automatic BLOCKER in review.
 
+   **Delivery is not submission — they fail independently.** The trailing Return is absorbed
+   as a literal newline when the target is mid-task, so a perfectly delivered message can sit
+   unread in an input box forever; three orchestration rulings were lost this way in one day.
+   Anything that must be *read* — a ruling, a STOP, a correction — sends with
+   `--verify-submit`, which polls the input box and nudges until our text leaves it. Verify
+   against the **box**, never against the spinner: a busy target proves nothing, because
+   sitting unsubmitted while the session works is the whole failure.
+
+   Both guards share `AGENTIC_WORKING_RE`, the busy-marker regex, with
+   `watch-file-or-prompt.sh`. It tracks a vendor's TUI and *will* drift — it is one override
+   for every tool that reads a screen, and it is derived from observed screens, not docs.
+
 5. **No inventory list in this file.** A hand-maintained list of what's in this directory
    goes stale the first time someone forgets to update it, and a stale inventory is worse
    than none — it gets read as authoritative. Every script's own header says what it does

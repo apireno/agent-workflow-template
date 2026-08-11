@@ -271,6 +271,29 @@ build green as itself a violation** of this rule — the exemption is the defect
 Declare the status in this file's project header (e.g. `Domain-agnostic: yes`). Application and
 integration repos are legitimately domain-bearing; this rule does not apply to them.
 
+### Workflow mechanism is not yours to edit (BINDING)
+
+The files that define *how the workflow runs* are owned by the template team and arrive in this
+repo by sync. They are not project files, even though they sit in your tree:
+
+- `.claude/hooks/`, `.claude/settings.json`, `.claude/skills/`
+- `scripts/agentic/`, `.review-engine`
+- `docs/personas/*.md` (definitions), `docs/sprints/_templates/`, this file
+
+**Do not edit, delete, or override them — including by environment variable.** Setting
+`REVIEW_ENGINE=` in your shell to bypass `.review-engine` is the same violation as editing the
+file, and it has happened. The next sync overwrites your change silently, or preserves it as a
+divergent copy that makes this repo behave differently from every sibling while reporting the
+same version. Either way the next team inherits a mystery.
+
+If mechanism blocks you: **work around it for this sprint** (an ad-hoc command, a scratch
+wrapper outside the tracked paths), record the gap in `dev-report.md` under a `Mechanism gaps`
+heading, and continue. The CTO routes it to the template team. A blocked sprint is an
+escalation, never a licence to patch the tooling.
+
+Project files you *do* own are unaffected: your source, your tests, your CI config, your ADRs
+and sprint artifacts, and the CUSTOMIZE block below.
+
 <!-- CUSTOMIZE: Add project-specific technical standards below -->
 ### Technical Standards
 - Add your project's coding standards here

@@ -161,6 +161,17 @@ Before the dev-report is complete, for any sprint:
 
 ---
 
+## Workflow Mechanism Is Not Yours to Edit (BINDING — CEO ruling 2026-08-11)
+
+`.claude/hooks/`, `.claude/settings.json`, `.claude/skills/`, `scripts/agentic/`,
+`.review-engine`, `docs/personas/*.md` and `CLAUDE.md` arrive in your repo by sync from the
+template team. They are not project files, and overriding one by environment variable counts
+as editing it. Work around a mechanism gap for the sprint, record it in `dev-report.md` under
+a `Mechanism gaps` heading, and let the CTO route it upstream. Full statement of the rule and
+its rationale: `CLAUDE.md` → "Workflow mechanism is not yours to edit".
+
+---
+
 ## Response Signature
 
 **MANDATORY:** End EVERY response with a signature line on its own line: `— Dev`. No exceptions.
