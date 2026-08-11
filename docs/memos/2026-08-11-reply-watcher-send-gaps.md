@@ -85,4 +85,53 @@ personas, doc templates and agentic scripts — not just this change.
 3. **`kgspin-object-store-rag` carried the CTO-home `CLAUDE.md`** and so never had dev-team
    governance at all. The sync corrected it. That repo still has no git remote.
 
+---
+
+# Addendum — the review engine (same day)
+
+Raising the `gemini` values above turned out to understate the problem, and the CEO's
+correction — *gemini has no CLI on this plan and we do not use the API* — made it a defect
+rather than a preference.
+
+## What was actually broken
+
+**A dead engine read as a passing review.** `resolve-review-engine.sh` accepted `gemini`
+without complaint. With no CLI present the call emits an empty verdict, and an empty verdict
+is indistinguishable downstream from a clean one. This was not "reviews fail"; it was
+"reviews silently approve."
+
+**The seeding bug was the root cause.** `CLAUDE.md`'s hand-bootstrap instruction wrote
+`gemini` into every new repo's `.review-engine` — that is where all the stale values came
+from. It also pointed at `.claude/.review-engine`, a path **nothing reads**; the resolver
+reads `<repo-root>/.review-engine`. `/new-project` wrote the same wrong path.
+
+**It was 10 repos, not the two filed** — plus `lancedb` on the legacy `dual` alias, and six
+repos carrying a stray `.claude/` copy, one of which disagreed with the real file.
+`PROTOCOL.md` meanwhile told operators to choose from `gemini | claude | dual`: no correct
+answer on the menu.
+
+## What changed
+
+- The resolver now **warns and degrades** `gemini`/`dual`/`claude` to `subagent` so the review
+  actually runs. `REVIEW_ALLOW_GEMINI=1` forces it if access ever returns.
+- **NEW `scripts/agentic/set-review-engine.sh`** — the validated writer. `--menu` lists the
+  selectable engines, `--fleet-default` reports the project's choice. It refuses unavailable
+  and quarantined engines, warns when `kimi`/`codex` lacks its key or CLI, writes the repo-root
+  file and removes the stray copy. **Use it instead of editing `.review-engine` by hand** —
+  and note that the file is mechanism either way.
+- **The engine is now a project-start choice, asked like the permissions posture.**
+  `/new-project` and `/setup` ask, state the tradeoff (cross-family independence vs pennies),
+  and recommend `kimi`. The answer is stored in the CTO home's own `.review-engine`, and
+  `push-to-repos.sh` seeds and heals dev repos from it — while leaving a deliberate per-repo
+  value alone.
+- Session start **reports** the engine and only asks when it is broken.
+- Stale prose corrected in `CLAUDE.md`, `cto.md`, `PROTOCOL.md`, `vp-review.sh` and the
+  sprint-fanout skill, all of which asserted the workflow runs on gemini.
+
+## Operational rule this exposed
+
+**Run fleet syncs from the CTO home, not the template.** `--fleet-default` resolves from the
+repo the script lives in. My first pass ran from the template — which is deliberately
+engine-neutral — so two repos were healed to `subagent` instead of kgspin's `kimi`. Corrected.
+
 — CTO
