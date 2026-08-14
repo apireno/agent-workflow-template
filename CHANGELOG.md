@@ -53,6 +53,14 @@ and is never read, a resolver that confidently returns the wrong fleet.
   `/close-window` resolve through it, check liveness against Terminal, and **refuse to guess**
   when a repo has two live windows.
 
+### Field-confirmed 2026-08-14 (kgspin-cto)
+
+Clipboard send path (864-char paste into a live session, clipboard restored, no leakage),
+tri-state send verification against a live transcript, detached `/vp-review` including a correct
+exit-3 rerun, and `/peek`. Four fixes confirmed by a session that was not the one that wrote
+them — which is the only kind of confirmation that counts for the send path, whose failure mode
+lands outside the terminal.
+
 ### Guards added (they fail against the pre-fix code — verified)
 
 - `scripts/cto/lint-skills.sh` — quoted-heredoc interpolation, anchor drift, and `!` blocks

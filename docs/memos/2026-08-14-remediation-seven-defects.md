@@ -9,15 +9,16 @@
 | # | Item | Verdict | Guard |
 |---|---|---|---|
 | 1 | `/sprint-status` heredoc quoting | **FIXED** — and `/peek` had it too | `lint-skills.sh` CHECK A |
-| 2 | `/vp-review` skill-shell timeout + 0-byte files | **FIXED** — detach + poll, atomic publish | `test-vp-review-guards.sh` (7 assertions + negative control) |
+| 2 | `/vp-review` skill-shell timeout + 0-byte files | **FIXED — FIELD-CONFIRMED 2026-08-14** | guards + a live detached run incl. a correct exit-3 rerun |
 | 3 | Skill CTO-home anchoring | **FIXED** — one validated resolver, loud accurate failure | `lint-skills.sh` CHECK B + C |
-| 4 | `qa-send --verify-submit` swallowed send | **FIXED** — verifies against the transcript, not the box | partial: exit codes distinguish the states; no automated test (needs a live session) |
-| 5 | Focus-guard mid-typing leak | **FIXED** — clipboard paste + re-verify before Return | abort path tested live; happy path not (see caveat) |
+| 4 | `qa-send --verify-submit` swallowed send | **FIXED — FIELD-CONFIRMED 2026-08-14** | processing verified from a live session transcript |
+| 5 | Focus-guard mid-typing leak | **FIXED — FIELD-CONFIRMED 2026-08-14** | 864-char paste into a live session; clipboard restored, no leakage |
 | 6 | Dev-team Phase-3 lane ambiguity | **FIXED** — lane table + named filenames + reason | none (prose) |
 | 7 | `/handoff` single window slot | **FIXED** — append-only registry, refuses to guess | tested against live window ids |
 | 8 | `sync-cto-home.sh` cwd-resolved TEMPLATE (filed during adoption) | **FIXED** — resolves from `BASH_SOURCE`; sweep found 1 real site of 15 | `lint-skills.sh` CHECK D |
 
-All eight fixed. Two carry honest caveats, stated below rather than buried.
+All eight fixed. **Four are now field-confirmed** by kgspin-cto on 2026-08-14 — see
+"Field confirmation" at the end, which retires both caveats this memo originally carried.
 
 ---
 
@@ -154,12 +155,11 @@ stray paste into a sent message; that is the keystroke worth withholding.
 `--type` / `AGENTIC_SEND_MODE=type` restores keystroke mode. Abort-loud behaviour is unchanged
 and now applies to nudges too, which route through the same primitive.
 
-**Caveat, stated plainly:** the *abort* path was verified live during this work — the guard
-fired correctly, refused to type, and reported `frontmost app is Google Chrome` (you were using
-the machine). The *happy* path was not run against a live session, because doing so would have
-required stealing focus from you mid-session. The AppleScript compiles clean and the logic is
-unchanged from the working path apart from the paste branch, but a first real send should be
-one you are watching.
+**Caveat RETIRED 2026-08-14.** When written, only the *abort* path had been verified live —
+the guard fired, refused to type, and named Chrome as the thief. The happy path was untested
+because exercising it meant stealing focus from the operator mid-session. kgspin-cto has since
+run it for real: an 864-character ruling injected by paste into a live session, clipboard saved
+and restored, no leakage and no fragments. Clean on first use.
 
 ## 6. Dev-team Phase-3 lane
 
@@ -245,3 +245,29 @@ and restart any long-lived sessions so they pick up the corrected mechanism.
 have surfaced — they only appear when a real session runs into them.
 
 — CTO
+
+
+---
+
+# Field confirmation — 2026-08-14 (kgspin-cto)
+
+Four of these fixes have now been exercised by a real session rather than by my tests:
+
+- **Item 5, the clipboard send path.** An 864-char ruling injected with `mode=paste` into a
+  live session. Clipboard saved and restored; no leakage, no fragments. This was the single
+  most important one to confirm, because it is the only fix whose failure mode lands *outside*
+  the terminal — in the operator's own applications. Clean on first use.
+- **Item 4, tri-state verification.** Delivery confirmed, then processing verified from the
+  session transcript. The distinction the fix exists to make held in the field.
+- **Item 2, detached reviews.** A live `/vp-review` detach + `WAIT_CMD`, **including a correct
+  exit-3 rerun on a long review** — which is the behaviour most likely to be misread as failure,
+  so confirming it is worth more than confirming the happy path.
+- **Item 1, `/peek`** — the bug the original report could not have seen.
+
+This is the evidence my own testing could not produce, and it is why gap reports and
+confirmations are equally worth filing. A fix verified only by the person who wrote it is a
+hypothesis with good manners.
+
+**Still unexercised:** the window registry's ambiguity refusal under a genuine two-live-sprint
+repo (tested against real window ids, not against a real second sprint), and CHECK D as a
+pre-commit gate rather than a manual run.
