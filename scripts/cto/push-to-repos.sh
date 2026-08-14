@@ -310,6 +310,16 @@ PYEOF
   esac
   echo "      wrote $DEST/scripts/agentic + docs/personas + docs/sprints/_templates ; .review-engine=$(cat "$DEST/.review-engine" 2>/dev/null)"
 
+  # 3c. Point the repo back at THIS CTO home. escalate-to-cto.sh routes by this file, and
+  # the skills' CTO-home anchor uses it to recover when a shell has cd'd into a dev repo.
+  # It was written once at bootstrap and never refreshed, so four kgspin repos still pointed
+  # at the public template — escalations went to the wrong home and /sprint-status resolved
+  # a placeholder registry. Rewrite it on every sync; it is one line and cheap to be right.
+  if [ "$(cat "$DEST/.cto-path" 2>/dev/null)" != "$TEMPLATE" ]; then
+    printf '%s\n' "$TEMPLATE" > "$DEST/.cto-path"
+    echo "      .cto-path -> $TEMPLATE"
+  fi
+
   # 4a. Pre-trust the workspace in ~/.claude.json so /handoff doesn't hit the
   # "Quick safety check: do you trust this folder?" dialog on first claude run.
   # Without this, the auto-kickoff prompt is queued behind the dialog and the

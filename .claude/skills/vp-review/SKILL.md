@@ -18,7 +18,68 @@ Reviewing artifact at the path above. Each VP reads its persona file, applies it
 ```!
 set -uo pipefail
 [ -n "${ZSH_VERSION:-}" ] && setopt sh_word_split
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# >>> CTO-HOME ANCHOR (canonical — sync with: bash scripts/cto/lint-skills.sh --apply) >>>
+# Fleet state lives in the CTO home, and neither obvious anchor is reliable alone:
+# `git rev-parse` returns whatever repo the SHELL sits in, so one lingering cd into a dev
+# repo silently retargets the skill; and $CLAUDE_PROJECT_DIR was observed EMPTY in skill
+# shells (2026-08-13) — /handoff then resolved the registry against kgspin-tuner and refused
+# with an error that blamed the registry rather than the anchoring. So: try every anchor,
+# VALIDATE each candidate before accepting it, and when none holds either fail naming the
+# real cause or fall back explicitly and say so.
+# Skills that read the fleet registry set CTO_HOME_REQUIRED=1 before this block.
+_CTO_REJECTED=""
+_cto_is_home() {
+  [ -n "$1" ] && [ -f "$1/.cto/projects.yaml" ] || return 1
+  # The PUBLIC template ships a placeholder registry (/Users/yourname/repos/my-project).
+  # Accepting it resolves cleanly and then reports a fleet of repos that do not exist —
+  # a confident wrong answer, which is worse than the error it replaced. Observed live:
+  # four dev repos still point .cto-path at the template, so this is the real path.
+  if grep -q '/Users/yourname/' "$1/.cto/projects.yaml" 2>/dev/null; then
+    _CTO_REJECTED="$_CTO_REJECTED  $1 (placeholder registry — the unconfigured template)"
+    return 1
+  fi
+  return 0
+}
+# Sets _CTO_FOUND rather than printing: a $(…) capture runs in a SUBSHELL, so the rejected-
+# candidate diagnostics collected by _cto_is_home would be discarded exactly when they are
+# needed — on the failure path.
+_CTO_FOUND=""
+_cto_walk() {
+  _d="$1"
+  while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+    _cto_is_home "$_d" && { _CTO_FOUND="$_d"; return 0; }
+    if [ -f "$_d/.cto-path" ]; then
+      _p="$(tr -d '[:space:]' < "$_d/.cto-path")"
+      _cto_is_home "$_p" && { _CTO_FOUND="$_p"; return 0; }
+    fi
+    _d="$(dirname "$_d")"
+  done
+  return 1
+}
+ROOT=""
+for _c in "${CTO_HOME:-}" "${CTO_REPO:-}" "${CLAUDE_PROJECT_DIR:-}"; do
+  [ -n "$_c" ] && _cto_is_home "$_c" && { ROOT="$_c"; break; }
+done
+if [ -z "$ROOT" ]; then if _cto_walk "$PWD"; then ROOT="$_CTO_FOUND"; fi; fi
+if [ -z "$ROOT" ] && [ -f "$HOME/.cto/home" ]; then
+  _p="$(tr -d '[:space:]' < "$HOME/.cto/home")"; _cto_is_home "$_p" && ROOT="$_p"
+fi
+if [ -z "$ROOT" ]; then
+  if [ "${CTO_HOME_REQUIRED:-0}" = "1" ]; then
+    echo "ERROR: no CTO home found — no directory containing .cto/projects.yaml." >&2
+    echo "  \$CTO_HOME='${CTO_HOME:-}'  \$CTO_REPO='${CTO_REPO:-}'  \$CLAUDE_PROJECT_DIR='${CLAUDE_PROJECT_DIR:-}'" >&2
+    echo "  walked up from: $PWD" >&2
+    [ -n "$_CTO_REJECTED" ] && { echo "  rejected candidates:" >&2; printf '%s\n' "$_CTO_REJECTED" >&2; }
+    echo "  This is an ANCHORING failure, not a missing registry. Run the skill from the CTO" >&2
+    echo "  home, or fix it permanently:  echo /path/to/<project>-cto > ~/.cto/home" >&2
+    exit 1
+  fi
+  ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  echo "NOTE: no CTO home found; using the current repo ($ROOT)." >&2
+fi
+CTO_REGISTRY="$ROOT/.cto/projects.yaml"
+cd "$ROOT" || { echo "ERROR: cannot enter $ROOT" >&2; exit 1; }
+# <<< CTO-HOME ANCHOR <<<
 
 ARGS="$ARGUMENTS"
 ART=""
@@ -72,24 +133,30 @@ persona_file() {
 IFS=',' read -A VP_LIST <<< "$VPS" 2>/dev/null || IFS=',' read -ra VP_LIST <<< "$VPS"
 
 if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
-  # CLI engines: the script CAN run these inline. Fire all VPs in parallel, then emit.
-  for vp in "${VP_LIST[@]}"; do
-    vp=$(echo "$vp" | tr -d '[:space:]'); [ -z "$vp" ] && continue
-    REVIEW_ENGINE="$ENGINE" REVIEW_ALLOW_METERED="${REVIEW_ALLOW_METERED:-0}" \
-      "$ROOT/scripts/agentic/vp-review.sh" "$vp" "$ART" "${VPR_DIR}/${vp}.md" \
-      > "${VPR_DIR}/${vp}.log" 2>&1 &
-  done
-  wait
-  for vp in "${VP_LIST[@]}"; do
-    vp=$(echo "$vp" | tr -d '[:space:]'); [ -z "$vp" ] && continue
-    echo ""; echo "==================== ${vp} ===================="
-    if [ -s "${VPR_DIR}/${vp}.md" ]; then
-      "$ROOT/scripts/agentic/wrap-untrusted.sh" "${VPR_DIR}/${vp}.md" "${ENGINE}:${vp}"
-    else
-      echo "(${vp} FAILED — log tail:)"; tail -10 "${VPR_DIR}/${vp}.log"
-    fi
-  done
-  echo ""; echo "DISPATCH=done   # CLI engine ran the reviews above — synthesize them."
+  # CLI engines: LAUNCH DETACHED, do not wait here.
+  #
+  # This body used to fire the reviews and `wait`. A skill shell has a ~2-minute budget and a
+  # kimi review of a long artifact runs past it: on 2026-08-13 the shell was killed, the
+  # children went with it ("Terminated: 15"), and zero-byte verdicts were left on disk that a
+  # later reviewer read as "completed review missing content". Minutes-long work cannot have
+  # its lifetime tied to a seconds-long caller — so the launch returns immediately and the
+  # CTO polls from the main loop, where the budget is minutes.
+  DRC=0
+  REVIEW_ALLOW_METERED="${REVIEW_ALLOW_METERED:-0}" \
+    "$ROOT/scripts/agentic/vp-review-detach.sh" "$ART" "$VPR_DIR" "$VPS" --engine "$ENGINE" || DRC=$?
+  echo ""
+  # Announcing "detached" after a failed launch would send the CTO off to poll for reviews
+  # that were never started — the same failure-reports-success shape this whole change is
+  # about. The launch result decides what we claim.
+  if [ "$DRC" -ne 0 ] || [ -z "$(ls "$VPR_DIR"/*.status 2>/dev/null)" ]; then
+    echo "DISPATCH=failed   # the launcher did not start any review (exit $DRC). Do NOT poll."
+    echo "  Most likely: this CTO home predates vp-review-detach.sh — re-sync the mechanism"
+    echo "  (scripts/cto/push-to-repos.sh from the template), or run the reviews in the"
+    echo "  foreground: scripts/agentic/vp-review.sh <vp> $ART <out.md>"
+  else
+    echo "DISPATCH=detached   # reviews are RUNNING — poll before reading anything."
+    echo "WAIT_CMD=bash $ROOT/scripts/agentic/vp-review-wait.sh $VPR_DIR --timeout 480"
+  fi
 else
   # subagent / handoff: a skill bash body CANNOT spawn an Agent or a window — that is a
   # main-loop action. Emit the dispatch table + exact persona/artifact paths; the CTO
@@ -106,10 +173,27 @@ fi
 
 ## Your task as CTO
 
-**First read the `ENGINE=` and `DISPATCH=` lines in the script output above** — they tell you whether the reviews already ran or whether YOU must fan them out.
+**First read the `ENGINE=` and `DISPATCH=` lines in the script output above** — they tell you whether the reviews are RUNNING DETACHED (poll them), or whether YOU must fan them out.
 
-### If `DISPATCH=done` (engine = gemini, kimi, codex, or claude-p)
-The VP verdicts are already printed above (CLI-authored, wrapped untrusted). Skip straight to **Synthesize**. For `kimi`, per-VP token usage lines are in `${VPR_DIR}/<vp>.log` if the CEO asks about spend. For `codex` (⚠️ untested engine), if a verdict is missing or malformed, check `${VPR_DIR}/<vp>.log` and the `.codex-stderr.log` file for that VP before assuming the review content itself is at fault — this is the first engine's untested code path, so a plumbing failure is as likely as a bad review.
+### If `DISPATCH=detached` (engine = gemini, kimi, codex, or claude-p)
+The reviews are **running**, not finished. Nothing is on disk yet. Do this, in order:
+
+1. **Run the `WAIT_CMD=` line above** as a Bash call. It polls until every review lands or the
+   timeout expires, then prints a status table. It is a poll, not a consumer — **exit 3 means
+   "still running", not failure: run the same command again.** Exit 0 = all landed, 1 = at
+   least one failed.
+2. **Then read each verdict** and pipe it through the untrusted wrapper before quoting it:
+   `bash scripts/agentic/wrap-untrusted.sh <VPR_DIR>/<vp>.md "<engine>:<vp>"`
+3. Only then **Synthesize**.
+
+**Never read a verdict file before the wait returns.** A file that is absent mid-run is a
+review in flight, not a review that failed — and `<vp>.md` is now published by atomic rename,
+so if it exists it has a body. A FAILED row means no verdict was produced at all: read
+`<VPR_DIR>/<vp>.log` and the `.{kimi,codex,claude}-stderr.log` beside it for the cause, and
+report the failure rather than synthesizing around a missing VP. For `kimi`, per-VP token
+usage lines are in the same `.log` if the CEO asks about spend. For `codex` (⚠️ untested
+engine), a plumbing failure is as likely as a bad review — check the log before blaming the
+content.
 
 ### If `DISPATCH=subagent` (the default)
 The bash body did NOT run the reviews — you run them now, in parallel, via the **Agent tool** (in-session, subscription pool — bright-line clean). For EACH `vp=… persona=… out=…` line above, launch one `Task`/Agent call (send them in a single message so they run concurrently) with a prompt like:

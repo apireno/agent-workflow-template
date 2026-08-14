@@ -104,6 +104,25 @@ Then WAIT. Do not write any code until the CEO explicitly approves.
 
 **Phase 3 is NOT optional.** After writing the dev report and demo output, you MUST proceed to Step 11. The sprint is not done until VP evaluations are on disk and the CEO has given a verdict.
 
+> **LANE — you run exactly TWO reviews here, with exactly these filenames.**
+>
+> | Artifact | Owner | Filename |
+> |---|---|---|
+> | Dev-lane product review | **you** | `docs/sprints/sprint-XX/product-review.md` |
+> | Dev-lane engineering/test review | **you** | `docs/sprints/sprint-XX/test-eval.md` |
+> | Accept-gate VP reviews | **CTO** | anything else — `phase3-review-*.md`, `cto-decision-*.md`, `conformance.md` |
+>
+> Do **not** invent additional review files. Dev sessions have repeatedly generated their own
+> `phase3-review-vp-*.md` — duplicating the CTO's independent accept-gate, and (when the engine
+> failed) leaving empty files behind that a later reviewer flagged as reviews missing content.
+> The CTO's Phase-3 review exists to be **independent of you**; a copy you commission yourself
+> cannot serve that purpose, so it is not yours to run. Two files. No others.
+>
+> **If a review command fails, delete any empty output it left and say so in `dev-report.md`.**
+> Never leave a zero-byte review on disk: downstream it is indistinguishable from a review that
+> ran and found nothing to say. Reporting "the vp-prod review failed, engine error in the log"
+> is a complete and acceptable Phase-3 outcome. Producing an empty file is not.
+
 **Step 11. MANDATORY — EXECUTE these bash commands:**
 
 ```bash
@@ -207,6 +226,12 @@ This workflow requires writing files and executing bash commands. If you are in 
 4. **Starting code before CEO approval.** WAIT for explicit approval even if VP reviews look clean.
 5. **Using plan mode.** Exit it immediately.
 6. **Skipping Phase 3.** Phase 3 evaluations are mandatory. The sprint is not done after the dev report.
+7. **Running the CTO's accept-gate reviews yourself.** Your Phase 3 is exactly two files —
+   `product-review.md` and `test-eval.md`. `phase3-review-*.md`, `cto-decision-*.md` and
+   `conformance.md` belong to the CTO and must not appear in a sprint dir with your name on them.
+8. **Leaving a zero-byte review file.** If a review command fails, delete the empty output and
+   record the failure in `dev-report.md`. An empty file reads downstream as a review that ran
+   and had nothing to say — a failure wearing the costume of a pass.
 
 **The rule: sprint plan on disk → execute vp-review.sh → verify review files exist → CEO approval → code → tests → execute vp-review.sh evaluations → verify evaluation files exist → CEO verdict. No exceptions.**
 

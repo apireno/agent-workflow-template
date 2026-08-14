@@ -189,7 +189,7 @@ End your response with your role signature on its own line.
 
 # --- Assemble the prompt using a temp file (avoids shell variable size limits) ---
 PROMPT_FILE=$(mktemp)
-trap "rm -f '$PROMPT_FILE'" EXIT
+trap "rm -f '$PROMPT_FILE'" EXIT   # replaced by _vp_cleanup once OUT_TMP exists
 
 cat > "$PROMPT_FILE" <<PROMPT_HEADER
 You are adopting the following persona for this review. Read it carefully and fully embody this role.
@@ -246,6 +246,26 @@ ARTIFACT_BLOCK
 # --- Create output directory if needed ---
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
+# --- NEVER PUBLISH A 0-BYTE VERDICT (2026-08-13 incident) ---------------------------------
+# The engine's output was previously redirected straight at $OUTPUT_FILE. Shell redirection
+# CREATES that file before the CLI writes a byte, so when the caller's shell timed out and
+# SIGTERMed the children, what survived was a zero-length <vp>.md — indistinguishable from a
+# completed review with no content, and a downstream VP flagged exactly such an artifact as
+# "review missing content". So: the engine writes to a temp file, and the final path is only
+# ever created by an atomic rename after the body passes inspection. Every abnormal exit
+# leaves either the previous verdict or nothing at all — never an empty one.
+OUT_TMP="$(dirname "$OUTPUT_FILE")/.$(basename "$OUTPUT_FILE").partial.$$"
+_vp_cleanup() {
+    rm -f "$PROMPT_FILE" "$OUT_TMP"
+    # Belt and braces: if anything did manage to create an empty final file, remove it.
+    [ -f "$OUTPUT_FILE" ] && [ ! -s "$OUTPUT_FILE" ] && rm -f "$OUTPUT_FILE"
+    return 0
+}
+trap _vp_cleanup EXIT
+trap '_vp_cleanup; exit 143' TERM
+trap '_vp_cleanup; exit 130' INT
+trap '_vp_cleanup; exit 129' HUP
+
 # --- ADR-042 Tenet 4 toolchain compliance (sprint-layer-3-hardening-20260512) ---
 # Retry-with-backoff. Detect empty output and rate-limit markers BEFORE
 # writing the output file. Don't swallow stderr — capture it so
@@ -285,7 +305,7 @@ _inspect_output_body() {
 # invocation is diagnosable (was: 2>/dev/null silently ate everything).
 run_gemini() {
     local out_file="$1"
-    local stderr_file="${out_file}.gemini-stderr.log"
+    local stderr_file="${OUTPUT_FILE}.gemini-stderr.log"
     cat "$PROMPT_FILE" | "$GEMINI_CMD" > "$out_file" 2>"$stderr_file"
     local rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -298,7 +318,7 @@ run_gemini() {
 
 run_kimi() {
     local out_file="$1"
-    local stderr_file="${out_file}.kimi-stderr.log"
+    local stderr_file="${OUTPUT_FILE}.kimi-stderr.log"
     cat "$PROMPT_FILE" | "$OPENROUTER_CHAT" > "$out_file" 2>"$stderr_file"
     local rc=$?
     # Surface the per-call usage line (spend visibility) even on success.
@@ -314,7 +334,7 @@ run_kimi() {
 run_codex() {
     # ⚠️ UNTESTED (2026-07-02) — see codex-exec.sh header.
     local out_file="$1"
-    local stderr_file="${out_file}.codex-stderr.log"
+    local stderr_file="${OUTPUT_FILE}.codex-stderr.log"
     cat "$PROMPT_FILE" | "$CODEX_EXEC" > "$out_file" 2>"$stderr_file"
     local rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -327,7 +347,7 @@ run_codex() {
 
 run_claude() {
     local out_file="$1"
-    local stderr_file="${out_file}.claude-stderr.log"
+    local stderr_file="${OUTPUT_FILE}.claude-stderr.log"
     cat "$PROMPT_FILE" | "$CLAUDE_CMD" -p --max-turns 1 > "$out_file" 2>"$stderr_file"
     local rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -412,6 +432,16 @@ if [ -n "${VP_REVIEW_DRY_RUN:-}" ]; then
             # not classify it as a rate-limit short-circuit.
             python3 -c "import sys; sys.stdout.write('# review\n\n' + ('valid review content line\n' * 200))" > "$OUTPUT_FILE"
             ;;
+        hang)
+            # Reproduces the 2026-08-13 failure with no API call: a review in flight, a
+            # partial body on disk, then the caller's shell times out and SIGTERMs us.
+            # The invariant under test is that no 0-byte $OUTPUT_FILE survives.
+            # Faithful to the fixed engine path: the body goes to the TEMP file only, so
+            # $OUTPUT_FILE does not exist yet. That is what makes even an untrappable
+            # SIGKILL safe — there is no empty final file for it to leave behind.
+            printf '# partial review, engine still writing\n' > "$OUT_TMP"
+            sleep 60
+            ;;
         *)
             echo "[vp-review] unknown VP_REVIEW_DRY_RUN=$VP_REVIEW_DRY_RUN" >&2
             exit 1
@@ -442,14 +472,14 @@ echo "Requesting $PERSONA review of $(basename "$INPUT_FILE") [engine: $ENGINE].
 
 case "$ENGINE" in
     gemini)
-        run_with_retry run_gemini "$OUTPUT_FILE" "gemini"
+        run_with_retry run_gemini "$OUT_TMP" "gemini"
         ;;
     kimi)
         if [ -z "${OPENROUTER_API_KEY:-}" ]; then
             echo "Error: engine 'kimi' requires OPENROUTER_API_KEY in the environment." >&2
             exit 1
         fi
-        run_with_retry run_kimi "$OUTPUT_FILE" "kimi"
+        run_with_retry run_kimi "$OUT_TMP" "kimi"
         ;;
     codex)
         # ⚠️ UNTESTED (2026-07-02) — see codex-exec.sh header. Not hard-requiring an env var:
@@ -459,7 +489,7 @@ case "$ENGINE" in
             echo "[vp-review] note: neither CODEX_API_KEY nor OPENAI_API_KEY set — proceeding on the" >&2
             echo "  assumption a 'codex login' OAuth session is active. If this fails, set one of those." >&2
         fi
-        run_with_retry run_codex "$OUTPUT_FILE" "codex"
+        run_with_retry run_codex "$OUT_TMP" "codex"
         ;;
     claude-p)
         # ⚠️ METERED Anthropic API (Agent-SDK credit pool). The shared resolver already
@@ -468,7 +498,7 @@ case "$ENGINE" in
             echo "Error: engine 'claude-p' is the metered API path; set REVIEW_ALLOW_METERED=1 to opt in." >&2
             exit 1
         fi
-        run_with_retry run_claude "$OUTPUT_FILE" "claude-p"
+        run_with_retry run_claude "$OUT_TMP" "claude-p"
         ;;
     subagent|handoff)
         # This CLI executor cannot run an in-session Agent or a window — those are
@@ -487,12 +517,13 @@ esac
 
 # --- Verify output (defense-in-depth: retry wrapper already cleaned
 #     up + returned non-zero on failure; this is the final gate) ---
-if [ -s "$OUTPUT_FILE" ]; then
+if [ -s "$OUT_TMP" ]; then
+    mv "$OUT_TMP" "$OUTPUT_FILE"          # atomic publish — the only way $OUTPUT_FILE appears
     LINES=$(wc -l < "$OUTPUT_FILE" | tr -d ' ')
     echo "Review written to: $OUTPUT_FILE ($LINES lines)"
 else
-    echo "[vp-review] FAIL: Output file is missing or empty after retries."
-    rm -f "$OUTPUT_FILE"
+    echo "[vp-review] FAIL: no review body after retries — publishing NOTHING rather than an empty file."
+    rm -f "$OUT_TMP"
     exit 1
 fi
 

@@ -3,7 +3,8 @@
 #
 #   window-peek.sh list                # every Terminal window: "<id> | <title>"
 #   window-peek.sh <window-id> [N]     # last N (default 15) non-blank on-screen lines
-#   window-peek.sh <window-id> --input # ONLY the pending input line (the ❯ row)
+#   window-peek.sh <window-id> --input  # ONLY the pending input line (the ❯ row)
+#   window-peek.sh <window-id> --queued # is the session holding SUBMITTED-but-unread messages?
 #
 # Companion to /peek, NOT a replacement. /peek tails the session JSONL — the model's
 # thinking and tool calls. This shows the SCREEN: permission dialogs, queued-but-
@@ -44,21 +45,36 @@ if [ "${1:-}" = "list" ]; then
     exit 0
 fi
 
-# Accept --input on either side of the window id so both orderings work.
-WIN=""; N=""; INPUT_MODE=0
+# Accept --input/--queued on either side of the window id so both orderings work.
+WIN=""; N=""; INPUT_MODE=0; QUEUED_MODE=0
+QUEUED_HINT_TEXT="${AGENTIC_QUEUED_HINT:-Press up to edit queued messages}"
 for a in "$@"; do
     case "$a" in
-        --input) INPUT_MODE=1 ;;
+        --input)  INPUT_MODE=1 ;;
+        --queued) QUEUED_MODE=1 ;;
         *) if [ -z "$WIN" ]; then WIN="$a"; else N="$a"; fi ;;
     esac
 done
-: "${WIN:?usage: window-peek.sh list | window-peek.sh <window-id> [lines] | window-peek.sh <window-id> --input}"
+: "${WIN:?usage: window-peek.sh list | window-peek.sh <window-id> [lines] | window-peek.sh <window-id> --input|--queued}"
 N="${N:-15}"
 
 CONTENTS="$(osascript -e "tell application \"Terminal\" to get contents of window id $WIN" 2>/dev/null)"
 if [ -z "$CONTENTS" ]; then
     echo "window-peek: no contents for window id $WIN (closed, or wrong id — try 'window-peek.sh list')" >&2
     exit 1
+fi
+
+if [ "$QUEUED_MODE" -eq 1 ]; then
+    # QUEUED is a state of its own, and the one the box cannot show: the text left the input
+    # box (so --input reads clean) but the session has not read it — it is stacked behind the
+    # current turn. Messages in that state have been dropped at turn end, so "box cleared"
+    # must never be reported as "delivered and read" while this hint is on screen.
+    if printf '%s\n' "$CONTENTS" | grep -qF "$QUEUED_HINT_TEXT"; then
+        printf '%s\n' "queued: the session is holding submitted message(s) behind the current turn"
+        exit 0
+    fi
+    echo "window-peek: no queued-message hint on screen for window $WIN" >&2
+    exit 3
 fi
 
 if [ "$INPUT_MODE" -eq 1 ]; then
@@ -68,6 +84,15 @@ if [ "$INPUT_MODE" -eq 1 ]; then
         | grep '❯' \
         | tail -1 \
         | sed -e 's/.*❯[[:space:]]*//' -e 's/[[:space:]]*[│|][[:space:]]*$//' -e 's/[[:space:]]*$//')"
+    # TUI chrome is not pending input. The hint line in particular sits directly under the box
+    # and, when it lands on the matched row, reads as a draft that is not there — a caller
+    # then nudges a box that was already clear. Strip the known furniture, then re-test.
+    PENDING="$(printf '%s' "$PENDING" \
+        | sed -e "s/$QUEUED_HINT_TEXT//g" \
+              -e 's/? for shortcuts//g' \
+              -e 's/\/ for commands//g' \
+              -e 's/⏵⏵ *accept edits on//g' \
+              -e 's/[[:space:]]*$//')"
     if [ -z "$PENDING" ]; then
         echo "window-peek: input box empty for window $WIN" >&2
         exit 3

@@ -167,8 +167,16 @@ exists, and a list of candidate sibling repos. Walk the CEO through onboarding:
    is dirty (uncommitted changes already present), still write the mechanism files (they're
    template-owned, not app code) but flag it so the CEO knows there's other WIP in that repo.
 
-6. **Mark setup complete:** `mkdir -p .claude && touch .claude/.setup-done` in this clone, so the
-   `[FIRST-RUN]` preflight directive doesn't fire again next session.
+6. **Mark setup complete and record the CTO home:**
+   ```
+   mkdir -p .claude && touch .claude/.setup-done
+   mkdir -p ~/.cto && pwd > ~/.cto/home
+   ```
+   `~/.cto/home` is the last-resort anchor for every skill. Skills resolve the CTO home from
+   `$CTO_HOME` → `$CTO_REPO` → `$CLAUDE_PROJECT_DIR` → a walk up from the cwd → this file.
+   `$CLAUDE_PROJECT_DIR` has been observed empty inside skill shells, and a shell that has
+   cd'd into a dev repo makes the walk-up miss, so without this file those sessions fail
+   (loudly, but they fail). One line here prevents it.
 
 7. **Summarize:** what's registered, what got deployed, and the next real step — author the first
    PRD under `docs/roadmap/prds/` and pick a permissions posture (`default`/`acceptEdits`/

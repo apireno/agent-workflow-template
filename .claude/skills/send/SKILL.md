@@ -16,9 +16,69 @@ set -uo pipefail
 # into a project repo made /handoff report "no target repos found" and made vp-review
 # resolve personas against the wrong tree. $CLAUDE_PROJECT_DIR is the session's project
 # root regardless of cwd drift, so it is the correct anchor; git root is the fallback.
-ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-cd "$ROOT" || { echo "ERROR: cannot enter $ROOT"; exit 1; }
+CTO_HOME_REQUIRED=1
+# >>> CTO-HOME ANCHOR (canonical — sync with: bash scripts/cto/lint-skills.sh --apply) >>>
+# Fleet state lives in the CTO home, and neither obvious anchor is reliable alone:
+# `git rev-parse` returns whatever repo the SHELL sits in, so one lingering cd into a dev
+# repo silently retargets the skill; and $CLAUDE_PROJECT_DIR was observed EMPTY in skill
+# shells (2026-08-13) — /handoff then resolved the registry against kgspin-tuner and refused
+# with an error that blamed the registry rather than the anchoring. So: try every anchor,
+# VALIDATE each candidate before accepting it, and when none holds either fail naming the
+# real cause or fall back explicitly and say so.
+# Skills that read the fleet registry set CTO_HOME_REQUIRED=1 before this block.
+_CTO_REJECTED=""
+_cto_is_home() {
+  [ -n "$1" ] && [ -f "$1/.cto/projects.yaml" ] || return 1
+  # The PUBLIC template ships a placeholder registry (/Users/yourname/repos/my-project).
+  # Accepting it resolves cleanly and then reports a fleet of repos that do not exist —
+  # a confident wrong answer, which is worse than the error it replaced. Observed live:
+  # four dev repos still point .cto-path at the template, so this is the real path.
+  if grep -q '/Users/yourname/' "$1/.cto/projects.yaml" 2>/dev/null; then
+    _CTO_REJECTED="$_CTO_REJECTED  $1 (placeholder registry — the unconfigured template)"
+    return 1
+  fi
+  return 0
+}
+# Sets _CTO_FOUND rather than printing: a $(…) capture runs in a SUBSHELL, so the rejected-
+# candidate diagnostics collected by _cto_is_home would be discarded exactly when they are
+# needed — on the failure path.
+_CTO_FOUND=""
+_cto_walk() {
+  _d="$1"
+  while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+    _cto_is_home "$_d" && { _CTO_FOUND="$_d"; return 0; }
+    if [ -f "$_d/.cto-path" ]; then
+      _p="$(tr -d '[:space:]' < "$_d/.cto-path")"
+      _cto_is_home "$_p" && { _CTO_FOUND="$_p"; return 0; }
+    fi
+    _d="$(dirname "$_d")"
+  done
+  return 1
+}
+ROOT=""
+for _c in "${CTO_HOME:-}" "${CTO_REPO:-}" "${CLAUDE_PROJECT_DIR:-}"; do
+  [ -n "$_c" ] && _cto_is_home "$_c" && { ROOT="$_c"; break; }
+done
+if [ -z "$ROOT" ]; then if _cto_walk "$PWD"; then ROOT="$_CTO_FOUND"; fi; fi
+if [ -z "$ROOT" ] && [ -f "$HOME/.cto/home" ]; then
+  _p="$(tr -d '[:space:]' < "$HOME/.cto/home")"; _cto_is_home "$_p" && ROOT="$_p"
+fi
+if [ -z "$ROOT" ]; then
+  if [ "${CTO_HOME_REQUIRED:-0}" = "1" ]; then
+    echo "ERROR: no CTO home found — no directory containing .cto/projects.yaml." >&2
+    echo "  \$CTO_HOME='${CTO_HOME:-}'  \$CTO_REPO='${CTO_REPO:-}'  \$CLAUDE_PROJECT_DIR='${CLAUDE_PROJECT_DIR:-}'" >&2
+    echo "  walked up from: $PWD" >&2
+    [ -n "$_CTO_REJECTED" ] && { echo "  rejected candidates:" >&2; printf '%s\n' "$_CTO_REJECTED" >&2; }
+    echo "  This is an ANCHORING failure, not a missing registry. Run the skill from the CTO" >&2
+    echo "  home, or fix it permanently:  echo /path/to/<project>-cto > ~/.cto/home" >&2
+    exit 1
+  fi
+  ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  echo "NOTE: no CTO home found; using the current repo ($ROOT)." >&2
+fi
 CTO_REGISTRY="$ROOT/.cto/projects.yaml"
+cd "$ROOT" || { echo "ERROR: cannot enter $ROOT" >&2; exit 1; }
+# <<< CTO-HOME ANCHOR <<<
 if [ ! -f "$CTO_REGISTRY" ]; then
   echo "ERROR: fleet registry not found at $CTO_REGISTRY"
   echo "  This skill must run from the CTO home (the repo holding .cto/projects.yaml)."
@@ -90,14 +150,25 @@ if [ -z "$REPO_PATH" ]; then
   exit 1
 fi
 
-WIN_ID_FILE="$REPO_PATH/.claude/terminal-window.id"
-if [ ! -f "$WIN_ID_FILE" ]; then
-  echo "ERROR: no recorded window id for $REPO_NAME at $WIN_ID_FILE"
-  echo "Either the session was not launched via /handoff, or handoff predates the window-id tracking patch."
-  echo "Fix: run  bash scripts/cto/window-peek.sh list  and send id-direct:  /send <window-id> <message>"
+# Resolve through the append-only window registry first: it knows about EVERY window opened
+# for this repo and checks each against Terminal, so a repo running two sprints refuses to
+# guess instead of silently addressing the newest one. Exit 3 = ambiguous (choices printed).
+WIN_ID="$(bash "$ROOT/scripts/cto/window-registry.sh" resolve "$REPO_PATH" 2>/dev/null)"; RRC=$?
+if [ "$RRC" -eq 3 ]; then
+  bash "$ROOT/scripts/cto/window-registry.sh" resolve "$REPO_PATH"   # re-run for the message
   exit 1
 fi
-WIN_ID=$(cat "$WIN_ID_FILE" | tr -d '[:space:]')
+if [ -z "$WIN_ID" ]; then
+  WIN_ID_FILE="$REPO_PATH/.claude/terminal-window.id"
+  if [ ! -f "$WIN_ID_FILE" ]; then
+    echo "ERROR: no live window for $REPO_NAME (no registry entry, no $WIN_ID_FILE)"
+    echo "Either the session was not launched via /handoff, or the window has been closed."
+    echo "Fix: run  bash scripts/cto/window-peek.sh list  and send id-direct:  /send <window-id> <message>"
+    exit 1
+  fi
+  WIN_ID=$(cat "$WIN_ID_FILE" | tr -d '[:space:]')
+  echo "NOTE: no registry entry — falling back to the legacy single slot (window $WIN_ID)." >&2
+fi
 fi
 
 # Write the message to a temp file — qa-send.sh reads it from there so neither the
@@ -117,10 +188,25 @@ echo ""
 # personal messaging app that way. qa-send.sh verifies Terminal is frontmost AND its front
 # window is the target id before typing a single character, and aborts sending NOTHING
 # otherwise. Do not reinstate an inline osascript here.
-bash "$ROOT/scripts/cto/qa-send.sh" "$WIN_ID" "$MSG_FILE"
+# --verify-submit + --repo: check the message was SUBMITTED (the trailing Return is absorbed
+# as a newline when the target is mid-task) and then that it was actually PROCESSED. Box-
+# cleared is not proof: on 2026-08-13 a ruling submitted into the queue was dropped at turn
+# end — box clear, "SUBMITTED" reported, nothing read. --repo lets qa-send check the session
+# transcript on disk, which is the only signal that separates "read" from "queued and lost".
+VERIFY_ARGS=""
+[ "$ID_DIRECT" -eq 0 ] && [ -n "${REPO_PATH:-}" ] && VERIFY_ARGS="--repo $REPO_PATH"
+bash "$ROOT/scripts/cto/qa-send.sh" "$WIN_ID" "$MSG_FILE" --verify-submit $VERIFY_ARGS
 SEND_RC=$?
 
 echo ""
+if [ "$SEND_RC" -eq 6 ]; then
+  echo "DELIVERED BUT NOT PROCESSED by $REPO_NAME (window id $WIN_ID)."
+  echo "The message left the input box but has not appeared in the session transcript."
+  echo "Do NOT report this as delivered: it may be queued behind the current turn, and queued"
+  echo "messages have been dropped at turn end before. Re-check with /peek $REPO_NAME, and"
+  echo "re-send once the turn ends if it never lands."
+  exit "$SEND_RC"
+fi
 if [ "$SEND_RC" -ne 0 ]; then
   echo "NOT SENT to $REPO_NAME (window id $WIN_ID) — see the FOCUS-GUARD reason above."
   echo "Nothing was typed anywhere. Common causes: the machine is in use by the operator,"
@@ -128,10 +214,7 @@ if [ "$SEND_RC" -ne 0 ]; then
   echo "permission is not granted to Terminal."
   exit "$SEND_RC"
 fi
-echo "Message injected into $REPO_NAME (window id $WIN_ID)."
-echo "NOTE: the trailing Return does NOT reliably submit — when the dev team is mid-task"
-echo "the keystrokes buffer and the Return replays as a newline, not a submit. If the"
-echo "message is sitting unsent in the input box, press Enter in that Terminal window."
+echo "Message delivered to $REPO_NAME (window id $WIN_ID) — see the qa-send verdict above."
 echo "Then /peek $REPO_NAME to see the response."
 ```
 
@@ -143,10 +226,15 @@ The message has been injected into the dev-team session. Tell the CEO:
    aborted with a FOCUS-GUARD error, say NOTHING WAS SENT** — do not describe the message as
    delivered, and relay the guard's reason (machine in use / stale window id / missing
    Accessibility permission) so the CEO knows what to fix before a retry.
-2. **Submit caveat — state this EVERY time:** the auto-submit Return is unreliable. If the
-   message is sitting unsubmitted in the dev team's input box, the CEO must press Enter in
-   that Terminal window. This is a known `/send` limitation, not a one-off — do not claim
-   the message "sent" or "delivered" as if it auto-submitted.
+2. **Report the qa-send verdict verbatim, and do not upgrade it.** The script now checks
+   three separate things and says which one it got to:
+   - `PROCESSED` — it is in the session transcript. This is the only one that means "read".
+   - `DELIVERED` — it left the input box, but processing could not be checked (no transcript).
+   - `SUBMITTED BUT NOT PROCESSED` (exit 6) — it left the box and never reached the session.
+     Queued behind the current turn, and queued messages have been dropped at turn end.
+   - `NOT CONFIRMED` (exit 5) / focus abort (exit 4) — it was never submitted / never sent.
+
+   Never describe anything below `PROCESSED` as delivered-and-read.
 3. **Next step:** once submitted, `/peek $REPO_NAME` to see the response (id-direct sends have no repo to peek — use `bash scripts/cto/window-peek.sh <id>` instead).
 
 Sign as: — CTO

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # qa-send.sh <window-id> <message-file> [--no-return] [--verify-submit [tries]]
+#                                      [--repo <path> | --transcript <file>] [--type]
 #
-# Inject the contents of <message-file> as keystrokes into the Terminal window with the
-# given id (the proven osascript + System Events mechanism). Reads the message from a FILE
-# so neither the message text nor the osascript braces/quotes land on the scanned command
-# line.
+# Inject the contents of <message-file> into the Claude Code session running in the Terminal
+# window with the given id. Reads the message from a FILE so neither the message text nor the
+# osascript braces/quotes land on the scanned command line.
 #
 # THE SINGLE KEYSTROKE PATH. Every keystroke-emitting caller in this template routes here —
 # the /send skill, qa-drive-claude.sh's auto-kickoff. Do NOT hand-roll an inline
@@ -19,38 +19,60 @@
 # into this file means only `bash scripts/cto/qa-send.sh <id> <file>` (plain positional args)
 # is scanned — clean — while the braces/quotes live harmlessly in the script body.
 #
-# TWO INDEPENDENT FAILURE MODES, TWO GUARDS. Delivery and submission are not the same event:
+# ── THREE INDEPENDENT FAILURE MODES, THREE GUARDS ────────────────────────────────────────
+# Delivery, submission and PROCESSING are three different events. Each can fail while the
+# previous one succeeds, and each failure looks like success from the layer below:
 #
-#   FOCUS GUARD (always on)   — did the keystrokes reach the right window? Without it they
-#                               go to whatever app is frontmost. See the guard body below.
-#   --verify-submit (opt-in)  — did the target actually SUBMIT the message, or is it sitting
-#                               in the input box? The trailing Return is absorbed as a literal
-#                               newline when the session is mid-task (the Return-replay gap).
-#                               Delivery succeeds, the ruling is never read. In one day this
-#                               silently swallowed three orchestration rulings downstream.
+#   FOCUS GUARD (always on)   — did the input reach the right window? Without it, input goes
+#                               to whatever app is frontmost.
+#   --verify-submit (opt-in)  — did the target SUBMIT, or is the text sitting in the box? The
+#                               trailing Return is absorbed as a literal newline when the
+#                               session is mid-task (the Return-replay gap).
+#   --repo / --transcript     — did the session actually PROCESS it? A message can submit into
+#                               the QUEUE and then be dropped at turn end. Observed 2026-08-13:
+#                               box cleared, "SUBMITTED" reported, ruling never read. Box state
+#                               is a proxy; the session transcript on disk is ground truth.
 #
-# Use --verify-submit for anything the sprint depends on being READ (rulings, STOP orders,
-# corrections). It costs up to ~<tries>×6s of wall clock and only when the send did not take.
+# Use --verify-submit --repo <path> for anything the sprint depends on being READ (rulings,
+# STOP orders, corrections). Without a transcript this script will NOT claim a message was
+# processed — it says DELIVERED and names what it could not verify.
+#
+# ── INJECTION MODE ───────────────────────────────────────────────────────────────────────
+# Default is CLIPBOARD PASTE (⌘V), not per-character typing. Typing a 2KB message holds the
+# keyboard for seconds, and twice on 2026-08-13 focus moved DURING that window and fragments
+# of an orchestration message were typed into the operator's WhatsApp and Chrome. Paste
+# collapses that exposure from seconds to a single event, and focus is re-verified between
+# the paste and the Return so a steal in between aborts BEFORE anything can be submitted
+# somewhere it shouldn't be. `--type` (or AGENTIC_SEND_MODE=type) restores keystroke mode.
+#
+# The operator's clipboard is saved and restored (text only — a non-text clipboard, e.g. a
+# copied image, is not preserved).
 #
 # Note: needs Accessibility permission for Terminal (System Settings → Privacy & Security →
 # Accessibility).
 #
-# Exit codes:  0 sent (check stderr for a mid-type focus warning) · 1 usage/IO
-#              4 FOCUS GUARD abort (nothing typed) · 5 --verify-submit could not confirm
+# Exit codes:  0 delivered (and processed, when a transcript was given) · 1 usage/IO
+#              4 FOCUS GUARD abort (nothing sent) · 5 --verify-submit could not confirm
+#              6 submitted but NOT processed by the session (queued and dropped, or still busy)
 
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-WIN="${1:?usage: qa-send.sh <window-id> <message-file> [--no-return] [--verify-submit [tries]]}"
+WIN="${1:?usage: qa-send.sh <window-id> <message-file> [--no-return] [--verify-submit [tries]] [--repo <path>] [--type]}"
 MSGFILE="${2:?need a message file (keeps message + osascript off the scanned command line)}"
 shift 2
 [ -f "$MSGFILE" ] || { echo "ERROR: message file not found: $MSGFILE"; exit 1; }
 case "$WIN" in ''|*[!0-9]*) echo "ERROR: window id must be numeric, got '$WIN'"; exit 1 ;; esac
 
-NORETURN="0"; VERIFY=0; TRIES=5
+NORETURN="0"; VERIFY=0; TRIES=5; REPO=""; TRANSCRIPT=""
+SEND_MODE="${AGENTIC_SEND_MODE:-paste}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --no-return)     NORETURN="1"; shift ;;
+        --type)          SEND_MODE="type"; shift ;;
+        --paste)         SEND_MODE="paste"; shift ;;
+        --repo)          REPO="${2:?--repo needs a path}"; shift 2 ;;
+        --transcript)    TRANSCRIPT="${2:?--transcript needs a file}"; shift 2 ;;
         --verify-submit) VERIFY=1; shift
                          case "${1:-}" in ''|*[!0-9]*) ;; *) TRIES="$1"; shift ;; esac ;;
         *) echo "ERROR: unknown argument '$1'"; exit 1 ;;
@@ -75,16 +97,51 @@ MSG="$(cat "$MSGFILE")"
 # alternative, never as the sole marker.
 WORKING_RE="${AGENTIC_WORKING_RE:-esc to interrupt|ctrl\+b to run in background|… \([0-9]+[hms]}"
 
-# --- the guarded keystroke primitive -----------------------------------------------------
-# $1 = payload, $2 = "1" to suppress the trailing Return. Echoes the osascript result,
-# returns the osascript exit status. Every keystroke in this file goes through here, so the
-# nudges below are focus-guarded exactly like the message.
-keystroke_guarded() {
-osascript - "$WIN" "$1" "$2" <<'OSA' 2>&1
+# ── resolve the transcript (ground truth for "was it processed") ──────────────────────────
+if [ -z "$TRANSCRIPT" ] && [ -n "$REPO" ]; then
+    SID_FILE="$REPO/.claude/current-session.id"
+    if [ -f "$SID_FILE" ]; then
+        SID="$(tr -d '[:space:]' < "$SID_FILE")"
+        TRANSCRIPT="$(ls -1 "$HOME/.claude/projects/"*/"$SID.jsonl" 2>/dev/null | head -1)"
+        [ -n "$TRANSCRIPT" ] || echo "qa-send: WARNING — no transcript found for session $SID under ~/.claude/projects (processing cannot be verified)" >&2
+    else
+        echo "qa-send: WARNING — $SID_FILE not found; processing cannot be verified" >&2
+    fi
+fi
+TRANSCRIPT_SIZE_BEFORE=0
+[ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && TRANSCRIPT_SIZE_BEFORE=$(wc -c < "$TRANSCRIPT" | tr -d ' ')
+
+# ── clipboard hygiene ─────────────────────────────────────────────────────────────────────
+CLIP_SAVED=0; OLD_CLIP=""
+restore_clip() {
+    [ "$CLIP_SAVED" = 1 ] || return 0
+    printf '%s' "$OLD_CLIP" | pbcopy 2>/dev/null || true
+    CLIP_SAVED=0
+}
+trap restore_clip EXIT INT TERM
+
+if [ "$SEND_MODE" = "paste" ]; then
+    if ! command -v pbcopy >/dev/null 2>&1 || ! command -v pbpaste >/dev/null 2>&1; then
+        echo "qa-send: pbcopy/pbpaste unavailable — falling back to keystroke mode" >&2
+        SEND_MODE="type"
+    else
+        OLD_CLIP="$(pbpaste 2>/dev/null || true)"; CLIP_SAVED=1
+        printf '%s' "$MSG" | pbcopy
+    fi
+fi
+
+# --- the guarded injection primitive ------------------------------------------------------
+# $1 = payload (ignored in paste mode — the clipboard carries it), $2 = "1" to suppress the
+# trailing Return, $3 = "paste" | "type". Echoes the osascript result, returns its status.
+# Every character this template sends goes through here, so the nudges below are guarded
+# exactly like the message.
+inject_guarded() {
+osascript - "$WIN" "$1" "$2" "$3" <<'OSA' 2>&1
 on run argv
   set winId to (item 1 of argv) as integer
   set theMsg to item 2 of argv
   set noReturn to item 3 of argv
+  set sendMode to item 4 of argv
 
   -- Raise the target. `try` because a stale id must fall through to the guard below,
   -- which reports it usefully, rather than dying with a raw AppleScript error.
@@ -95,17 +152,17 @@ on run argv
     end try
   end tell
 
-  -- FOCUS GUARD (2026-08-10, from a downstream incident).
-  -- Keystrokes are delivered to whatever is FOCUSED, not to the window we addressed. When
-  -- focus fails to land — the operator is using the machine, another app is frontmost, the
-  -- window id is stale — the entire message INCLUDING the trailing Return types into that
-  -- app instead. This is not theoretical: an orchestration message once landed in the
-  -- operator's personal messaging app and may have auto-sent.
+  -- FOCUS GUARD (2026-08-10, from a downstream incident; hardened 2026-08-14).
+  -- Input is delivered to whatever is FOCUSED, not to the window we addressed. When focus
+  -- fails to land — the operator is using the machine, another app is frontmost, the window
+  -- id is stale — the entire message INCLUDING the trailing Return goes to that app instead.
+  -- This is not theoretical: orchestration text landed in the operator's WhatsApp and Chrome
+  -- on three separate occasions.
   --
-  -- So: never type unverified. Poll (the raise is async and a loaded machine can take a
+  -- So: never send unverified. Poll (the raise is async and a loaded machine can take a
   -- second or two) until BOTH hold — Terminal is the frontmost process, and Terminal's front
-  -- window is the target id — then type. If the poll expires, abort loudly and send NOTHING.
-  -- Retrying the RAISE is fine; retrying the KEYSTROKE blind is what we are preventing.
+  -- window is the target id. If the poll expires, abort loudly and send NOTHING.
+  -- Retrying the RAISE is fine; retrying the SEND blind is what we are preventing.
   set guardOk to false
   set frontApp to "(none)"
   set frontWin to 0
@@ -142,23 +199,31 @@ on run argv
     end if
   end if
 
-  -- Verified. Scope the keystroke to the process as defence in depth.
+  -- Verified. Scope the send to the process as defence in depth.
+  --
+  -- PASTE MODE is the default because it is ATOMIC. Typing a long message holds the keyboard
+  -- for seconds; a focus steal anywhere in that window sprays the remainder into whatever
+  -- app took over. One ⌘V is a single event, so the exposure is one instant rather than a
+  -- span. Bracketed paste also means embedded newlines do not each submit.
   tell application "System Events"
     tell process "Terminal"
-      keystroke theMsg
-      if noReturn is "0" then
+      if sendMode is "paste" then
+        keystroke "v" using command down
+        delay 0.6
+      else
+        keystroke theMsg
         -- Scale the wait to message length (~1.5s base + ~0.0015s/char). System Events
         -- returns before the OS finishes delivering every event; a fixed short delay makes
-        -- the Return arrive mid-paste, where it is absorbed as a literal newline and the
+        -- the Return arrive mid-type, where it is absorbed as a literal newline and the
         -- message sits UNSUBMITTED.
         delay (1.5 + (count of characters of theMsg) * 0.0015)
-        key code 36
       end if
     end tell
   end tell
 
-  -- A long message types for seconds. If focus was stolen partway, some of it landed
-  -- elsewhere — the operator needs to know which app to go check.
+  -- RE-VERIFY BEFORE THE RETURN. The window between delivery and submit is exactly where
+  -- the 2026-08-13 leaks happened. If focus moved, we must NOT press Return: in a messaging
+  -- app that keystroke is what turns a stray paste into a sent message. Report and stop.
   set stillFront to "(unknown)"
   tell application "System Events"
     try
@@ -168,6 +233,15 @@ on run argv
   if stillFront is not "Terminal" then
     return "FOCUS-LOST-MIDSEND:" & stillFront
   end if
+
+  if noReturn is "0" then
+    tell application "System Events"
+      tell process "Terminal"
+        key code 36
+      end tell
+    end tell
+  end if
+
   return "OK"
 end run
 OSA
@@ -175,64 +249,116 @@ OSA
 
 report_focus_abort() {
     echo "qa-send: ABORTED — $1" >&2
-    echo "qa-send: nothing was typed. Re-run once Terminal can take focus, or re-resolve the window id:" >&2
+    echo "qa-send: nothing was sent. Re-run once Terminal can take focus, or re-resolve the window id:" >&2
     echo "  bash scripts/cto/window-peek.sh list" >&2
 }
 
-# --- send --------------------------------------------------------------------------------
-OUT=$(keystroke_guarded "$MSG" "$NORETURN"); RC=$?
+# --- send ---------------------------------------------------------------------------------
+OUT=$(inject_guarded "$MSG" "$NORETURN" "$SEND_MODE"); RC=$?
 if [ "$RC" -ne 0 ]; then report_focus_abort "$OUT"; exit 4; fi
 
 case "$OUT" in
     FOCUS-LOST-MIDSEND:*)
-        echo "qa-send: WARNING — focus moved to '${OUT#FOCUS-LOST-MIDSEND:}' DURING typing." >&2
-        echo "  Part of the message may have landed there. Check that app, and check window $WIN" >&2
-        echo "  for a truncated message before re-sending." >&2 ;;
+        STOLE="${OUT#FOCUS-LOST-MIDSEND:}"
+        echo "qa-send: ABORTED MID-SEND — focus moved to '$STOLE' after delivery." >&2
+        echo "  NO Return was pressed, so nothing was submitted anywhere." >&2
+        if [ "$SEND_MODE" = "paste" ]; then
+            echo "  Paste mode: the message may have pasted into '$STOLE'. Check and clear it there." >&2
+        else
+            echo "  Keystroke mode: part of the message may have typed into '$STOLE'. Check it there," >&2
+            echo "  and check window $WIN for a truncated fragment before re-sending." >&2
+        fi
+        restore_clip
+        exit 4 ;;
 esac
 
-echo "qa-send: injected $(wc -c < "$MSGFILE" | tr -d ' ') chars into window $WIN (return=$([ "$NORETURN" = "1" ] && echo no || echo yes))"
+restore_clip
+echo "qa-send: injected $(wc -c < "$MSGFILE" | tr -d ' ') chars into window $WIN (mode=$SEND_MODE, return=$([ "$NORETURN" = "1" ] && echo no || echo yes))"
 [ "$VERIFY" = 1 ] || exit 0
 
-# --- verify submission -------------------------------------------------------------------
-# THE AUTHORITATIVE SIGNAL IS THE INPUT BOX, not the spinner. A busy session proves nothing:
-# the whole failure being guarded against is a message sitting unsubmitted WHILE the target
-# works. So the question is only ever "is our text still in the box?"
+# --- stage 1: verify SUBMISSION -----------------------------------------------------------
+# The question here is only "is our text still in the box?" A busy session proves nothing:
+# the failure being guarded against is a message sitting unsubmitted WHILE the target works.
 #
-#   box no longer holds our text → submitted (processing now, or queued for turn end). Done.
+#   box no longer holds our text → left the box. Continue to stage 2.
 #   box still holds our text     → the Return replayed as a literal newline. Nudge with a
-#                                  single SPACE plus Return: the space is the smallest
-#                                  payload that makes the box register a fresh edit, and
-#                                  anything longer appends garbage to the pending message.
+#                                  single SPACE plus Return: the smallest payload that makes
+#                                  the box register a fresh edit. Anything longer appends
+#                                  garbage to the pending message.
 #
 # Our text is identified by the head of its first line, which is what the box renders even
-# when a long message wraps.
+# when a long message wraps. In paste mode the TUI may instead render a "[Pasted text #N]"
+# placeholder — window-peek --input reports that as pending, which is the correct reading.
 MSGHEAD="$(printf '%s' "$MSG" | head -1 | cut -c1-24)"
+SUBMITTED=0
 
 for i in $(seq 1 "$TRIES"); do
     sleep 5
     PENDING="$(bash "$HERE/window-peek.sh" "$WIN" --input 2>/dev/null)"; PRC=$?
 
-    if [ "$PRC" -ne 0 ]; then
-        BUSY_NOTE="queued for turn end"
-        bash "$HERE/window-peek.sh" "$WIN" 25 2>/dev/null | grep -qE "$WORKING_RE" && BUSY_NOTE="target is processing"
-        echo "qa-send: SUBMITTED — input box cleared on attempt $i ($BUSY_NOTE)."
-        exit 0
-    fi
+    if [ "$PRC" -ne 0 ]; then SUBMITTED=1; break; fi
 
-    if ! printf '%s' "$PENDING" | grep -qF "$MSGHEAD"; then
-        echo "qa-send: SUBMITTED — our message left the input box on attempt $i." >&2
-        echo "  NOTE: the box is not empty; it now holds unrelated text:" >&2
-        echo "    $(printf '%s' "$PENDING" | cut -c1-80)" >&2
-        echo "  That is stray input queued ahead of the next send — clear it in window $WIN." >&2
-        exit 0
-    fi
+    case "$PENDING" in
+        *"[Pasted text"*) : ;;   # our paste, still pending — keep nudging
+        *)
+            if ! printf '%s' "$PENDING" | grep -qF "$MSGHEAD"; then
+                echo "qa-send: our message left the input box on attempt $i." >&2
+                echo "  NOTE: the box is not empty; it now holds unrelated text:" >&2
+                echo "    $(printf '%s' "$PENDING" | cut -c1-80)" >&2
+                echo "  That is stray input queued ahead of the next send — clear it in window $WIN." >&2
+                SUBMITTED=1; break
+            fi ;;
+    esac
 
     echo "qa-send: attempt $i/$TRIES — still unsubmitted (\"$(printf '%s' "$PENDING" | cut -c1-60)\"), nudging…" >&2
-    NOUT=$(keystroke_guarded " " "0"); NRC=$?
+    NOUT=$(inject_guarded " " "0" "type"); NRC=$?
     if [ "$NRC" -ne 0 ]; then report_focus_abort "$NOUT"; exit 4; fi
+    case "$NOUT" in FOCUS-LOST-MIDSEND:*) report_focus_abort "$NOUT"; exit 4 ;; esac
 done
 
-echo "qa-send: NOT CONFIRMED — after $TRIES nudges the message is still in window $WIN's input box." >&2
-echo "  It has NOT been read. Press Enter in that window, or check it for a blocking dialog:" >&2
+if [ "$SUBMITTED" -ne 1 ]; then
+    echo "qa-send: NOT CONFIRMED — after $TRIES nudges the message is still in window $WIN's input box." >&2
+    echo "  It has NOT been read. Press Enter in that window, or check it for a blocking dialog:" >&2
+    echo "    bash scripts/cto/window-peek.sh $WIN" >&2
+    exit 5
+fi
+
+# --- stage 2: verify PROCESSING -----------------------------------------------------------
+# An empty input box means the text LEFT the box. It does not mean the session read it: a
+# message submitted while the target is mid-turn goes into a QUEUE, and on 2026-08-13 a
+# queued ruling was dropped at turn end — box cleared, nothing processed, no artifact, no
+# transcript entry. Box state is a proxy. The session's JSONL on disk is ground truth.
+QUEUED_HINT=0
+bash "$HERE/window-peek.sh" "$WIN" 40 2>/dev/null | grep -qF "Press up to edit queued messages" && QUEUED_HINT=1
+
+if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
+    echo "qa-send: DELIVERED — the message left the input box of window $WIN."
+    echo "  NOT VERIFIED: whether the session actually processed it. Pass --repo <path> (or"
+    echo "  --transcript <file>) to check the session transcript, which is the only signal that"
+    echo "  distinguishes 'read' from 'queued and dropped'."
+    [ "$QUEUED_HINT" = 1 ] && echo "  The screen shows 'Press up to edit queued messages' — it is QUEUED, not yet read."
+    exit 0
+fi
+
+for i in $(seq 1 "$TRIES"); do
+    SIZE_NOW=$(wc -c < "$TRANSCRIPT" | tr -d ' ')
+    if [ "$SIZE_NOW" -gt "$TRANSCRIPT_SIZE_BEFORE" ] && grep -qF "$MSGHEAD" "$TRANSCRIPT" 2>/dev/null; then
+        echo "qa-send: PROCESSED — the message appears in the session transcript (attempt $i)."
+        echo "  transcript: $TRANSCRIPT (+$((SIZE_NOW - TRANSCRIPT_SIZE_BEFORE)) bytes)"
+        exit 0
+    fi
+    sleep 10
+done
+
+echo "qa-send: SUBMITTED BUT NOT PROCESSED — the message left window $WIN's input box, but after" >&2
+echo "  $((TRIES * 10))s it has not appeared in the session transcript." >&2
+echo "  transcript: $TRANSCRIPT" >&2
+if [ "$QUEUED_HINT" = 1 ]; then
+    echo "  The screen shows 'Press up to edit queued messages' — it is QUEUED behind the current turn." >&2
+    echo "  Queued messages have been DROPPED at turn end before. Re-check once the turn ends:" >&2
+else
+    echo "  Either the target is still mid-turn, or the message was swallowed. Re-check with:" >&2
+fi
 echo "    bash scripts/cto/window-peek.sh $WIN" >&2
-exit 5
+echo "  Do NOT assume the ruling was read." >&2
+exit 6
