@@ -98,6 +98,30 @@ if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
     emit_warning "ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is set. Any \`claude -p\` invocations would charge against API, not subscription. Verify intent."
 fi
 
+# ─── 3a. Duplicate native libraries in the Python env ────────────────────────
+# Two copies of one C++ runtime in a single interpreter share process-global
+# state, and the usual symptom is a crash at EXIT — after the work is done and
+# the artifacts are written, so every individual instance looks like ignorable
+# noise. One machine reached 41 crash dumps before anyone read one (kgspin-core
+# BUG-308). Never blocking: it is an environment smell, not a broken session.
+#
+# The scan costs ~10s, so it is CACHED and keyed on the environment fingerprint.
+# We read the cached verdict (instant) and refresh in the background when stale,
+# so a session start never waits for it.
+DUPES="$(dirname "$0")/check-native-dupes.sh"
+if [ -x "$DUPES" ]; then
+    DUPE_OUT="$("$DUPES" 2>/dev/null)"; DUPE_RC=$?
+    if [ "$DUPE_RC" -eq 1 ] && [ -n "$DUPE_OUT" ]; then
+        # The scanner prints its own "[WARN] duplicate native libraries in <path>"
+        # header, so emit the body as-is and only bump the advisory counter.
+        emit_warning "$(printf '%s' "$DUPE_OUT" | head -1 | sed 's/^\[WARN\] //')"
+        printf '%s\n' "$DUPE_OUT" | tail -n +2 | sed 's/^/  /'
+    fi
+    # Refresh detached so the next session sees current state without this one
+    # paying for it. Ignored if already fresh.
+    ( "$DUPES" --refresh --quiet >/dev/null 2>&1 & ) >/dev/null 2>&1
+fi
+
 # ─── 3b. git identity + gh auth (needed for /new-project's publish commands) ──
 if ! git config user.email > /dev/null 2>&1; then
     emit_warning "git user.email not configured (git config --global user.email you@example.com). Commits will fail until set."

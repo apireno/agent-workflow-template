@@ -6,6 +6,28 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-08-14 — duplicate-native-library detection (kgspin-core BUG-308)
+
+`scripts/agentic/check-native-dupes.sh`, wired into `preflight.sh`. Detects two copies of one
+C++ runtime inside a single Python environment — the condition behind an interpreter-teardown
+SIGBUS that produced 41 crash dumps on one machine before anyone read one.
+
+The template cannot fix a dev repo's dependency graph, but it can stop the condition recurring
+silently. That is the whole contribution: **38 of 41 dumps were one signature**, and nothing in
+the workflow was ever going to say so, because the crash happens at `exit()` — after the work
+is done and the artifacts are written. It never failed a test. Every instance looked ignorable.
+
+Two detectors: a hazard-list check for duplicate process-global runtimes (`libomp` ×3 here),
+and a symbol-level check that catches the case filenames cannot — `_sentencepiece…so` and
+`_spp…so` are unrelated names carrying the same vendored library.
+
+Precision mattered more than coverage; the first draft reported 60+ benign vendored copies and
+would have been switched off in a week. Nested interpreters are pruned (one package ships an
+entire second Python), findings group by owning *package* rather than by file (pyarrow ships
+four interlinked libraries — one copy, not four), and only runtimes holding process-global
+state are reported. Cached and keyed on an environment fingerprint: ~10s cold, 0.8s warm,
+refreshed in the background so a session start never waits for it.
+
 ## 2026-08-14 — seven field defects from the kgspin fleet
 
 From `template-gap-report-20260814` (kgspin-cto), filed after a real orchestration session.
