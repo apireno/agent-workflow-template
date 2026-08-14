@@ -257,8 +257,11 @@ Four of these fixes have now been exercised by a real session rather than by my 
   live session. Clipboard saved and restored; no leakage, no fragments. This was the single
   most important one to confirm, because it is the only fix whose failure mode lands *outside*
   the terminal — in the operator's own applications. Clean on first use.
-- **Item 4, tri-state verification.** Delivery confirmed, then processing verified from the
-  session transcript. The distinction the fix exists to make held in the field.
+- **Item 4, tri-state verification.** `--verify-submit --repo` returned **PROCESSED on the
+  first poll**, from the transcript. The distinction the fix exists to make held in the field,
+  and the first-attempt hit also settles a timing question the design left open: stage 2 polls
+  up to `tries × 10s` on the assumption the transcript lags the submit. It does not lag enough
+  to matter, so the wait costs nothing on the common path.
 - **Item 2, detached reviews.** A live `/vp-review` detach + `WAIT_CMD`, **including a correct
   exit-3 rerun on a long review** — which is the behaviour most likely to be misread as failure,
   so confirming it is worth more than confirming the happy path.
