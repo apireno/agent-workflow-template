@@ -209,6 +209,53 @@ for name in sorted(os.listdir(skills_dir)):
             f"each block is a separate shell, so the value is empty here."
         )
 
+# ── CHECK D: cwd-anchored SOURCE trees in shell scripts ───────────────────────────────────
+# Same class as CHECK B, one layer down. `git rev-parse --show-toplevel` answers "which repo is
+# the shell standing in" — a fine anchor for the repo a script OPERATES ON (that is what nearly
+# every REPO_ROOT here means, and those are correct). It is the wrong anchor for the tree a
+# script COPIES FROM: sync-cto-home.sh resolved TEMPLATE that way, so running it from the CTO
+# home — which the fleet-sync instructions require — made TEMPLATE equal TARGET and the script
+# refused, blaming the target. Source trees must come from BASH_SOURCE/$0.
+COPY_RE = re.compile(r"\b(rsync|cp|install)\b")
+for dirpath, _dirs, files in os.walk(os.path.join(root, "scripts")):
+    for fn in sorted(files):
+        if not fn.endswith(".sh"):
+            continue
+        sp = os.path.join(dirpath, fn)
+        rel = os.path.relpath(sp, root)
+        lines = open(sp, errors="replace").read().split("\n")
+        cwd_vars = {}
+        for i, l in enumerate(lines, 1):
+            m = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)=.*git rev-parse --show-toplevel", l)
+            if not m or "git -C" in l:
+                continue
+            # `VAR="${VAR:-$(git rev-parse …)}"` is the deliberate SUBJECT-repo idiom: the repo
+            # being operated on, with the caller able to override it. That is the correct use
+            # of cwd anchoring and the majority of hits here. The bug shape is an unconditional
+            # assignment naming the tree the script reads its own assets out of.
+            if re.search(r":-\s*\$\(\s*git rev-parse", l):
+                continue
+            cwd_vars[m.group(1)] = i
+        # Only scripts that actually copy things can have a "source tree" to get wrong.
+        copies = any(COPY_RE.search(l) for l in lines)
+        for var, ln in cwd_vars.items():
+            if not copies:
+                continue
+            for l in lines:
+                # Source position = "$VAR/..." appearing BEFORE another path variable on the
+                # same line — `sync_one "$TEMPLATE/$d/" "$TARGET/$d/"`, `cp "$SRC/x" "$DST/x"`.
+                # Matching only literal rsync/cp lines misses the wrapper-function form, which
+                # is exactly how the sync-cto-home.sh bug hid.
+                if ("literal-ok" not in l
+                        and re.search(r"\$\{?" + var + r"\b[^\"']*/", l)
+                        and re.search(r"\$\{?" + var + r"\b.*\$\{?[A-Za-z_][A-Za-z0-9_]*\b", l)):
+                    findings.append(
+                        f"D  {rel}:{ln}  ${var} is resolved from the CALLER'S CWD "
+                        f"(git rev-parse) but used as a copy SOURCE — resolve it from "
+                        f"\"$(dirname \"${{BASH_SOURCE[0]}}\")\" instead."
+                    )
+                    break
+
 if findings:
     print(f"lint-skills: {len(findings)} finding(s)\n")
     for f in sorted(findings):

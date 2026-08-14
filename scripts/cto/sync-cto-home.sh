@@ -14,8 +14,9 @@
 #   CLAUDE.md (project-customized) · .cto/projects.yaml · .git
 # No --delete: the target's own extra files are never removed, only matching files overwritten.
 #
-# Dry-run by DEFAULT (shows what would change); pass --apply to write. Run from the TEMPLATE.
-# After --apply: review `git -C <target> status`, then commit + push the CTO home.
+# Dry-run by DEFAULT (shows what would change); pass --apply to write. Runnable from ANY cwd
+# (see the TEMPLATE resolution below). After --apply: review `git -C <target> status`, then
+# commit + push the CTO home.
 #
 # Usage:
 #   scripts/cto/sync-cto-home.sh <cto-home-path>            # preview (dry-run)
@@ -24,10 +25,25 @@
 set -uo pipefail
 TARGET="${1:?usage: sync-cto-home.sh <cto-home-path> [--apply]}"
 APPLY=0; [ "${2:-}" = "--apply" ] && APPLY=1
-TEMPLATE="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# TEMPLATE is the tree we copy FROM, so it must come from THIS SCRIPT's location — never from
+# the caller's cwd. `git rev-parse --show-toplevel` resolved the cwd repo, and the documented
+# way to run a fleet sync is with cwd IN the CTO home; TEMPLATE then equalled TARGET and the
+# script refused with "target is the template itself", an error naming the wrong cause
+# (kgspin-cto, 2026-08-14, twice). Same anchoring class as the skills' CTO-home resolution:
+# a path that means "where the mechanism lives" cannot be inferred from where the operator
+# happens to stand. Guarded by scripts/cto/lint-skills.sh CHECK D.
+TEMPLATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 [ -d "$TARGET" ] || { echo "ERROR: target not found: $TARGET"; exit 1; }
 TARGET="$(cd "$TARGET" && pwd)"
-[ "$TARGET" = "$TEMPLATE" ] && { echo "ERROR: target is the template itself — nothing to sync."; exit 1; }
+if [ "$TARGET" = "$TEMPLATE" ]; then
+  echo "ERROR: target and source are the same directory — nothing to sync."
+  echo "  TARGET   : $TARGET   (from argument 1)"
+  echo "  TEMPLATE : $TEMPLATE (from this script's own path: ${BASH_SOURCE[0]})"
+  echo "  You are pointing the sync at the template itself. Name the CTO home instead, e.g."
+  echo "    $0 /path/to/<project>-cto --apply"
+  exit 1
+fi
 command -v rsync >/dev/null || { echo "ERROR: rsync not found."; exit 1; }
 
 RS="-a --itemize-changes"; [ "$APPLY" = 0 ] && RS="$RS -n"

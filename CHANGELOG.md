@@ -62,6 +62,20 @@ and is never read, a resolver that confidently returns the wrong fleet.
   including SIGTERM and SIGKILL mid-review, plus a negative control that reproduces the
   pre-fix code and confirms it *does* leave a zero-byte file.
 
+### Item 8 — `sync-cto-home.sh` resolved its SOURCE tree from the caller's cwd
+
+Reported by kgspin-cto while adopting the above. `TEMPLATE="$(git rev-parse --show-toplevel)"`
+answers "which repo is the shell standing in" — but TEMPLATE is the tree we copy *from*. Run
+from the CTO home (which the fleet-sync instructions require), TEMPLATE resolved to TARGET and
+the script refused with "target is the template itself": an error naming the wrong cause. Now
+resolved from `${BASH_SOURCE[0]}`, and the refusal prints both paths and where each came from.
+
+Swept all 15 `git rev-parse --show-toplevel` sites in `scripts/`. **Fourteen are correct** —
+they mean "the repo this script operates on", almost all in the `${VAR:-$(git …)}`
+caller-overridable form. One was the bug. New **CHECK D** in `lint-skills.sh` encodes the
+distinction: a cwd-resolved variable used as a copy *source* is flagged; the subject-repo idiom
+is not. Verified precise — clean on the fixed tree, one finding when the bug is reintroduced.
+
 ### Also found while fixing (not in the report)
 
 - `/peek` carried the same fatal heredoc bug as `/sprint-status`.

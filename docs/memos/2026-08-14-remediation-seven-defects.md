@@ -15,8 +15,9 @@
 | 5 | Focus-guard mid-typing leak | **FIXED** — clipboard paste + re-verify before Return | abort path tested live; happy path not (see caveat) |
 | 6 | Dev-team Phase-3 lane ambiguity | **FIXED** — lane table + named filenames + reason | none (prose) |
 | 7 | `/handoff` single window slot | **FIXED** — append-only registry, refuses to guess | tested against live window ids |
+| 8 | `sync-cto-home.sh` cwd-resolved TEMPLATE (filed during adoption) | **FIXED** — resolves from `BASH_SOURCE`; sweep found 1 real site of 15 | `lint-skills.sh` CHECK D |
 
-All seven fixed. Two carry honest caveats, stated below rather than buried.
+All eight fixed. Two carry honest caveats, stated below rather than buried.
 
 ---
 
@@ -190,6 +191,44 @@ Verified against your real window ids: two live windows → refusal with choices
 resolves; dead id → `GONE`; after close → the survivor resolves cleanly.
 
 ---
+
+## 8. `sync-cto-home.sh` resolved TEMPLATE from cwd — FIXED
+
+Filed by you during adoption, and correctly classed: same anchoring family as item 3, in a
+script my item-3 fix did not reach because it fixes skills, not scripts.
+
+**(1) Fixed.** `TEMPLATE` now comes from `${BASH_SOURCE[0]}`, so the script runs from any cwd —
+including the CTO home, which is the cwd the fleet-sync instructions ask for. Confirmed against
+your exact failing invocation.
+
+**(2) Swept — and the honest result is one bug, not a class-wide rot.** There are 15
+`git rev-parse --show-toplevel` sites under `scripts/`. **Fourteen are correct**: they mean
+"the repo this script operates on" (`resolve-review-engine.sh` reading *that repo's*
+`.review-engine`, `escalate-to-cto.sh`, `preflight.sh`, `vp-review.sh`'s project-specific
+concerns/context), and nearly all use the `${VAR:-$(git …)}` caller-overridable idiom. The
+`qa-drive-*` scripts anchor with `git -C "$SPRINT_DIR"`, which is explicit and right. Yours was
+the only site where a cwd-resolved path meant *the tree we copy from*.
+
+**(3) The refusal now self-diagnoses**, as requested:
+
+```
+ERROR: target and source are the same directory — nothing to sync.
+  TARGET   : /Users/apireno/repos/kgspin-cto   (from argument 1)
+  TEMPLATE : /Users/apireno/repos/agent-workflow-template (from this script's own path: …)
+```
+
+**Guarded — `lint-skills.sh` CHECK D.** The rule encodes the distinction rather than banning
+`git rev-parse`, which would flag fourteen correct lines and be switched off within a week: a
+cwd-resolved variable used in a copy *source* position is a finding; the subject-repo idiom is
+not. It also matches the wrapper-function form (`sync_one "$TEMPLATE/x" "$TARGET/x"`), which is
+how this bug hid from a naive `rsync|cp` scan. Verified both directions: clean on the fixed
+tree, exactly one finding when the old line is restored.
+
+**On your last paragraph — yes, keep sending those.** "The `/close-window` tty pre-kill worked
+hands-free on its first live use" is worth as much as a bug report: it is the only evidence
+that path works outside my own testing. Noted that the clipboard send path is still unexercised;
+that is the one I most want a real report on, because its failure mode lands outside the
+terminal.
 
 ## Sync
 
