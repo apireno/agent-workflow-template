@@ -230,7 +230,9 @@ for repo in "${TARGETS[@]}"; do
     echo "      would write: $DEST/.claude/hooks/ (6: inject-devteam-contract, auto-paste-brief,"
     echo "                     session-end-record, check-complete, deny-self-commit, deny-generated-edit)"
     echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
-    [ -f "$DEST/.review-engine" ] || echo "      would write: $DEST/.review-engine = subagent"
+    # Name the engine the real run would actually seed. Hardcoding "subagent" here made the
+    # preview disagree with the apply whenever the project default was anything else.
+    [ -f "$DEST/.review-engine" ] || echo "      would write: $DEST/.review-engine = $(bash "$TEMPLATE/scripts/agentic/set-review-engine.sh" --fleet-default 2>/dev/null || echo subagent)"
     push_count=$((push_count + 1))
     continue
   fi
