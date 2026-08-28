@@ -71,6 +71,30 @@ The rule:
    `watch-file-or-prompt.sh`. It tracks a vendor's TUI and *will* drift — it is one override
    for every tool that reads a screen, and it is derived from observed screens, not docs.
 
+   **Observed text is not attributed text — a watcher may ALERT, never SUBMIT.** Both guards
+   above ask *did our message arrive*. Authorship is the sender's, so they are safe by
+   construction. The unsafe act is the mirror image: submitting text that was ALREADY in the
+   target's composer. Claude Code renders its own generated inline suggestion in the same
+   input cells as typed characters, differing only by colour, and every window read here
+   strips colour — a suggestion and a human's unsubmitted draft are byte-identical, with no
+   marker and nothing persisted to compare against. So no tool here can say who put text in
+   a composer, and none may act as though it can.
+
+   Directive provenance is two-class: **typed by the human in their own channel**, or
+   **orchestrator-authored and verify-submitted**. Window-recovered text is neither until a
+   human claims it, per incident. Auto-submitting a suggestion hands a session its own last
+   recommendation back wearing its principal's authority — a fabricated directive that every
+   downstream artifact then records as a real decision. It was attempted twice on a live dev
+   window on 2026-08-27 and only a busy composer stopped it.
+
+   Three things hold the line, and `scripts/cto/test-authorship-guards.sh` keeps them there:
+   every interactive launch path exports `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0` so the
+   ambiguity cannot arise in a window we opened; `window-peek.sh --input` prints the
+   unverified-authorship warning on every hit and `--authorship` proves the switch is set for
+   a given window (0 = provably off, 3 = unknown — never a guess in the other direction); and
+   `qa-send.sh` refuses a whitespace-only payload, whose only effect is to submit whatever is
+   already in the box, unless a named human attests to having typed it.
+
 5. **No inventory list in this file.** A hand-maintained list of what's in this directory
    goes stale the first time someone forgets to update it, and a stale inventory is worse
    than none — it gets read as authoritative. Every script's own header says what it does

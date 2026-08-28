@@ -154,11 +154,16 @@ PY
 # 5. launch interactive claude in the UX repo (subscription pool; never claude -p) and
 #    RECORD the window id (mirrors /handoff: the trailing bare `newTab` keeps
 #    "tab N of window id NNNN" as the last osascript line so the parse below works).
+#
+# CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0: no grey composer suggestions in an
+# ORCHESTRATED window. Window peeks read plain text with colour stripped, so a
+# generated suggestion is byte-identical to a human draft and a watcher can submit
+# the session its own advice as if the CEO typed it (2026-08-27). Off at the source.
 echo "qa-drive-claude: launching interactive claude in $ROOT ..."
 TAB_INFO=$(osascript 2>&1 <<APPLESCRIPT | tail -1
 tell application "Terminal"
   activate
-  set newTab to do script "cd $ROOT && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 && claude"
+  set newTab to do script "cd $ROOT && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && claude"
   set custom title of newTab to "qa-ux · $(basename "$SPRINT_DIR")"
   newTab
 end tell

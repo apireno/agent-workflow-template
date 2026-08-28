@@ -6,6 +6,50 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-08-27 — composer suggestions are not directives (authorship guards)
+
+A watcher reported *stranded input* in a live dev-team session and, per standing doctrine,
+tried to submit it. Twice. The text was Claude Code's own generated grey composer suggestion —
+nobody had typed it. Only a busy composer stopped the submit.
+
+Window reads carry no colour. Claude Code renders its generated suggestion through the same
+input renderer as typed characters, in the same cells, differing only by a dim attribute that
+`Terminal … get contents` strips — and the suggestion is persisted nowhere to compare against.
+A suggestion and a human's unsubmitted draft are byte-identical to every watcher here. Because
+a suggestion is generated from the session's own context, submitting one hands the session its
+own last recommendation back **wearing its principal's authority**: not a fabricated result,
+a fabricated authorization.
+
+Root cause was one sentence in a header. `window-peek --input` called what it found "stray
+input" and "the operator's draft" — an authorship claim the script had no way to make — and a
+downstream doctrine reasonably read that as licence to submit. The mechanism never submitted
+anything; the seam did.
+
+Fixed at the source rather than by detection, because detection is impossible here and saying
+so is part of the fix: every interactive launch path now exports
+`CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0` (read by the vendor ahead of any feature gate or
+setting), and `promptSuggestionEnabled: false` covers sessions started by hand in a dev repo.
+Then the fences, because a session can still attach to a window we did not launch:
+`window-peek --input` warns on every hit; `--authorship` proves the switch is set for a window
+(0 = provably off, 3 = unknown — never "probably human"); `qa-send` refuses a whitespace-only
+payload, whose only effect is to submit whatever is already in the box, unless a named human
+attests to having typed it. Doctrine lives where the grant lives — `cto.md`, `CLAUDE.md`,
+`scripts/cto/README.md`, `/send`.
+
+The audit turned up a second instance of the same class: `/close-window` answered the macOS
+"Terminate" sheet by clicking the button on *every* Terminal window, since System Events
+cannot see Terminal's window ids. With two sheets up it could have killed a live sprint while
+tidying a finished tab. It now refuses on ambiguity.
+
+`scripts/cto/test-authorship-guards.sh` — 13 assertions. The launch-site scan is written as
+"every `do script` that starts claude", so a path added later is covered without anyone
+remembering; a negative control reconstructs the pre-fix script and confirms it *would* have
+reached the keystroke path.
+
+The durable rule: **a watcher may report what it observed, never who caused it.** Where the
+second is needed and cannot be measured, remove the ambiguity at the source or ask a human.
+RCA: `docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.md`.
+
 ## 2026-08-14 — duplicate-native-library detection (kgspin-core BUG-308)
 
 `scripts/agentic/check-native-dupes.sh`, wired into `preflight.sh`. Detects two copies of one

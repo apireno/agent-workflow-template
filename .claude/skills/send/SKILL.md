@@ -237,4 +237,10 @@ The message has been injected into the dev-team session. Tell the CEO:
    Never describe anything below `PROCESSED` as delivered-and-read.
 3. **Next step:** once submitted, `/peek $REPO_NAME` to see the response (id-direct sends have no repo to peek — use `bash scripts/cto/window-peek.sh <id>` instead).
 
+**What this skill is NOT for.** `/send` carries a message *you wrote* — authorship is yours,
+and that is what makes it safe. Text you find already sitting in a dev team's composer is a
+different thing: Claude Code's own generated grey suggestion is byte-identical to a human's
+unsubmitted draft once a window read strips colour. Never submit it on a watcher signal — show
+it to the CEO and let them claim it. See `docs/personas/cto.md` "Directive provenance".
+
 Sign as: — CTO

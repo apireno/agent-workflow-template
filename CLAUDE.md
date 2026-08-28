@@ -319,6 +319,14 @@ After `/handoff` launches dev-team sessions in Terminal tabs, talk to them via t
 
 **`/resume-dev-team`** is ONLY for crash recovery (SessionEnd touched `.claude/CRASHED`). In every other case, prefer `/send`.
 
+**Watchers ALERT, they never SUBMIT (binding).** `/send` is safe because we wrote the
+message. Text already sitting in a dev team's composer is a different thing: Claude Code's own
+generated grey suggestion renders in the same cells as typed text and every window peek strips
+colour, so a suggestion and a human's unsubmitted draft are byte-identical. Never submit
+composer text on a watcher signal — that hands a session its own advice back under the CEO's
+authority. Show it to the CEO and let them claim it. See `docs/personas/cto.md` "Directive
+provenance" and `docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.md`.
+
 **One-time setup:** `/send` requires **Accessibility permission for Terminal** (System Settings → Privacy & Security → Accessibility → enable Terminal). Granted once per machine. If `/send` returns `osascript is not allowed to send keystrokes (1002)`, this is the cause. See `docs/personas/cto.md` "Communicating with Running Dev Teams" for the full pattern including the empirical reason System Events is required (not `do script in window N`).
 
 ---

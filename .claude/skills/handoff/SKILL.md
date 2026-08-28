@@ -342,13 +342,26 @@ for REPO_PATH in $PATHS_TO_OPEN; do
   # task summary — an external `set custom title` alone gets overwritten within
   # seconds. CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 stops Claude Code touching the
   # title; the `set custom title` below then sticks for the life of the session.
+  #
+  # CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 turns OFF the composer's grey inline
+  # suggestion in every ORCHESTRATED window. This is a safety control, not a
+  # preference. Claude Code renders a generated suggestion in the same input cells
+  # as typed text, differing only by colour — and `Terminal get contents` (what
+  # every watcher here reads) returns plain text with the colour stripped. A ghost
+  # suggestion and a human's typed-but-unsubmitted draft are therefore BYTE-
+  # IDENTICAL to any watcher, and a watcher that submits "stranded input" submits
+  # the session its own generated advice wearing the CEO's authority. Observed
+  # 2026-08-27: two submit attempts on a suggestion, stopped only by a busy
+  # composer. See docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.md.
+  # Turning the feature off in orchestrated windows removes the ambiguity at the
+  # source; the human's OWN session keeps its suggestions.
   # The trailing bare `newTab` keeps "tab N of window id NNNN" as the last output
   # line so the window-id parse below still works unchanged.
   TAB_TITLE="$REPO_NAME · $SHORT_DESC"
   TAB_INFO=$(osascript <<APPLESCRIPT 2>&1 | tail -1
 tell application "Terminal"
     activate
-    set newTab to do script "cd $REPO_PATH && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 && echo '[handoff] launching claude for $REPO_NAME...' && claude \"$KICKOFF\""
+    set newTab to do script "cd $REPO_PATH && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && echo '[handoff] launching claude for $REPO_NAME...' && claude \"$KICKOFF\""
     set custom title of newTab to "$TAB_TITLE"
     newTab
 end tell

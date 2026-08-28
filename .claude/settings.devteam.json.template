@@ -1,5 +1,7 @@
 {
   "_comment": "Template for per-repo .claude/settings.json on Phase 2 dev-team targets. push-to-repos.sh installs this. Strip _comment fields when applying.",
+  "_comment_promptSuggestionEnabled": "OFF in dev-team repos as a SAFETY control, not a preference. Claude Code renders its generated composer suggestion in the same input cells as typed text, distinguished only by colour \u2014 and the window-content API every watcher here reads (Terminal 'get contents') strips colour. A suggestion is therefore byte-identical to a human's typed-but-unsubmitted draft, so any automation that submits 'stranded input' can feed a session its own advice under the CEO's authority (observed 2026-08-27; two attempts). /handoff also exports CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 at launch, which takes precedence; this key covers sessions started by hand in the repo, which the launch env does not reach. See docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.md.",
+  "promptSuggestionEnabled": false,
   "permissions": {
     "allow": [
       "Bash(*)",

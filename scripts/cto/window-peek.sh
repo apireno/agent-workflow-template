@@ -3,24 +3,62 @@
 #
 #   window-peek.sh list                # every Terminal window: "<id> | <title>"
 #   window-peek.sh <window-id> [N]     # last N (default 15) non-blank on-screen lines
-#   window-peek.sh <window-id> --input  # ONLY the pending input line (the ❯ row)
+#   window-peek.sh <window-id> --input  # ONLY the composer line (the ❯ row)
 #   window-peek.sh <window-id> --queued # is the session holding SUBMITTED-but-unread messages?
+#   window-peek.sh <window-id> --authorship  # can text in this window be a generated suggestion?
 #
 # Companion to /peek, NOT a replacement. /peek tails the session JSONL — the model's
 # thinking and tool calls. This shows the SCREEN: permission dialogs, queued-but-
 # unsubmitted input, and shell output the JSONL never records. When a session looks
 # hung, /peek shows the last thing it did; this shows what it is waiting on.
 #
-# --input MODE (stray-input hygiene). Text sitting UNSUBMITTED in a session's input box
-# is invisible to every other tool: it produces no JSONL, no artifact, no screen change.
-# It stays invisible until something submits it — at which point it lands ahead of, or
+# --input MODE (composer hygiene). Text sitting UNSUBMITTED in a session's composer is
+# invisible to every other tool: it produces no JSONL, no artifact, no screen change. It
+# stays invisible until something submits it — at which point it lands ahead of, or
 # concatenated with, the next real message. Check before sending. Contract:
 #
-#     prints the pending text, exit 0     — something is queued
-#     prints nothing,        exit 3       — box is empty (the clean state)
+#     prints the composer text, exit 0    — something is in the box
+#     prints nothing,           exit 3    — box is empty (the clean state)
 #
 # so callers can branch on the exit code:
-#     if bash scripts/cto/window-peek.sh "$WIN" --input; then echo "stray input — clear it first"; fi
+#     if bash scripts/cto/window-peek.sh "$WIN" --input; then echo "composer not clear"; fi
+#
+# ── OBSERVED TEXT IS NOT ATTRIBUTED TEXT (read before acting on --input) ──────────────────
+# This mode reports that the composer is NON-EMPTY. It CANNOT report who put the text there,
+# and no version of it ever will:
+#
+#   Claude Code renders its generated inline suggestion through the SAME text-input renderer
+#   as typed characters, in the same cells, differing only by a dim/colour attribute — and
+#   `Terminal … get contents` returns plain text with every attribute stripped. A generated
+#   suggestion and a human's typed-but-unsubmitted draft are BYTE-IDENTICAL here. There is
+#   no prefix, no marker, no separate row, and the suggestion is persisted nowhere on disk
+#   to compare against (verified against Claude Code 2.1.248).
+#
+# So the output of this mode is UNVERIFIED-AUTHORSHIP text. The rule that follows is not a
+# style preference — it is the reason this warning exists:
+#
+#   **NEVER submit composer text on a watcher signal.** Detection ALERTS; a human confirms
+#   authorship per incident before anything submits. A generated suggestion echoes the
+#   session's own last recommendation, so auto-submitting one hands the session its own
+#   advice back wearing its principal's authority — a fabricated directive that every
+#   downstream artifact then records as a CEO decision. Observed 2026-08-27: two submit
+#   attempts on a suggestion, stopped only by a busy composer.
+#
+# Directive provenance is two-class: (a) typed by the human in their own channel, (b)
+# orchestrator-authored and verify-submitted via qa-send.sh, where authorship is the
+# SENDER's. Window-recovered text is neither until a human claims it.
+#
+# --authorship MODE is the one-directional escape from that ambiguity. /handoff, /qa-drive
+# and /resume-dev-team launch with CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0, and that launch
+# line stays in the window's scrollback. If we can see it, this window CANNOT produce a
+# suggestion and composer text in it was necessarily put there by a human or by us:
+#
+#     exit 0  — suggestions provably OFF in this window (composer text is not generated)
+#     exit 3  — unproven. NOT proof of the opposite: the launch line may have scrolled out
+#               of the buffer, or the session was started by hand. Treat as unverified.
+#
+# The asymmetry is deliberate. A safety check may only ever return "provably safe" or
+# "unknown"; a check that guessed "probably human" would be the same defect in a new coat.
 #
 # The pending text is matched by the LAST '❯' on screen. That heuristic prefers the input
 # box (bottom of the viewport) over a shell prompt using the same glyph, and it reads only
@@ -46,17 +84,41 @@ if [ "${1:-}" = "list" ]; then
 fi
 
 # Accept --input/--queued on either side of the window id so both orderings work.
-WIN=""; N=""; INPUT_MODE=0; QUEUED_MODE=0
+WIN=""; N=""; INPUT_MODE=0; QUEUED_MODE=0; AUTHORSHIP_MODE=0
 QUEUED_HINT_TEXT="${AGENTIC_QUEUED_HINT:-Press up to edit queued messages}"
 for a in "$@"; do
     case "$a" in
-        --input)  INPUT_MODE=1 ;;
-        --queued) QUEUED_MODE=1 ;;
+        --input)      INPUT_MODE=1 ;;
+        --queued)     QUEUED_MODE=1 ;;
+        --authorship) AUTHORSHIP_MODE=1 ;;
         *) if [ -z "$WIN" ]; then WIN="$a"; else N="$a"; fi ;;
     esac
 done
-: "${WIN:?usage: window-peek.sh list | window-peek.sh <window-id> [lines] | window-peek.sh <window-id> --input|--queued}"
+: "${WIN:?usage: window-peek.sh list | window-peek.sh <window-id> [lines] | window-peek.sh <window-id> --input|--queued|--authorship}"
 N="${N:-15}"
+
+# The env var every orchestrated launch path exports. Searched for in the window's SCROLLBACK,
+# where the launch command line is echoed by the shell. Presence proves the session cannot
+# render a generated composer suggestion; absence proves nothing (see the header).
+SUGGESTION_KILL="CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0"
+
+# 0 = provably off, 3 = unproven. `history` (full scrollback) not `contents` (visible screen):
+# the launch line scrolls out of view within seconds but stays in the buffer for a long time.
+suggestions_provably_off() {
+    osascript -e "tell application \"Terminal\" to return (history of window id $WIN)" 2>/dev/null \
+        | grep -qF "$SUGGESTION_KILL"
+}
+
+if [ "$AUTHORSHIP_MODE" -eq 1 ]; then
+    if suggestions_provably_off; then
+        echo "suggestions OFF (launch line in scrollback) — composer text in window $WIN is not generated"
+        exit 0
+    fi
+    echo "window-peek: UNPROVEN for window $WIN — no '$SUGGESTION_KILL' in the scrollback." >&2
+    echo "  This is NOT proof suggestions are on: the launch line may have scrolled out of the" >&2
+    echo "  buffer, or the session was started by hand. Treat composer text as unverified-authorship." >&2
+    exit 3
+fi
 
 CONTENTS="$(osascript -e "tell application \"Terminal\" to get contents of window id $WIN" 2>/dev/null)"
 if [ -z "$CONTENTS" ]; then
@@ -97,7 +159,23 @@ if [ "$INPUT_MODE" -eq 1 ]; then
         echo "window-peek: input box empty for window $WIN" >&2
         exit 3
     fi
+    # The text goes to stdout unchanged (callers parse it). The banner goes to stderr, so it
+    # reaches a human reading the run and cannot corrupt a pipeline. It is printed on EVERY
+    # hit, not on a heuristic: the whole point is that this layer cannot tell the two cases
+    # apart, and a warning that only fires when we think it matters is a warning that will be
+    # missing on the day it does.
     printf '%s\n' "$PENDING"
+    if suggestions_provably_off; then
+        echo "window-peek: authorship OK — suggestions are provably off in window $WIN," >&2
+        echo "  so this text was put there by a human or by us. It is still UNSUBMITTED:" >&2
+        echo "  a human confirms it is theirs before anything submits it." >&2
+    else
+        echo "window-peek: UNVERIFIED AUTHORSHIP — this may be Claude Code's own generated grey" >&2
+        echo "  suggestion, which is byte-identical to typed text once colour is stripped." >&2
+        echo "  DO NOT SUBMIT IT. Alert a human and let them confirm they typed it." >&2
+        echo "  (Orchestrated windows launch with $SUGGESTION_KILL; this one shows no such" >&2
+        echo "   launch line, so the ambiguity is real here.)" >&2
+    fi
     exit 0
 fi
 

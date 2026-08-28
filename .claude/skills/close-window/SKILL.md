@@ -197,7 +197,29 @@ osascript -e "tell application \"Terminal\" to close (first window whose id is $
 RESULT="WARNING: window id $WIN_ID may still be open — retry /close-window or click the red X"
 for _i in 1 2 3 4 5 6; do
   sleep 0.4
-  osascript >/dev/null 2>&1 <<'OSA' || true
+  # REFUSE ON AMBIGUITY. This clicks a destructive button ("Terminate" kills that window's
+  # processes) on a window it identifies by UI state, not by id — System Events cannot see
+  # Terminal's window ids. With one sheet on screen that is unambiguous. With two, we cannot
+  # tell ours from a sheet the operator raised on a live dev session, so we click NEITHER and
+  # say so: killing somebody else's running sprint to tidy up a tab is not a trade we make.
+  SHEETS=$(osascript 2>/dev/null <<'OSA' || echo 0
+tell application "System Events"
+  if not (exists process "Terminal") then return 0
+  tell process "Terminal"
+    set n to 0
+    repeat with w in windows
+      if (exists sheet 1 of w) and (exists button "Terminate" of sheet 1 of w) then set n to n + 1
+    end repeat
+    return n
+  end tell
+end tell
+OSA
+)
+  if [ "${SHEETS:-0}" -gt 1 ]; then
+    echo "  NOTE: $SHEETS Terminal windows are showing a Terminate sheet. Not clicking any of" >&2
+    echo "  them — one may belong to a live session. Click the sheet on window $WIN_ID yourself." >&2
+  elif [ "${SHEETS:-0}" -eq 1 ]; then
+    osascript >/dev/null 2>&1 <<'OSA' || true
 tell application "System Events"
   if exists process "Terminal" then
     tell process "Terminal"
@@ -210,6 +232,7 @@ tell application "System Events"
   end if
 end tell
 OSA
+  fi
   STILL=$(osascript -e "tell application \"Terminal\" to ((id of windows) contains $WIN_ID)" 2>/dev/null || echo "true")
   if [ "$STILL" = "false" ]; then RESULT="closed window id $WIN_ID (processes terminated, window closed)"; break; fi
 done

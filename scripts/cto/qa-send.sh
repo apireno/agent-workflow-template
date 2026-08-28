@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # qa-send.sh <window-id> <message-file> [--no-return] [--verify-submit [tries]]
 #                                      [--repo <path> | --transcript <file>] [--type]
+#                                      [--submit-composer-text <who-confirmed-authorship>]
 #
 # Inject the contents of <message-file> into the Claude Code session running in the Terminal
 # window with the given id. Reads the message from a FILE so neither the message text nor the
@@ -37,6 +38,33 @@
 # STOP orders, corrections). Without a transcript this script will NOT claim a message was
 # processed — it says DELIVERED and names what it could not verify.
 #
+# ── AUTHORSHIP: WHAT THIS SCRIPT MAY AND MAY NOT SUBMIT ──────────────────────────────────
+# Everything above is about a message WE wrote: authorship is the sender's, and the guards
+# only ask whether it arrived. A different and more dangerous act shares the same keystroke
+# path — submitting text that was ALREADY in the target's composer, which we did not write.
+#
+# That is barred by default, because the composer is not attributable. Claude Code renders
+# its own generated inline suggestion in the same cells as typed text, differing only by
+# colour, and every window read here strips colour: a suggestion and a human's unsubmitted
+# draft are byte-identical. Submitting one hands the session its own advice back under its
+# principal's authority. On 2026-08-27 exactly that was attempted twice against a live dev
+# window on a watcher signal; only a busy composer stopped it.
+#
+# The concrete shape it took is a WHITESPACE-ONLY message file — a lone space is the
+# smallest payload that makes the composer register an edit and submit what is already
+# there. So a whitespace-only payload is REFUSED here unless the caller passes
+#
+#     --submit-composer-text "<who confirmed they typed it>"
+#
+# which requires a named human attestation, refuses on an empty composer, and prints the
+# exact text being submitted before it presses Return. Watchers never get to pass it: a
+# watcher signal is not a human. Detection ALERTS; a human confirms; only then does this run.
+#
+# (The internal nudge in --verify-submit stage 1 also sends a bare space, and that one is
+# safe for the reason this whole section is about: it fires ONLY while the box still matches
+# the head of OUR message, so the text it submits is text we wrote. It never reaches this
+# argument path.)
+#
 # ── INJECTION MODE ───────────────────────────────────────────────────────────────────────
 # Default is CLIPBOARD PASTE (⌘V), not per-character typing. Typing a 2KB message holds the
 # keyboard for seconds, and twice on 2026-08-13 focus moved DURING that window and fragments
@@ -54,6 +82,7 @@
 # Exit codes:  0 delivered (and processed, when a transcript was given) · 1 usage/IO
 #              4 FOCUS GUARD abort (nothing sent) · 5 --verify-submit could not confirm
 #              6 submitted but NOT processed by the session (queued and dropped, or still busy)
+#              7 REFUSED — whitespace-only payload without a human authorship attestation
 
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,7 +93,7 @@ shift 2
 [ -f "$MSGFILE" ] || { echo "ERROR: message file not found: $MSGFILE"; exit 1; }
 case "$WIN" in ''|*[!0-9]*) echo "ERROR: window id must be numeric, got '$WIN'"; exit 1 ;; esac
 
-NORETURN="0"; VERIFY=0; TRIES=5; REPO=""; TRANSCRIPT=""
+NORETURN="0"; VERIFY=0; TRIES=5; REPO=""; TRANSCRIPT=""; ATTESTED_BY=""
 SEND_MODE="${AGENTIC_SEND_MODE:-paste}"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -73,6 +102,8 @@ while [ $# -gt 0 ]; do
         --paste)         SEND_MODE="paste"; shift ;;
         --repo)          REPO="${2:?--repo needs a path}"; shift 2 ;;
         --transcript)    TRANSCRIPT="${2:?--transcript needs a file}"; shift 2 ;;
+        --submit-composer-text)
+                         ATTESTED_BY="${2:?--submit-composer-text needs the name of the human who confirmed they typed the text}"; shift 2 ;;
         --verify-submit) VERIFY=1; shift
                          case "${1:-}" in ''|*[!0-9]*) ;; *) TRIES="$1"; shift ;; esac ;;
         *) echo "ERROR: unknown argument '$1'"; exit 1 ;;
@@ -84,6 +115,45 @@ fi
 
 MSG="$(cat "$MSGFILE")"
 [ -n "$MSG" ] || { echo "ERROR: message file is empty: $MSGFILE"; exit 1; }
+
+# ── THE AUTHORSHIP GATE ──────────────────────────────────────────────────────────────────
+# A whitespace-only payload carries no message. Its only effect is to make the target's
+# composer register an edit and SUBMIT WHATEVER IS ALREADY IN IT — text this script did not
+# write and cannot attribute. See the header: that text may be Claude Code's own generated
+# suggestion, and a window read cannot tell. This is the guard for the 2026-08-27 near-miss.
+if [ -z "$(printf '%s' "$MSG" | tr -d '[:space:]')" ]; then
+    if [ -z "$ATTESTED_BY" ]; then
+        echo "qa-send: REFUSED — '$MSGFILE' holds only whitespace." >&2
+        echo "  A whitespace payload does not send a message; it SUBMITS whatever is already in" >&2
+        echo "  window $WIN's composer. That text is UNVERIFIED-AUTHORSHIP: Claude Code's own grey" >&2
+        echo "  suggestion is byte-identical to a human draft once a window read strips colour, so" >&2
+        echo "  submitting it can feed the session its own advice under its principal's authority." >&2
+        echo "" >&2
+        echo "  A watcher signal is NOT authorization. Show the text to a human first:" >&2
+        echo "      bash $HERE/window-peek.sh $WIN --input" >&2
+        echo "  and if they confirm they typed it, re-run naming them:" >&2
+        echo "      bash $HERE/qa-send.sh $WIN $MSGFILE --submit-composer-text \"<their name>\"" >&2
+        echo "  To send a message of your own instead, put the message in the file." >&2
+        exit 7
+    fi
+    # Attested path. Refuse on an empty composer (nothing to submit — a bare space would just
+    # add a stray character), and print the exact text so the attestation is on the record.
+    COMPOSER="$(bash "$HERE/window-peek.sh" "$WIN" --input 2>/dev/null)"
+    if [ -z "$COMPOSER" ]; then
+        echo "qa-send: REFUSED — window $WIN's composer is empty; there is nothing to submit." >&2
+        echo "  (A whitespace payload into an empty box types a stray space, nothing more.)" >&2
+        exit 7
+    fi
+    echo "qa-send: SUBMITTING COMPOSER TEXT of window $WIN on the authority of: $ATTESTED_BY" >&2
+    echo "  text being submitted (authorship attested, NOT verified by this script):" >&2
+    echo "    $(printf '%s' "$COMPOSER" | cut -c1-160)" >&2
+    if bash "$HERE/window-peek.sh" "$WIN" --authorship >/dev/null 2>&1; then
+        echo "  corroborating: suggestions are provably off in this window, so it is not generated." >&2
+    else
+        echo "  NOTE: suggestions are NOT provably off in this window. $ATTESTED_BY's confirmation" >&2
+        echo "  is the ONLY thing distinguishing this text from a generated suggestion." >&2
+    fi
+fi
 
 # Marker that the target session is BUSY. Tracks a vendor's TUI, so it is overridable and
 # shared with watch-file-or-prompt.sh — set it once for both. A watcher that silently stops

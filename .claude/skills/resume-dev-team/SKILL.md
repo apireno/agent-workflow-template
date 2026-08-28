@@ -126,11 +126,15 @@ echo "Last activity: $(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$JSONL")"
 echo ""
 
 # Open new Terminal tab running claude --resume
+# CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0: no grey composer suggestions in an
+# ORCHESTRATED window. Window peeks read plain text with colour stripped, so a
+# generated suggestion is byte-identical to a human draft and a watcher can submit
+# the session its own advice as if the CEO typed it (2026-08-27). Off at the source.
 echo "Opening Terminal tab with claude --resume..."
 osascript <<APPLESCRIPT 2>&1 | tail -1
 tell application "Terminal"
     activate
-    do script "cd $REPO_PATH && echo '[resume] resuming session $SESSION_ID for $REPO_NAME...' && claude --resume $SESSION_ID"
+    do script "cd $REPO_PATH && export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && echo '[resume] resuming session $SESSION_ID for $REPO_NAME...' && claude --resume $SESSION_ID"
 end tell
 APPLESCRIPT
 
