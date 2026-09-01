@@ -42,7 +42,12 @@ if [ -d "$INBOX" ]; then
   count=$(ls "$INBOX"/*.md 2>/dev/null | wc -l | tr -d ' ')
   echo "  $count pending escalation(s) in $INBOX"
   if [ "$count" -gt 0 ]; then
-    ls -lt "$INBOX"/*.md 2>/dev/null | head -5 | awk '{print "    " $6, $7, $8, $9}'
+    # A read loop, not `ls -lt | awk` on column numbers: awk field references are
+    # dollar-digit tokens, which the skill runtime rewrites with invocation-argument text
+    # before awk ever parses the program. (It also stops depending on ls column layout.)
+    ls -t "$INBOX"/*.md 2>/dev/null | head -5 | while IFS= read -r _f; do
+      printf '    %s  %s\n' "$(date -r "$_f" '+%Y-%m-%d %H:%M' 2>/dev/null)" "$(basename "$_f")"
+    done
   fi
 else
   echo "  no inbox configured (~/.cto/inbox does not exist — Sprint B work)"

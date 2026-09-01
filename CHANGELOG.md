@@ -6,6 +6,52 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-09-01 — the CTO-home anchor never worked (skill argument rewriting)
+
+Reported from the field: `/handoff` failing "no CTO home found" regardless of cwd and
+regardless of the `~/.cto/home` anchor the error message recommends. The report was right on
+root cause and evidence, and understated the impact.
+
+The skill runtime rewrites argument placeholders in SKILL.md before the shell runs, and its
+regex matches any dollar-digit token. Measured against a probe skill: it is document-wide with
+no code-fence awareness (comments and prose included), there is no escape (a backslash renders
+it **empty**), it beats the shell (a function's own positional is replaced before bash sees it,
+so the caller's real argument is discarded), and with no arguments it substitutes nothing.
+
+That last property is why this is not "broken when passed arguments" but **never worked**. The
+anchor's first test renders as `[ -n "" ]`, so it fails for every candidate on every path —
+env vars, the upward walk, the `~/.cto/home` fallback. Executed while standing in the CTO home,
+the case that cannot fail, it still printed "no CTO home found". So for six weeks `/handoff`
+was hard-down and the other eleven anchor-carrying skills fell back to the cwd repo 100% of the
+time, saved only by the CEO usually standing in the right place. The block exists to stop
+relying on exactly that luck. `dirname: illegal option -- -` was the same bug waving, read as
+cosmetic noise for two weeks.
+
+Introduced here, in `ed27f56`, by the fix for the *previous* anchoring defect. The block written
+to replace a confident wrong answer about which repo we are in shipped as a confident wrong
+answer about which repo we are in.
+
+Fixed: no positional parameters in the anchor at all (named variables; brace-wrapped positionals
+survive the rewrite and are deliberately not used, because the next person to write the bare form
+reintroduces a silent bug). Lint **CHECK E** flags any dollar-digit token anywhere in a SKILL.md,
+whole-document to match the runtime's own scope. That found four more offenders the report did not
+reach: `awk '{print $6}'` in `digest` (awk field references are the same token class), functions
+taking positionals in `lane-check` and `vp-review`, and `$0` written in prose meaning *zero
+dollars*, rendered to the reader as argument text. Also `dirname --`, and a failure message that
+no longer recommends the remedy you have already applied.
+
+Verified by the property that matters: substituting argument text into all 18 SKILL.md files is
+now a byte-for-byte no-op. Plus the anchor resolving from a drifted dev repo, CHECK E catching an
+injected regression, and a live `/escalate-drain` with the exact failing argument shape.
+
+The lesson: `/handoff` already carried a comment — written when the anchor was — saying not to use
+awk field references *because the harness substitutes them*. Correct diagnosis of this exact
+defect, forty lines from where the broken block was pasted in, recorded as a local quirk instead of
+a rule about the rendering layer. A finding written down where it was found does not generalise.
+CHECK E is that finding written down as a rule.
+
+RCA: `docs/memos/2026-09-01-rca-skill-argument-rewriting.md`.
+
 ## 2026-08-27 — composer suggestions are not directives (authorship guards)
 
 A watcher reported *stranded input* in a live dev-team session and, per standing doctrine,

@@ -25,8 +25,10 @@ for tok in $ARGS; do
   esac
 done
 
+# Takes its argument in _LC_REPO, not a positional: the skill runtime rewrites every
+# dollar-digit token in this file with invocation-argument text before the shell sees it.
 run_one() {
-  local repo="$1" lint
+  local repo="$_LC_REPO" lint
   lint="$repo/scripts/agentic/lane-boundary-lint.sh"
   [ -x "$lint" ] || lint="$ROOT/scripts/agentic/lane-boundary-lint.sh"
   echo "=== $(basename "$repo") ==="
@@ -35,7 +37,7 @@ run_one() {
 }
 
 if [ "$ALL" -eq 1 ] && [ -f "$ROOT/.cto/projects.yaml" ]; then
-  python3 - "$ROOT/.cto/projects.yaml" <<'PY' | while IFS= read -r p; do [ -d "$p" ] && run_one "$p"; done
+  python3 - "$ROOT/.cto/projects.yaml" <<'PY' | while IFS= read -r p; do [ -d "$p" ] && { _LC_REPO="$p"; run_one; }; done
 import re,sys
 t=open(sys.argv[1]).read()
 for b in re.split(r'(?=- name:)',t):
@@ -43,7 +45,7 @@ for b in re.split(r'(?=- name:)',t):
     if p and ((a is None) or a.group(1).lower() not in ('false','no','0')): print(p.group(1))
 PY
 else
-  run_one "${TARGET:-$ROOT}"
+  _LC_REPO="${TARGET:-$ROOT}"; run_one
 fi
 ```
 

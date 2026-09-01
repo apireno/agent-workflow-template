@@ -140,9 +140,9 @@ exists, and a list of candidate sibling repos. Walk the CEO through onboarding:
    - **kimi (recommended)** — OpenRouter `moonshotai/kimi-k2.6`. Cross-**family**, so a VP
      verdict is genuinely independent of the model that wrote the work. Pennies per review,
      non-Anthropic; needs `OPENROUTER_API_KEY` (the prerequisite check above reports it).
-   - **subagent** — in-session Agent calls. $0, no API key. Same-family: Claude reviewing
+   - **subagent** — in-session Agent calls. Free, no API key. Same-family: Claude reviewing
      Claude, a weaker accept-gate.
-   - **handoff** — review runs in its own interactive Claude window. $0, slowest.
+   - **handoff** — review runs in its own interactive Claude window. Free, slowest.
 
    Apply it to **this clone** (the CTO home) — that file is what makes it the project default:
 

@@ -19,7 +19,18 @@
 #            A later block referencing $ROOT/$CTO_REGISTRY without re-anchoring silently uses
 #            an empty value. /sprint-status' second block did exactly this.
 #
-# --apply rewrites the anchor block in place (CHECK B only); A and C are report-only because
+#   CHECK E  a positional parameter inside a `!` block
+#            The skill runtime rewrites every dollar-followed-by-digits token in the FILE with
+#            the invocation's arguments before the shell runs — document-wide, no code-fence
+#            awareness, no escape (a backslash renders it empty), comments and string literals
+#            included. So a shell function's own positional parameter silently becomes argument
+#            text, and awk's field references (dollar-1, dollar-3) become it too. The CTO-home
+#            anchor block shipped with positional parameters and was broken from day one: it
+#            tested a garbage path on every candidate, never matched, and every skill fell back
+#            to the cwd repo while reporting success. Use named variables. Read arguments from
+#            $ARGUMENTS, which is the supported form and is not affected.
+#
+# --apply rewrites the anchor block in place (CHECK B only); A, C and E are report-only because
 # their fixes are not mechanical.
 #
 # Exit: 0 clean · 1 findings
@@ -255,6 +266,31 @@ for dirpath, _dirs, files in os.walk(os.path.join(root, "scripts")):
                         f"\"$(dirname \"${{BASH_SOURCE[0]}}\")\" instead."
                     )
                     break
+
+# ── CHECK E: positional parameters inside a `!` block ─────────────────────────────────────
+# The runtime's substitution regex is `$ARGUMENTS[<digits>]`, `$ARGUMENTS`, or a bare
+# `$<digits>` not followed by a word character — applied to the whole document. Only the
+# ARGUMENTS forms are a supported way to read invocation arguments; a bare `$<digits>` is
+# always either a shell positional or an awk field, and both are silently destroyed.
+POSITIONAL = re.compile(r"\$\d+(?!\w)")
+for name in sorted(os.listdir(skills_dir)):
+    p = os.path.join(skills_dir, name, "SKILL.md")
+    if not os.path.isfile(p):
+        continue
+    rel = os.path.relpath(p, root)
+    # WHOLE FILE, not just the `!` blocks: the rewrite has no code-fence awareness, so it also
+    # corrupts comments and prose. A "$0" written to mean zero dollars renders as argument text
+    # in the doc the CEO reads — same defect, lower stakes, and confusing in exactly the same way.
+    for off, line in enumerate(open(p).read().split("\n"), 1):
+        if "positional-ok" in line:
+            continue
+        m = POSITIONAL.search(line)
+        if m:
+            findings.append(
+                f"E  {rel}:{off}  `{m.group(0)}` — the skill runtime replaces every dollar-digit "
+                f"token in this FILE with invocation-argument text before the shell, awk, or the "
+                f"reader sees it. Use a named variable; read arguments from the ARGUMENTS placeholder."
+            )
 
 if findings:
     print(f"lint-skills: {len(findings)} finding(s)\n")

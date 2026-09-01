@@ -194,9 +194,9 @@ now rather than a surprise at the first accept gate. Run
 - **kimi (recommended)** — OpenRouter `moonshotai/kimi-k2.6`. Cross-**family** reviewer, so a
   VP verdict is genuinely independent of the model that wrote the work. Metered but
   non-Anthropic (pennies per review); needs `OPENROUTER_API_KEY`.
-- **subagent** — in-session Agent calls. $0, no API key, no external CLI. Same-family: Claude
+- **subagent** — in-session Agent calls. Free, no API key, no external CLI. Same-family: Claude
   reviewing Claude, which is a weaker accept-gate.
-- **handoff** — the review runs in its own interactive Claude window. $0, slowest; use when a
+- **handoff** — the review runs in its own interactive Claude window. Free, slowest; use when a
   review needs tools.
 
 State the tradeoff plainly — independence versus pennies — and recommend `kimi` for any
