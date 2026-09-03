@@ -6,6 +6,39 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-09-03 — dev tabs inherited a Fable default nobody set here
+
+Reported from the field: several `/handoff` windows ran on Fable rather than the Opus default,
+and the CTO agent had not instructed a model change. It hadn't, and neither had any script.
+
+`/model` does two things under one keystroke: it changes the window you typed it in, **and** it
+writes the choice as the machine-global default for every session started afterwards. A
+selection made in the CTO-home window at 2026-09-02T01:43:54Z was inherited twenty minutes
+later by all three tabs of a `/handoff` fan-out — proven at message #1 of each transcript, so
+nothing switched mid-session; each tab was born on Fable. A fourth handoff four hours later did
+the same. The picker's own wording has changed under us: transcripts from v2.1.145 record "for
+this session", v2.1.156 onward record "and saved as your default for new sessions". The habit
+outlived the semantics.
+
+Nothing in this repo pins a model — no `--model`, no `ANTHROPIC_MODEL`, no `"model"` key in any
+shipped settings file — and that is correct behaviour, not the bug. The bug is that the value
+deciding the cost of every orchestrated session is held in state this repo cannot see, and a
+tab on the wrong model still produces perfectly good work. Nothing fails; the quota reports it
+days later without naming the sprint that spent it.
+
+Fix is observation, not pinning — pinning would trade a silent wrong model for a silent stale
+one. New `scripts/cto/check-fleet-model.sh`: `--audit` asserts no launch site pins a model
+(the standing answer to "are the handoff scripts setting it?"), default mode reads the model
+each session **actually ran on** out of its own JSONL and exits 3 on drift, because
+configuration does not hold that answer and the transcript does. Wired into `preflight.sh` for
+CTO homes only, and into `/handoff` as a post-launch check that prints the model each tab
+started on before the CTO reports the handoff as done.
+
+Operator note carried in both: a running session keeps the model it started on, so correcting
+the global default does not move a live tab.
+
+RCA: `docs/memos/2026-09-03-rca-handoff-model-inheritance.md`.
+
 ## 2026-09-01 — the CTO-home anchor never worked (skill argument rewriting)
 
 Reported from the field: `/handoff` failing "no CTO home found" regardless of cwd and

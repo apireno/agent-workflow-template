@@ -171,6 +171,28 @@ if [ -f "$REPO_ROOT/scripts/agentic/wrap-untrusted.sh" ]; then
     fi
 fi
 
+# ─── 8. Model drift (CTO homes only) ─────────────────────────────────────────
+# Claude Code's /model picker saves the choice as the MACHINE-GLOBAL default for
+# new sessions. Every dev tab /handoff opens inherits it. Nothing in this repo
+# pins a model, so a model chosen once in the CTO window silently becomes the
+# model the whole fleet runs on until someone notices the quota. See
+# docs/memos/2026-09-03-rca-handoff-model-inheritance.md.
+REPO_NAME="$(basename "$REPO_ROOT")"
+case "$REPO_NAME" in
+    agent-workflow-template|*-cto)
+        if [ -x "$REPO_ROOT/scripts/cto/check-fleet-model.sh" ]; then
+            MODEL_OUT="$("$REPO_ROOT/scripts/cto/check-fleet-model.sh" 2>/dev/null)"
+            if [ $? -eq 3 ]; then
+                emit_warning "model drift across the fleet — a session is running on a model that is not the default:"
+                echo "$MODEL_OUT" | grep -E 'DRIFT|^  REPO|^  ----' | sed 's/^/    /'
+                echo "    Nothing in this repo pins a model. The source is /model, which saves"
+                echo "    the choice as the default for NEW sessions — so it propagates to every"
+                echo "    tab /handoff opens next. Fix in the affected window with /model."
+            fi
+        fi
+        ;;
+esac
+
 # ─── Summary line (always emitted) ───────────────────────────────────────────
 echo ""
 if [ "$CRITICAL_FAILURES" -gt 0 ]; then

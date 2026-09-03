@@ -423,6 +423,67 @@ APPLESCRIPT
 done
 echo ""
 echo "All sessions launched with auto-kickoff prompt."
+
+# ─── Model inheritance check (RCA 2026-09-03) ────────────────────────────────
+# Nothing above sets a model, and that is the problem: each tab inherits the
+# MACHINE-GLOBAL default, which Claude Code's /model picker rewrites ("saved as
+# your default for new sessions"). A model chosen once in the CTO window becomes
+# the model every dev tab launched afterwards runs on, silently, until the quota
+# says so. Report what the tabs ACTUALLY started on — read from their own
+# transcripts, not from config, because no config records it.
+# See docs/memos/2026-09-03-rca-handoff-model-inheritance.md.
+echo ""
+echo "Verifying the model each tab actually started on..."
+LAUNCH_EPOCH=$(date +%s)
+sleep 20
+for ATTEMPT in 1 2 3 4 5 6; do
+  MISSING=0
+  MODEL_LINES=""
+  for REPO_PATH in $PATHS_TO_OPEN; do
+    REPO_NAME=$(basename "$REPO_PATH")
+    PROJ_DIR="$HOME/.claude/projects/$(echo "$REPO_PATH" | sed 's|/|-|g')"
+    M=$(python3 - "$PROJ_DIR" "$LAUNCH_EPOCH" <<'PYMODEL'
+import glob, json, os, sys
+proj, since = sys.argv[1], float(sys.argv[2])
+best = None
+for f in glob.glob(os.path.join(proj, "*.jsonl")):
+    if os.stat(f).st_mtime < since - 60:
+        continue
+    with open(f, errors="ignore") as fh:
+        for line in fh:
+            if '"model"' not in line:
+                continue
+            try:
+                o = json.loads(line)
+            except Exception:
+                continue
+            msg = o.get("message")
+            m = msg.get("model") if isinstance(msg, dict) else None
+            if m and m != "<synthetic>":
+                best = m
+                break
+    if best:
+        break
+print(best or "")
+PYMODEL
+)
+    if [ -z "$M" ]; then MISSING=1; M="(no assistant turn yet)"; fi
+    MODEL_LINES="$MODEL_LINES  $REPO_NAME -> $M"$'\n'
+  done
+  [ "$MISSING" -eq 0 ] && break
+  sleep 10
+done
+printf '%s' "$MODEL_LINES"
+OFF_DEFAULT=$(printf '%s' "$MODEL_LINES" | grep 'claude-' | grep -vc "${CTO_EXPECTED_MODEL:-opus}")
+if [ "${OFF_DEFAULT:-0}" -gt 0 ]; then
+  echo ""
+  echo "  WARN: $OFF_DEFAULT tab(s) did NOT start on the expected default (${CTO_EXPECTED_MODEL:-opus})."
+  echo "  Nothing in this skill sets a model — they inherited the machine-global default"
+  echo "  that Claude Code's /model picker writes. If that is not what you intended: run"
+  echo "  /model in each affected window (a running session keeps the model it started on"
+  echo "  until /model is run INSIDE it), or /close-window and re-run /handoff after"
+  echo "  resetting the default. Check any time with scripts/cto/check-fleet-model.sh."
+fi
 ```
 
 ## Your task as CTO
