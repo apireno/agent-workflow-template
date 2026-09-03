@@ -1,0 +1,34 @@
+# .cto/devteam-model — the model ORCHESTRATED windows run on.
+#
+# Copy to `.cto/devteam-model` to change it. With no file, the built-in default
+# `opus` applies, which is what you want if the answer is "the account default".
+#
+# WHY THIS FILE EXISTS: Claude Code's /model picker changes the window you type it
+# in AND saves the choice as the machine-global default for every session started
+# afterwards. A launcher that passes no model inherits that — which is how a Fable
+# pick in a CTO window ended up running three dev tabs on 2026-09-02 (see
+# docs/memos/2026-09-03-rca-handoff-model-inheritance.md). `claude --model X` is
+# scoped to the session it launches and writes nothing back, so pinning here means
+# the CEO can pick freely in the CTO window without it reaching the fleet.
+#
+# Consumed by scripts/cto/resolve-devteam-model.sh, which /handoff,
+# /resume-dev-team and qa-drive-claude.sh all resolve through.
+# Precedence: DEVTEAM_MODEL env var > this file > built-in `opus`.
+
+# ── the fleet default: first bare line wins ──────────────────────────────────
+# Prefer an ALIAS — it tracks the latest model of that family. A pinned full name
+# silently ages into a retired one.
+opus
+
+# Use a full name only for a variant an alias does not select — e.g. the 1M-context
+# build, which is worth it for long sprints but must be revisited each model release:
+#   claude-opus-5[1m]
+
+# ── optional per-repo overrides, one per line ────────────────────────────────
+#   acme-tuner=fable
+#   acme-demo-app=sonnet
+
+# ── opt out entirely (NOT recommended) ───────────────────────────────────────
+# `inherit` passes no --model flag and restores the pre-2026-09-03 behaviour:
+# every tab takes whatever /model last saved, in any window, silently.
+#   inherit

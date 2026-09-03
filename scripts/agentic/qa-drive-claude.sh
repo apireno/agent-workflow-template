@@ -159,11 +159,22 @@ PY
 # ORCHESTRATED window. Window peeks read plain text with colour stripped, so a
 # generated suggestion is byte-identical to a human draft and a watcher can submit
 # the session its own advice as if the CEO typed it (2026-08-27). Off at the source.
+# MODEL PIN (RCA 2026-09-03) — a QA drive is an orchestrated window too, so it must
+# not inherit whatever /model last saved globally. Same resolver as /handoff; empty
+# means the configured value is `inherit`, in which case no flag is passed.
+QA_MODEL="$(bash "$(dirname "${BASH_SOURCE[0]}")/../cto/resolve-devteam-model.sh" 2>/dev/null)"
+if [ -n "$QA_MODEL" ]; then
+  MODEL_FLAG="--model '$QA_MODEL' "
+  echo "qa-drive-claude: model pin $QA_MODEL"
+else
+  MODEL_FLAG=""
+fi
+
 echo "qa-drive-claude: launching interactive claude in $ROOT ..."
 TAB_INFO=$(osascript 2>&1 <<APPLESCRIPT | tail -1
 tell application "Terminal"
   activate
-  set newTab to do script "cd $ROOT && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && claude"
+  set newTab to do script "cd $ROOT && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && claude $MODEL_FLAG"
   set custom title of newTab to "qa-ux · $(basename "$SPRINT_DIR")"
   newTab
 end tell

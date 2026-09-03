@@ -23,7 +23,16 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-EXPECTED="${CTO_EXPECTED_MODEL:-opus}"
+# What SHOULD a session be on? The configured dev-tab pin, reduced to its family
+# word so an alias ('opus') and a full name ('claude-opus-5[1m]') both match the
+# 'claude-opus-5' a transcript records. CTO_EXPECTED_MODEL overrides; 'opus' is the
+# floor when nothing is configured.
+EXPECTED="${CTO_EXPECTED_MODEL:-}"
+if [ -z "$EXPECTED" ]; then
+    EXPECTED="$("$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-devteam-model.sh" 2>/dev/null \
+                | sed -E 's/^claude-//; s/-[0-9].*$//; s/\[.*//')"
+    [ -z "$EXPECTED" ] && EXPECTED="opus"
+fi
 MODE="observed"
 DAYS="${CTO_MODEL_SCAN_DAYS:-7}"
 
@@ -39,35 +48,57 @@ done
 
 FAIL=0
 
-# ─── audit: does anything we ship pin a model? ───────────────────────────────
+# ─── audit: is the pin explicit and traceable, or hardcoded? ─────────────────
+# Pinning is now CORRECT (RCA 2026-09-03): a launcher that passes no model inherits
+# whatever /model last saved globally. What must never appear is a model name
+# hardcoded at a launch site — that is a second invisible source of truth, and it
+# ages into a retired model without anyone editing the line. Every pin resolves
+# through resolve-devteam-model.sh, so the audit checks the SHAPE of the pin.
 audit() {
-    echo "== static audit: model pinning in launch sites =="
+    echo "== static audit: how launch sites choose a model =="
     local hits=0
 
-    # 1. --model / -m flags on a claude launch, and model env vars
+    # A hardcoded model at a launch site: --model followed by a literal rather than
+    # a shell variable, or a model env var assigned a literal.
     while IFS= read -r line; do
         [ -z "$line" ] && continue
-        echo "  PIN  $line"
+        echo "  HARDCODED  $line"
         hits=$((hits + 1))
-    done < <(grep -rnE -- '--model[ =]|ANTHROPIC_MODEL|ANTHROPIC_SMALL_FAST_MODEL|CLAUDE_MODEL' \
+    done < <(grep -rnE -- "--model[= ]+[\"']?(claude-|opus|sonnet|haiku|fable)|ANTHROPIC_MODEL=[^\"']*[a-z]" \
                  "$ROOT/scripts" "$ROOT/.claude" 2>/dev/null \
-             | grep -v '/check-fleet-model\.sh:')
+             | grep -v '/check-fleet-model\.sh:' \
+             | grep -v '/resolve-devteam-model\.sh:' \
+             | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#')
 
-    # 2. a "model" key in any settings file this repo ships to the fleet
+    # A "model" key in a settings file we ship: silent, per-repo, and invisible at
+    # the launch line. Config that decides cost must be visible where the cost is
+    # incurred.
     while IFS= read -r f; do
         [ -z "$f" ] && continue
         if grep -qE '^[[:space:]]*"model"[[:space:]]*:' "$f" 2>/dev/null; then
-            echo "  PIN  $f  (\"model\" key in a shipped settings file)"
+            echo "  HARDCODED  $f  (\"model\" key in a shipped settings file)"
             hits=$((hits + 1))
         fi
     done < <(find "$ROOT/.claude" -maxdepth 1 -name 'settings*.json*' -type f 2>/dev/null)
 
     if [ "$hits" -eq 0 ]; then
-        echo "  clean — no launch site sets a model. Dev tabs inherit the machine-global"
-        echo "  default, which /model rewrites. Run the observed check below to see what"
-        echo "  that default actually is right now."
+        echo "  clean — no hardcoded model at any launch site."
     else
         FAIL=1
+    fi
+
+    # What WILL the next handoff pass? Resolve it and say so; a pin nobody can read
+    # off is only marginally better than no pin.
+    if [ -x "$HERE/resolve-devteam-model.sh" ]; then
+        local resolved
+        resolved="$("$HERE/resolve-devteam-model.sh" 2>/dev/null)"
+        if [ -n "$resolved" ]; then
+            echo "  dev-tab pin: --model '$resolved'   (resolve-devteam-model.sh)"
+        else
+            echo "  dev-tab pin: NONE — orchestrated tabs inherit the machine-global default"
+            echo "               that /model writes in any window. Set one with:"
+            echo "                   echo opus > \"\$(git rev-parse --show-toplevel)/.cto/devteam-model\""
+        fi
     fi
     echo ""
 }
@@ -127,10 +158,13 @@ case "$MODE" in
            echo "$DRIFT_OUT" | grep -v '^DRIFT_COUNT='
            if echo "$DRIFT_OUT" | grep -q 'DRIFT'; then
                echo "DRIFT: a session ran on a model not matching '${EXPECTED}'."
-               echo "  Nothing here pins a model — the source is Claude Code's own /model picker,"
-               echo "  which saves the choice as the machine-global default for NEW sessions."
-               echo "  A model chosen in the CTO window is the model the next /handoff tab starts on."
-               echo "  Fix: run /model in an affected window and pick the default; then re-run this."
+               echo "  Orchestrated windows (/handoff, /resume-dev-team, qa-drive) are pinned at"
+               echo "  launch, so drift there means one of three things: the session predates the"
+               echo "  pin, it was launched by hand rather than by a launcher, or /model was run"
+               echo "  INSIDE it. A session launched by hand inherits the machine-global default"
+               echo "  that /model saves from any window — the pin cannot reach it."
+               echo "  Fix: run /model in the affected window (a running session keeps the model"
+               echo "  it started on), or close it and re-launch through the launcher."
                FAIL=1
            fi
            ;;
@@ -139,5 +173,5 @@ esac
 if [ "$FAIL" -ne 0 ]; then
     exit 3
 fi
-echo "fleet model: ok — nothing pins a model, no observed drift from '${EXPECTED}'."
+echo "fleet model: ok — pin is resolved not hardcoded, no observed drift from '${EXPECTED}'."
 exit 0

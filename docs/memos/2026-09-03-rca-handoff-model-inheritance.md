@@ -97,6 +97,44 @@ deliberate change too, trading a silent wrong model for a silent stale one.
   a loud warning if it is not the expected default. This closes the gap at the
   moment it opens, rather than at the next session start.
 
+## 4b. Amendment (same day) — separating the two decisions
+
+The first fix was observation only, on the reasoning that pinning trades a silent
+wrong model for a silent stale one. The CEO's actual requirement splits the decision
+in two: *the CTO window's model is a per-task choice I make freely; an orchestrated
+tab's model is a fleet policy that should not move when I make that choice.* One
+global default cannot serve both, so the launchers stop using it.
+
+`claude --model X` is scoped — its own `--help` says "Model for the current
+session" — and writes nothing back to the saved default. That is what makes the
+separation possible: pinning a launched tab does not disturb the CEO's picker, and
+the CEO's picker no longer reaches the tab.
+
+- **`scripts/cto/resolve-devteam-model.sh`** (new) — single source of truth for an
+  orchestrated window's model, in the same shape as `resolve-review-engine.sh`.
+  Precedence: `DEVTEAM_MODEL` env > `.cto/devteam-model` (fleet default plus optional
+  `<repo>=<model>` overrides) > built-in `opus`. The special value `inherit` emits
+  nothing and restores the old behaviour, deliberately and on the record.
+- **`/handoff`** passes the resolved pin per repo and accepts `--model=<x>` for a
+  one-off; **`/resume-dev-team`** resolves the same way, so a crash recovery cannot
+  quietly return a repo to the global default mid-sprint; **`qa-drive-claude.sh`**
+  likewise.
+- The **built-in default is an alias** (`opus`), not a full model name: an alias
+  tracks the latest model of its family, where a pinned full name ages into a retired
+  one without anyone editing the line. Use a full name only for a variant an alias
+  does not select — the 1M-context build being the case that matters for long sprints.
+- The **audit's meaning changed with it.** Pinning is now correct, so `--audit` no
+  longer fails on the presence of a pin; it fails on a *hardcoded* one — a model name
+  written at a launch site, which is a second source of truth that stales silently.
+  Verified in both directions: a planted `--model claude-fable-5-1` at the handoff
+  launch line exits 3, and removing it exits 0.
+- The **post-launch check** now compares against the resolved pin rather than a
+  hardcoded `opus`, so a `--model` flag that failed to apply is caught instead of
+  reading as success.
+
+What remains inherited, by design: any window the CEO opens by hand. The pin reaches
+launcher-spawned tabs only.
+
 ## 5. Operator note
 
 A running session keeps the model it started on. Fixing the global default does

@@ -2,7 +2,7 @@
 name: handoff
 description: Phase 2 execution launcher. Writes per-repo mission briefs to each target repo's docs/sprints/<sprint>/brief.md and opens a Terminal tab per repo running claude interactively; the kickoff prompt tells each session to read its brief. Use when the CEO approves a sprint plan and wants to fan out dev work across repos.
 allowed-tools: Bash(*) Read Write
-argument-hint: <sprint-XX> [--repos repo1,repo2] [--dry-run]
+argument-hint: <sprint-XX> [--repos repo1,repo2] [--model=<alias|full|inherit>] [--dry-run]
 ---
 
 # Phase 2 Handoff: $ARGUMENTS
@@ -137,6 +137,7 @@ DRY_RUN=0
 for tok in $ARGS; do
   case "$tok" in
     --repos=*)   REPOS_FILTER="${tok#--repos=}" ;;
+    --model=*)   DEVTEAM_MODEL="${tok#--model=}"; export DEVTEAM_MODEL ;;
     --dry-run)   DRY_RUN=1 ;;
     --*)         echo "Unknown flag: $tok" >&2 ;;
     *)           [ -z "$SPRINT" ] && SPRINT="$tok" ;;
@@ -144,7 +145,7 @@ for tok in $ARGS; do
 done
 
 if [ -z "$SPRINT" ]; then
-  echo "Usage: /handoff <sprint-XX> [--repos r1,r2] [--dry-run]"
+  echo "Usage: /handoff <sprint-XX> [--repos r1,r2] [--model=<alias|full|inherit>] [--dry-run]"
   exit 1
 fi
 
@@ -396,11 +397,28 @@ for REPO_PATH in $PATHS_TO_OPEN; do
   # source; the human's OWN session keeps its suggestions.
   # The trailing bare `newTab` keeps "tab N of window id NNNN" as the last output
   # line so the window-id parse below still works unchanged.
+  # MODEL PIN (RCA 2026-09-03). A bare `claude` inherits the machine-global default
+  # that /model last wrote in ANY window — that is how a Fable pick in the CTO window
+  # ended up running three dev tabs. `claude --model X` is scoped to "the current
+  # session" and writes nothing back, so pinning here decouples the two: the CEO picks
+  # freely in the CTO window, the tabs get what .cto/devteam-model says. Resolution
+  # (env > .cto/devteam-model incl. per-repo override > built-in `opus`) lives in
+  # scripts/cto/resolve-devteam-model.sh; `inherit` there returns empty = no flag.
+  # Single-quoted below because a full model name can contain brackets (claude-opus-5[1m])
+  # which zsh would try to glob.
+  DEV_MODEL="$(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" "$REPO_NAME" 2>/dev/null)"
+  if [ -n "$DEV_MODEL" ]; then
+    MODEL_FLAG="--model '$DEV_MODEL' "
+    echo "      model: $DEV_MODEL"
+  else
+    MODEL_FLAG=""
+    echo "      model: (inherit — tab takes the machine-global default; see RCA 2026-09-03)"
+  fi
   TAB_TITLE="$REPO_NAME · $SHORT_DESC"
   TAB_INFO=$(osascript <<APPLESCRIPT 2>&1 | tail -1
 tell application "Terminal"
     activate
-    set newTab to do script "cd $REPO_PATH && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && echo '[handoff] launching claude for $REPO_NAME...' && claude \"$KICKOFF\""
+    set newTab to do script "cd $REPO_PATH && export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && echo '[handoff] launching claude for $REPO_NAME...' && claude $MODEL_FLAG\"$KICKOFF\""
     set custom title of newTab to "$TAB_TITLE"
     newTab
 end tell
@@ -474,15 +492,26 @@ PYMODEL
   sleep 10
 done
 printf '%s' "$MODEL_LINES"
-OFF_DEFAULT=$(printf '%s' "$MODEL_LINES" | grep 'claude-' | grep -vc "${CTO_EXPECTED_MODEL:-opus}")
+# What SHOULD each tab be on? The resolved pin if there is one (aliases expand, so
+# match on the family word), else the expected default. This verifies the pin took —
+# a --model flag that silently failed to apply would otherwise look like success.
+EXPECT_WORD="$(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" 2>/dev/null | sed -E 's/^claude-//; s/-[0-9].*$//; s/\[.*//')"
+[ -z "$EXPECT_WORD" ] && EXPECT_WORD="${CTO_EXPECTED_MODEL:-opus}"
+OFF_DEFAULT=$(printf '%s' "$MODEL_LINES" | grep 'claude-' | grep -vc "$EXPECT_WORD")
 if [ "${OFF_DEFAULT:-0}" -gt 0 ]; then
   echo ""
-  echo "  WARN: $OFF_DEFAULT tab(s) did NOT start on the expected default (${CTO_EXPECTED_MODEL:-opus})."
-  echo "  Nothing in this skill sets a model — they inherited the machine-global default"
-  echo "  that Claude Code's /model picker writes. If that is not what you intended: run"
-  echo "  /model in each affected window (a running session keeps the model it started on"
-  echo "  until /model is run INSIDE it), or /close-window and re-run /handoff after"
-  echo "  resetting the default. Check any time with scripts/cto/check-fleet-model.sh."
+  echo "  WARN: $OFF_DEFAULT tab(s) did NOT start on '$EXPECT_WORD'."
+  if [ -n "$DEV_MODEL" ]; then
+    echo "  A --model pin was passed and did NOT take — investigate before trusting the"
+    echo "  next handoff; the pin is the only thing standing between a dev tab and"
+    echo "  whatever /model last saved globally."
+  else
+    echo "  No pin is configured, so the tabs inherited the machine-global default that"
+    echo "  /model writes. Set one: echo opus > .cto/devteam-model"
+  fi
+  echo "  A running session keeps the model it started on — /model must be run INSIDE"
+  echo "  each affected window, or /close-window and re-handoff. Check any time with"
+  echo "  scripts/cto/check-fleet-model.sh."
 fi
 ```
 

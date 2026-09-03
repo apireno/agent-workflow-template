@@ -166,11 +166,23 @@ echo ""
 # ORCHESTRATED window. Window peeks read plain text with colour stripped, so a
 # generated suggestion is byte-identical to a human draft and a watcher can submit
 # the session its own advice as if the CEO typed it (2026-08-27). Off at the source.
+# MODEL PIN (RCA 2026-09-03) — same resolution as /handoff. Without it a crash
+# recovery silently reverts the repo to the machine-global default: the sprint
+# starts pinned, then finishes on whatever /model last saved in some other window.
+DEV_MODEL="$(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" "$REPO_NAME" 2>/dev/null)"
+if [ -n "$DEV_MODEL" ]; then
+  MODEL_FLAG="--model '$DEV_MODEL' "
+  echo "Model pin: $DEV_MODEL"
+else
+  MODEL_FLAG=""
+  echo "Model pin: (inherit — tab takes the machine-global default)"
+fi
+
 echo "Opening Terminal tab with claude --resume..."
 osascript <<APPLESCRIPT 2>&1 | tail -1
 tell application "Terminal"
     activate
-    do script "cd $REPO_PATH && export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && echo '[resume] resuming session $SESSION_ID for $REPO_NAME...' && claude --resume $SESSION_ID"
+    do script "cd $REPO_PATH && export CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 && echo '[resume] resuming session $SESSION_ID for $REPO_NAME...' && claude $MODEL_FLAG--resume $SESSION_ID"
 end tell
 APPLESCRIPT
 

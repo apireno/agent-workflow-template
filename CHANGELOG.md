@@ -6,6 +6,37 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-09-03 — orchestrated windows pin their model; the CTO's picker stops reaching them
+
+Follow-on to the entry below, from the CEO's actual requirement: the CTO window's model
+is a per-task choice made freely, an orchestrated tab's model is fleet policy that must not
+move when that choice is made. One machine-global default cannot serve both, so the
+launchers stop using it.
+
+`claude --model X` is scoped to the session it launches ("Model for the current session",
+per its own --help) and writes nothing back to the saved default. So pinning at launch
+does not disturb the picker, and the picker no longer reaches the tab.
+
+New `scripts/cto/resolve-devteam-model.sh`, same shape as `resolve-review-engine.sh`:
+`DEVTEAM_MODEL` env > `.cto/devteam-model` (fleet default + optional `<repo>=<model>`
+overrides) > built-in `opus`. `inherit` restores the old behaviour deliberately and on the
+record. `/handoff` passes the resolved pin per repo and takes `--model=<x>` for a one-off;
+`/resume-dev-team` resolves identically, so a crash recovery cannot quietly return a repo
+to the global default mid-sprint; `qa-drive-claude.sh` likewise.
+
+The built-in default is an ALIAS, not a full model name — an alias tracks the latest model
+of its family, where a pinned full name ages into a retired one with nobody editing the
+line. Full names are for variants an alias does not select (the 1M-context build).
+
+`check-fleet-model.sh --audit` changed meaning with it: pinning is now correct, so it fails
+on a *hardcoded* model at a launch site rather than on the presence of a pin. Proven both
+directions — a planted `--model claude-fable-5-1` exits 3, removing it exits 0. The
+post-launch check compares against the resolved pin, so a flag that failed to apply is
+caught instead of reading as success.
+
+Windows the CEO opens by hand still inherit the global default. The pin reaches
+launcher-spawned tabs only, which is the whole point.
+
 ## 2026-09-03 — dev tabs inherited a Fable default nobody set here
 
 Reported from the field: several `/handoff` windows ran on Fable rather than the Opus default,
