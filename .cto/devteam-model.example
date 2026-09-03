@@ -1,7 +1,7 @@
 # .cto/devteam-model — the model ORCHESTRATED windows run on.
 #
-# Copy to `.cto/devteam-model` to change it. With no file, the built-in default
-# `opus` applies, which is what you want if the answer is "the account default".
+# Copy to `.cto/devteam-model` to change it. With no file you get `default`, which
+# is what you want if the answer is "whatever Anthropic currently defaults to".
 #
 # WHY THIS FILE EXISTS: Claude Code's /model picker changes the window you type it
 # in AND saves the choice as the machine-global default for every session started
@@ -13,22 +13,34 @@
 #
 # Consumed by scripts/cto/resolve-devteam-model.sh, which /handoff,
 # /resume-dev-team and qa-drive-claude.sh all resolve through.
-# Precedence: DEVTEAM_MODEL env var > this file > built-in `opus`.
+# Precedence: DEVTEAM_MODEL env var > this file > built-in `default`.
 
 # ── the fleet default: first bare line wins ──────────────────────────────────
-# Prefer an ALIAS — it tracks the latest model of that family. A pinned full name
-# silently ages into a retired one.
-opus
+#
+# default   — RECOMMENDED, and the built-in. Resolves at launch to the ACCOUNT
+#             default, so it follows Anthropic as they move it (context variants
+#             included — today that is Opus 5 with 1M). Being a CLI flag, it is
+#             NOT the machine-global default a /model pick rewrites. Tracking
+#             Anthropic and isolation from /model are usually wanted together;
+#             this is the only value that gives both.
+#
+# opus      — an ALIAS. Use when the fleet should sit on a specific FAMILY no
+# sonnet      matter what Anthropic defaults to. Tracks the latest model of that
+# haiku       family so it never stales, but may not select a context variant
+# fable       (plain `opus` is not the 1M build).
+#
+# claude-opus-5[1m]
+#           — a full name. Only when you need one exact build. Ages into a
+#             retired model with nobody editing the line; revisit each release.
+#
+# inherit   — take the machine-global default; no --model flag. This is the
+#             pre-2026-09-03 behaviour and it is NOT "the account default": the
+#             two coincide only until someone runs /model, after which the fleet
+#             follows that pick. If you want "whatever Anthropic defaults to",
+#             the value is `default`, not this.
 
-# Use a full name only for a variant an alias does not select — e.g. the 1M-context
-# build, which is worth it for long sprints but must be revisited each model release:
-#   claude-opus-5[1m]
+default
 
 # ── optional per-repo overrides, one per line ────────────────────────────────
 #   acme-tuner=fable
 #   acme-demo-app=sonnet
-
-# ── opt out entirely (NOT recommended) ───────────────────────────────────────
-# `inherit` passes no --model flag and restores the pre-2026-09-03 behaviour:
-# every tab takes whatever /model last saved, in any window, silently.
-#   inherit

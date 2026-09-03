@@ -135,6 +135,38 @@ the CEO's picker no longer reaches the tab.
 What remains inherited, by design: any window the CEO opens by hand. The pin reaches
 launcher-spawned tabs only.
 
+## 4c. Amendment 2 (same day) — `default` is a value, and it is the right one
+
+The field CTO, wanting the fleet to follow Anthropic's default as it moves, set
+`.cto/devteam-model` to `inherit`. That is expected behaviour for the value, and the
+wrong value for the intent — and the gap was in what was offered, not in the reading.
+`inherit` means *whatever `/model` last saved globally*, which equals the account
+default only until someone runs `/model`. It re-opens exactly this RCA.
+
+The menu shipped `opus` (an alias — tracks a family, not Anthropic's choice, and does
+not select the 1M build) and `inherit` (tracks `/model`). Neither expresses "the
+account default, isolated from `/model`", which is the common want.
+
+`default` does, and it is accepted:
+
+- `claude --model default` produces no catalog warning, where
+  `claude --model bogus-model-xyz` produces `"bogus-model-xyz" isn't described by this
+  version's model catalog` — so it is a known value, not a passthrough string.
+- It reads the ACCOUNT default, not the saved local one: on 2026-07-26 a `/model
+  default` resolved to `claude-opus-4-8[1m]` while the machine-global default saved on
+  2026-07-01 was Sonnet 5.
+- Being a CLI flag, `/model` cannot move it.
+
+So `default` is now a first-class value **and the built-in**, replacing `opus`. It
+also settles the alias-vs-full-name tension recorded in §4b: the account default
+carries its context variant, so `default` gets the 1M build without pinning a name
+that ages.
+
+One honest limitation, surfaced rather than hidden: `default` and `inherit` resolve at
+*launch*, so the drift checker cannot know the expected family statically. It assumes
+`opus` and **prints that it is assuming**, with `CTO_EXPECTED_MODEL` to override when
+the account default moves families.
+
 ## 5. Operator note
 
 A running session keeps the model it started on. Fixing the global default does

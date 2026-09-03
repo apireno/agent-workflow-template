@@ -28,10 +28,19 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 # 'claude-opus-5' a transcript records. CTO_EXPECTED_MODEL overrides; 'opus' is the
 # floor when nothing is configured.
 EXPECTED="${CTO_EXPECTED_MODEL:-}"
+EXPECTED_IS_ASSUMED=0
 if [ -z "$EXPECTED" ]; then
-    EXPECTED="$("$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-devteam-model.sh" 2>/dev/null \
-                | sed -E 's/^claude-//; s/-[0-9].*$//; s/\[.*//')"
-    [ -z "$EXPECTED" ] && EXPECTED="opus"
+    _PIN="$("$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/resolve-devteam-model.sh" 2>/dev/null)"
+    case "$_PIN" in
+        ""|default)
+            # `default` resolves at launch to whatever Anthropic currently defaults to,
+            # and `inherit` to whatever /model last saved — neither is knowable from
+            # here, so the family word is an ASSUMPTION, flagged as one. Override with
+            # CTO_EXPECTED_MODEL when the account default moves off Opus.
+            EXPECTED="opus"; EXPECTED_IS_ASSUMED=1 ;;
+        *)  EXPECTED="$(printf '%s' "$_PIN" | sed -E 's/^claude-//; s/-[0-9].*$//; s/\[.*//')" ;;
+    esac
+    [ -z "$EXPECTED" ] && { EXPECTED="opus"; EXPECTED_IS_ASSUMED=1; }
 fi
 MODE="observed"
 DAYS="${CTO_MODEL_SCAN_DAYS:-7}"
@@ -96,8 +105,10 @@ audit() {
             echo "  dev-tab pin: --model '$resolved'   (resolve-devteam-model.sh)"
         else
             echo "  dev-tab pin: NONE — orchestrated tabs inherit the machine-global default"
-            echo "               that /model writes in any window. Set one with:"
-            echo "                   echo opus > \"\$(git rev-parse --show-toplevel)/.cto/devteam-model\""
+            echo "               that /model writes in any window — which is NOT the account"
+            echo "               default once anyone has run /model. To track Anthropic's"
+            echo "               default AND stay isolated from /model:"
+            echo "                   echo default > <cto-home>/.cto/devteam-model"
         fi
     fi
     echo ""
@@ -106,6 +117,10 @@ audit() {
 # ─── observed: what did each session actually run on? ────────────────────────
 observed() {
     echo "== observed: model per session (last ${DAYS}d, from JSONL transcripts) =="
+    if [ "$EXPECTED_IS_ASSUMED" -eq 1 ]; then
+        echo "  (expecting '${EXPECTED}' — ASSUMED, since the pin resolves at launch rather"
+        echo "   than here. Set CTO_EXPECTED_MODEL if the account default moves families.)"
+    fi
     printf "  %-28s %-10s %-22s %-22s\n" REPO AGE FIRST-MSG-MODEL LAST-MSG-MODEL
     printf "  %-28s %-10s %-22s %-22s\n" "----" "---" "---------------" "--------------"
     local drift

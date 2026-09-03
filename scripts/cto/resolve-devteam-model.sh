@@ -16,22 +16,41 @@
 # PRECEDENCE (highest wins):
 #   1. DEVTEAM_MODEL env var          (per-invocation: DEVTEAM_MODEL=fable /handoff ...)
 #   2. <cto-home>/.cto/devteam-model  (per-fleet default + optional per-repo overrides)
-#   3. built-in default = opus        (an ALIAS — tracks the latest Opus, never stales)
+#   3. built-in default = default     (the ACCOUNT default — see VALUES below)
 #
 # FILE FORMAT (.cto/devteam-model) — blank lines and #-comments ignored:
-#   opus                    <- bare line: the fleet default
+#   default                 <- bare line: the fleet default
 #   acme-tuner=fable        <- optional per-repo override, one per line
 #   acme-demo-app=sonnet
 #
-# VALUES: any alias `claude --model` takes ('opus', 'sonnet', 'haiku', 'fable') or a
-# full model name ('claude-opus-5[1m]'). Prefer an ALIAS: it tracks the latest model
-# of that family, where a pinned full name silently ages into a retired one. Use a
-# full name only when you specifically need a variant an alias does not select —
-# e.g. the 1M-context build, which matters for long sprints.
+# VALUES, best first:
 #
-#   inherit  — special value: emit nothing, take the machine-global default. This is
-#              the pre-2026-09-03 behaviour. Deliberate opt-out, not a default: it
-#              reintroduces exactly the silent inheritance the RCA is about.
+#   default  — RECOMMENDED, and the built-in. Passes `--model default`, which resolves
+#              to the ACCOUNT default at launch: it follows Anthropic as they move it
+#              (including context-window variants — today that is Opus 5 with 1M), and
+#              because it is a CLI flag it is NOT the machine-global default a /model
+#              pick rewrites. Tracking Anthropic and isolation from /model are usually
+#              wanted together, and this is the only value that gives both.
+#              Verified: `claude --model default` is accepted by the catalog, where
+#              `--model bogus-model-xyz` warns; and a `/model default` on 2026-07-26
+#              resolved to claude-opus-4-8[1m] while the SAVED default was Sonnet 5 —
+#              i.e. it reads the account default, not the local one.
+#
+#   an alias — 'opus', 'sonnet', 'haiku', 'fable'. Use when the fleet should sit on a
+#              specific family regardless of what Anthropic makes default. Tracks the
+#              latest model OF THAT FAMILY, so it never stales, but it may not select
+#              a context variant (plain `opus` is not the 1M build).
+#
+#   full name— 'claude-opus-5[1m]'. Only when you need one exact build. It silently
+#              ages into a retired model with nobody editing the line; revisit each
+#              model release.
+#
+#   inherit  — emit nothing; take the machine-global default. This is the
+#              pre-2026-09-03 behaviour and it is NOT "the account default": the two
+#              coincide only until someone runs /model, at which point the fleet
+#              follows that pick. If what you want is "whatever Anthropic defaults
+#              to", the value you want is `default`, not this. Kept as a deliberate,
+#              on-the-record opt-out.
 #
 # OUTPUT: the model on stdout, or EMPTY for `inherit`. Diagnostics to stderr so
 # `M=$(resolve-devteam-model.sh acme-core)` stays clean. --explain prints the why.
@@ -40,7 +59,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_MODEL="opus"
+DEFAULT_MODEL="default"
 REPO_NAME=""
 EXPLAIN=0
 
@@ -58,8 +77,10 @@ emit() {
     # in: _M (resolved value)
     if [ "$_M" = "inherit" ]; then
         note "inherit — no --model flag; the tab takes the machine-global default."
-        note "  That default is whatever /model last saved, in ANY window. See"
-        note "  docs/memos/2026-09-03-rca-handoff-model-inheritance.md."
+        note "  That default is whatever /model last saved, in ANY window — which is"
+        note "  NOT the account default once anyone has run /model. If you set this to"
+        note "  track Anthropic's default, the value you want is 'default', not 'inherit'."
+        note "  See docs/memos/2026-09-03-rca-handoff-model-inheritance.md."
         echo ""
     else
         echo "$_M"
@@ -119,5 +140,5 @@ fi
 
 # ─── 3. built-in default ─────────────────────────────────────────────────────
 _M="$DEFAULT_MODEL"
-note "built-in default = '$_M' (alias; tracks the latest Opus)"
+note "built-in default = '$_M' (the account default, resolved at launch)"
 emit

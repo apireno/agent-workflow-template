@@ -6,6 +6,31 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-09-03 — `default` is a devteam-model value, and now the built-in
+
+A field CTO wanting the fleet to follow Anthropic's default as it moves set
+`.cto/devteam-model` to `inherit`. Expected behaviour for the value; wrong value for the
+intent; and the gap was in what we offered. `inherit` means *whatever /model last saved
+globally* — equal to the account default only until someone runs /model, at which point it
+re-opens the RCA below.
+
+The menu had `opus` (an alias: tracks a family, not Anthropic's choice, and does not select
+the 1M build) and `inherit` (tracks /model). Neither says "the account default, isolated
+from /model" — which is what people actually mean.
+
+`default` says it, and the CLI takes it: `claude --model default` draws no catalog warning
+where `claude --model bogus-model-xyz` draws `"bogus-model-xyz" isn't described by this
+version's model catalog`. It reads the ACCOUNT default rather than the saved one — a
+`/model default` on 2026-07-26 resolved to claude-opus-4-8[1m] while the saved default was
+Sonnet 5 — and being a CLI flag, /model cannot move it. Now first-class and the built-in,
+replacing `opus`. It also settles the alias-vs-full-name tension from the entry below: the
+account default carries its context variant, so you get the 1M build without pinning a name
+that ages.
+
+Limitation surfaced rather than hidden: `default` and `inherit` resolve at LAUNCH, so the
+drift checker cannot know the expected family statically. It assumes `opus` and prints that
+it is assuming; `CTO_EXPECTED_MODEL` overrides when the account default moves families.
+
 ## 2026-09-03 — orchestrated windows pin their model; the CTO's picker stops reaching them
 
 Follow-on to the entry below, from the CEO's actual requirement: the CTO window's model

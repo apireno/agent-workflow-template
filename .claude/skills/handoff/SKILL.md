@@ -495,7 +495,13 @@ printf '%s' "$MODEL_LINES"
 # What SHOULD each tab be on? The resolved pin if there is one (aliases expand, so
 # match on the family word), else the expected default. This verifies the pin took —
 # a --model flag that silently failed to apply would otherwise look like success.
-EXPECT_WORD="$(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" 2>/dev/null | sed -E 's/^claude-//; s/-[0-9].*$//; s/\[.*//')"
+# `default` and `inherit` both resolve at LAUNCH, not here, so their family word is
+# an assumption rather than a fact — fall back to the expected family and say so
+# rather than warning on every tab because "default" != "claude-opus-5".
+case "$DEV_MODEL" in
+  ""|default) EXPECT_WORD="${CTO_EXPECTED_MODEL:-opus}" ;;
+  *)          EXPECT_WORD="$(printf '%s' "$DEV_MODEL" | sed -E 's/^claude-//; s/-[0-9].*$//; s/\[.*//')" ;;
+esac
 [ -z "$EXPECT_WORD" ] && EXPECT_WORD="${CTO_EXPECTED_MODEL:-opus}"
 OFF_DEFAULT=$(printf '%s' "$MODEL_LINES" | grep 'claude-' | grep -vc "$EXPECT_WORD")
 if [ "${OFF_DEFAULT:-0}" -gt 0 ]; then
