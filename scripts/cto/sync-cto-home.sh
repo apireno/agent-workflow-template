@@ -59,7 +59,8 @@ sync_one() { # rsync wrapper that counts itemized lines
   local n; n=$(printf '%s' "$out" | grep -cE '^[<>ch.][fdL]' || true); CHANGES=$((CHANGES+n))
 }
 
-for d in .claude/skills .claude/hooks scripts; do
+# .claude/githooks: the ADR-002 pre-commit backstop push-to-repos.sh REQUIRES from its own tree.
+for d in .claude/skills .claude/hooks .claude/githooks scripts; do
   [ -d "$TEMPLATE/$d" ] || continue
   echo "== $d/ =="; mkdir -p "$TARGET/$d" 2>/dev/null || true
   sync_one "$TEMPLATE/$d/" "$TARGET/$d/"
@@ -85,7 +86,7 @@ for tdir in "$TEMPLATE"/docs/*/_templates; do
 done
 
 echo "== settings templates + CLAUDE.devteam.md =="
-for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template CLAUDE.devteam.md; do
+for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template .claude/derived-artifacts.yaml.example .cto/projects.yaml.example .cto/devteam-model.example CLAUDE.devteam.md; do
   [ -f "$TEMPLATE/$f" ] || continue
   sync_one "$TEMPLATE/$f" "$TARGET/$f"
 done
