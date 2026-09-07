@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# pre-commit — the BACKSTOP for governed derived artifacts (ADR-002 §4, point 4).
+#
+# Installed by push-to-repos.sh as `git config core.hooksPath .claude/githooks` (untracked
+# in upstream mode). Runs the derived-artifact gate against the INDEX: what is about to be
+# committed. Never regenerates anything itself; a refusal prints the exact fix command.
+#
+# core.hooksPath REPLACES .git/hooks, so a project's own pre-commit there would be silenced.
+# We chain to it first. A project using the `pre-commit` framework keeps working.
+#
+# Bypass for a deliberate exception (recorded in the commit message, the CTO's call):
+#   DERIVED_ARTIFACT_GATE=skip git commit ...
+
+set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# NOTE: `git rev-parse --git-path hooks/pre-commit` honours core.hooksPath and would return
+# THIS file; the legacy location must be derived from the git dir itself.
+LEGACY="$(git rev-parse --absolute-git-dir 2>/dev/null)/hooks/pre-commit"
+if [ -x "$LEGACY" ] && [ "$(cd "$(dirname "$LEGACY")" && pwd -P)" != "$(cd "$(dirname "$0")" && pwd -P)" ]; then
+    "$LEGACY" "$@" || exit $?
+fi
+
+if [ "${DERIVED_ARTIFACT_GATE:-}" = "skip" ]; then
+    echo "pre-commit: derived-artifact gate SKIPPED by DERIVED_ARTIFACT_GATE=skip — say why in the commit message." >&2
+    exit 0
+fi
+
+GATE="$ROOT/scripts/agentic/derived-artifact-gate.sh"
+[ -f "$GATE" ] || exit 0          # mechanism not synced here; nothing to enforce
+[ -f "$ROOT/.claude/derived-artifacts.yaml" ] || exit 0   # repo governs nothing
+
+bash "$GATE" --staged --repo "$ROOT"
+rc=$?
+if [ "$rc" -eq 3 ]; then
+    echo "" >&2
+    echo "pre-commit: commit REFUSED — a governed derived artifact is stale, leaked, dead-rooted, or has no generator." >&2
+    echo "  Regenerate as shown above (or: bash scripts/agentic/derived-artifact-gate.sh --fix), then commit again." >&2
+    exit 1
+fi
+[ "$rc" -eq 4 ] && { echo "pre-commit: derived-artifact manifest is misconfigured (see above) — fix .claude/derived-artifacts.yaml" >&2; exit 1; }
+exit 0

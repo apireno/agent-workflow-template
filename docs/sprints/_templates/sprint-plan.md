@@ -39,6 +39,7 @@
 - [ ] Tests written and passing
 - [ ] No regressions in existing test suite
 - [ ] Code follows established patterns (no domain leakage, lineage preserved)
+- [ ] Governed derived artifacts regenerated if a covered file changed (`derived-artifact-gate.sh` exits 0 — ADR-002)
 - [ ] Test results saved to `test-results.md`
 - [ ] Dev report written to `dev-report.md`
 - [ ] VP evaluations requested via `vp-review.sh` (see Phase 3 in CLAUDE.md)

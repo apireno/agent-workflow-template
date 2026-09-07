@@ -14,6 +14,7 @@
 | Task 1 | DONE | 3 | 5 |
 | Task 2 | DONE | 1 | 2 |
 | Task 3 | PARTIAL — see notes | 2 | 0 |
+| Derived artifacts regenerated (ADR-002) | DONE / N/A (no covered file changed) | `<artifact names>` | — |
 
 ## Test Results
 - Total tests: {count}

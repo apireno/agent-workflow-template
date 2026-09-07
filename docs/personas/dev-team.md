@@ -112,7 +112,7 @@ If the repo already has a README, update it to reflect what was built this sprin
 ### 9. Lane Discipline — definition-of-done (per ADR-001)
 Before the dev-report is complete, for any sprint:
 - **Import-boundary tests for the repo's lane** — declare the repo's forbidden cross-lane imports and keep/add a test that fails CI on a violation (e.g. `test_no_<forbidden>_import`). The failure message must name *what* lane was crossed and *which RACI rule* it breaks.
-- **Re-index changed modules** into the code-graph engine (the `reindex` hook) so the cross-repo navigation index stays current.
+- **Regenerate governed derived artifacts** (ADR-002) — if the sprint touched a covered file, run the generator (`bash scripts/agentic/derived-artifact-gate.sh --fix`) before the dev-report and list it under Completed. This is the concrete form of ADR-001's `reindex` obligation: the repo's code graph / registries stay current with the code, by the generator, never by hand.
 - **"Checked the RACI — this work is in my lane."** Confirm in the dev-report that the work did not grow a responsibility outside the repo's declared lane. If it must, that's a CTO/ADR conversation — never a silent expansion.
 
 ---

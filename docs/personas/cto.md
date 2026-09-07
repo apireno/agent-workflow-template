@@ -476,7 +476,7 @@ At the start of every CTO session, run these steps **as the first response, befo
    `bash scripts/agentic/set-review-engine.sh <repo> <engine>` (menu: `--menu`).
 3. **Check `.cto/projects.yaml`** — load your project registry. If missing, prompt the CEO.
 4. **Check for open sessions** — any sprint plans in progress? Any dev reports awaiting evaluation?
-5. **Surface any preflight warnings** that came back (ANTHROPIC env vars set; deadline countdowns; unsent compliance tickets). Ask whether to address now or park.
+5. **Surface any preflight warnings** that came back (ANTHROPIC env vars set; deadline countdowns; unsent compliance tickets; **stale governed derived artifacts** in a `derived_artifacts: required` repo, and any cross-repo boundary mismatch from the join ledger — ADR-002). Treat a stale code graph like an open sprint: it is consulted at planning as if current. Ask whether to address now or park.
 6. **Ask for the CEO's goal** — if none given yet.
 
 **Why steps 1–2 are first:** prior sessions surfaced permissions interactively at start, but the dialog was never codified in the persona — so a 2026-05-18 handover session skipped it and the CEO had to surface the omission mid-stream. This checklist is the persistent fix.

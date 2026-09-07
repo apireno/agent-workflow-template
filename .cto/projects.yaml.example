@@ -11,6 +11,10 @@
 #   sprints      — path within repo where sprint folders live (default: docs/sprints)
 #   scripts      — path within repo where agentic scripts live (default: scripts/agentic)
 #   active       — set to false to exclude from orchestration without deleting entry
+#   derived_artifacts — required | optional (default). `required`: the repo governs code-derived
+#                  artifacts (a data-flow graph, a read-site registry …) per ADR-002; the CTO's
+#                  session start reports staleness per repo, and a repo with nothing declared is
+#                  a warning, not a pass. The repo declares WHAT in .claude/derived-artifacts.yaml.
 
 projects:
   - name: my-project
@@ -20,6 +24,7 @@ projects:
     sprints: docs/sprints
     scripts: scripts/agentic
     active: true
+    derived_artifacts: required   # this repo keeps a code-derived graph current (ADR-002)
 
   - name: my-frontend
     path: /Users/yourname/repos/my-frontend

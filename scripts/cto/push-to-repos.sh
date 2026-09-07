@@ -172,6 +172,8 @@ required_files=(
   "$TEMPLATE/.claude/hooks/deny-self-commit.sh"
   "$TEMPLATE/.claude/hooks/deny-generated-edit.sh"
   "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh"
+  "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh"
+  "$TEMPLATE/.claude/githooks/pre-commit"
 )
 for f in "${required_files[@]}"; do
   if [ ! -f "$f" ]; then
@@ -227,7 +229,8 @@ for repo in "${TARGETS[@]}"; do
     fi
     echo "      would write: $DEST/.claude/settings.json (from template, _comment_* stripped)"
     [ -f "$DEST/.claude/settings.json" ] && echo "        (overwrites existing)"
-    echo "      would write: $DEST/.claude/hooks/ (6: inject-devteam-contract, auto-paste-brief,"
+    echo "      would write: $DEST/.claude/githooks/pre-commit + core.hooksPath (ADR-002 backstop; inert without a manifest)"
+    echo "      would write: $DEST/.claude/hooks/ (7: inject-devteam-contract, auto-paste-brief, derived-artifact-reminder,"
     echo "                     session-end-record, check-complete, deny-self-commit, deny-generated-edit)"
     echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
     # Name the engine the real run would actually seed. Hardcoding "subagent" here made the
@@ -274,8 +277,29 @@ PYEOF
   cp "$TEMPLATE/.claude/hooks/deny-self-commit.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/deny-generated-edit.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh" "$DEST/.claude/hooks/"
+  cp "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh" "$DEST/.claude/hooks/"
   chmod +x "$DEST/.claude/hooks/"*.sh
-  echo "      wrote $DEST/.claude/hooks/ (6: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit)"
+  echo "      wrote $DEST/.claude/hooks/ (7: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit, derived-artifact-reminder)"
+
+  # 3a. Git pre-commit backstop for governed derived artifacts (ADR-002 §4 point 4). Lives
+  # under .claude/ (already untracked in upstream mode) and is wired through the LOCAL
+  # core.hooksPath, never a tracked file. Inert unless the repo declares a manifest. A repo
+  # that already routes hooks elsewhere (husky, the pre-commit framework) is left alone and
+  # told so — its owner chains the gate from there.
+  mkdir -p "$DEST/.claude/githooks"
+  cp "$TEMPLATE/.claude/githooks/pre-commit" "$DEST/.claude/githooks/pre-commit"
+  chmod +x "$DEST/.claude/githooks/pre-commit"
+  if git -C "$DEST" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    CUR_HP="$(git -C "$DEST" config --get core.hooksPath 2>/dev/null || true)"
+    case "$CUR_HP" in
+      ""|.claude/githooks)
+        git -C "$DEST" config core.hooksPath .claude/githooks
+        echo "      wrote $DEST/.claude/githooks/pre-commit + core.hooksPath=.claude/githooks (chains .git/hooks/pre-commit if present)" ;;
+      *)
+        echo "      NOTE: core.hooksPath is already '$CUR_HP' — left alone. To enforce the derived-artifact gate at commit,"
+        echo "            call .claude/githooks/pre-commit from that hook (it is installed, just not wired)." ;;
+    esac
+  fi
 
   # 3b. scripts/agentic + persona defs + sprint doc templates. CLAUDE.devteam.md
   # (just written above) explicitly instructs the dev team to run

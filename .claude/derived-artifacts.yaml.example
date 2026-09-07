@@ -1,0 +1,44 @@
+# .claude/derived-artifacts.yaml — GOVERNED DERIVED ARTIFACTS this repo keeps current (ADR-002).
+#
+# Copy to .claude/derived-artifacts.yaml. One entry per artifact that is a function of the
+# code: a data-flow / call graph, a read-site registry, a capability matrix, a generated
+# client. The gate (scripts/agentic/derived-artifact-gate.sh) never reads the artifact; it
+# asks the GENERATOR for the covered set and hashes that against a stamp.
+#
+# This is NOT a manifest of files. Roots, seam kinds and exclusion globs are the generator's
+# own configuration, kept wherever the generator likes. The manifest knows artifacts and
+# generators, nothing else. Every `path` here is also protected from hand-edits, the same
+# as an entry in .claude/generated-paths.
+#
+# Generator contract (any language; executable, or a .py/.sh the gate runs with an interpreter):
+#   <generator> closure   print repo-relative paths of the covered set, one per line.
+#                         A PURE FUNCTION OF THE TREE: no env, no network, no timestamps.
+#   <generator> seams     print path:line:kind for every seam site ANYWHERE in the repo
+#                         (a config read through the loader, a model call, a ledger write,
+#                         a handler registration, an external call), honoring its own excludes.
+#   <generator> roots     print declared roots as path[:symbol]; each must resolve.
+#   <generator> build     write the artifact. The gate writes the stamp (`--fix` or `stamp NAME`).
+#   <generator> boundary  (optional) print JSON {producers:[...], consumers:[...]} for the
+#                         cross-repo join (scripts/cto/join-ledger.sh).
+#
+# RIGOR KNOBS — the project CTO's call, not the template's:
+#   mode: block        a finding refuses the commit / marks the verify row NOT-MET  (default)
+#   mode: warn         same text, printed as a warning, exit 0
+#   warn_until: DATE   warn through DATE (YYYY-MM-DD), block after — the audit-then-block rollout
+
+artifacts:
+  - name: dataflow-graph
+    path: docs/architecture/dataflow-graph/      # file or directory
+    generator: scripts/graph/build.py
+    mode: block
+
+  - name: read-site-registry
+    path: docs/architecture/read-sites.json
+    generator: scripts/graph/read_sites.py
+    mode: warn
+    warn_until: 2026-10-01
+
+# Cross-repo boundaries (ADR-002 §7). Each repo's graph stops at its edge; the CTO home joins.
+boundary:
+  typing: advisory     # advisory | required — refuse an unannotated boundary function (producer side)
+  join: advisory       # off | advisory | verify-row — how a join mismatch surfaces in the CTO home

@@ -169,3 +169,4 @@ docs/architecture/decisions/cto-*.md
 **/.qa-lane
 .qa-lanes
 **/.qa-lanes
+.cto/join-ledger.md

@@ -193,6 +193,57 @@ case "$REPO_NAME" in
         ;;
 esac
 
+# ─── 9. Governed derived artifacts (CTO homes only) — ADR-002 ────────────────
+# For every registry entry flagged `derived_artifacts: required`, run the gate in audit mode
+# at HEAD and surface staleness the way an open sprint is surfaced. A required repo with no
+# manifest is a warning too: nothing declared is not a pass.
+case "$REPO_NAME" in
+    agent-workflow-template|*-cto)
+        DAG="$REPO_ROOT/scripts/agentic/derived-artifact-gate.sh"
+        if [ -f "$DAG" ] && [ -f "$REPO_ROOT/.cto/projects.yaml" ]; then
+            DAG_ROWS=""; DAG_BAD=0
+            while IFS='|' read -r dname dpath; do
+                [ -d "$dpath" ] || continue
+                DOUT="$(bash "$DAG" --head --audit --require --repo "$dpath" 2>&1)"; DRC=$?
+                if [ "$DRC" -eq 4 ]; then
+                    DAG_BAD=$((DAG_BAD+1))
+                    DAG_ROWS="$DAG_ROWS
+    $(printf '%-24s %s' "$dname" 'NO-MANIFEST   flagged required, nothing declared — author .claude/derived-artifacts.yaml')"
+                elif [ "$DRC" -eq 3 ]; then
+                    DAG_BAD=$((DAG_BAD+1))
+                    DAG_ROWS="$DAG_ROWS
+$(printf '%s\n' "$DOUT" | grep -E '^  \S+ +(block|warn) +(STALE|LEAK|DEAD-ROOT|NO-GENERATOR|NO-STAMP|GEN-ERROR|BAD-ENTRY)' | cut -c1-150 | sed "s/^  /    $(printf '%-24s' "$dname") /")"
+                fi
+            done < <(python3 - "$REPO_ROOT/.cto/projects.yaml" <<'PYREG'
+import re,sys
+t=open(sys.argv[1]).read()
+for b in re.split(r'(?=- name:)',t):
+    n=re.search(r'- name:\s*(\S+)',b); p=re.search(r'path:\s*(\S+)',b); a=re.search(r'active:\s*(\S+)',b); r=re.search(r'derived_artifacts:\s*(\S+)',b)
+    if n and p and r and r.group(1).lower()=='required' and ((a is None) or a.group(1).lower() not in ('false','no','0')):
+        print(f"{n.group(1)}|{p.group(1)}")
+PYREG
+)
+            if [ "$DAG_BAD" -gt 0 ]; then
+                emit_warning "governed derived artifacts are not current in $DAG_BAD required repo(s) — ADR-002:"
+                echo "    $(printf '%-24s %s' REPO 'ARTIFACT  MODE  STATE  DETAIL')"
+                echo "$DAG_ROWS" | sed '/^$/d'
+                echo "    Regenerate through each repo's generator (or: bash scripts/agentic/derived-artifact-gate.sh --fix there)."
+                echo "    A stale graph is consulted at planning as if it were current — treat like an open sprint."
+            fi
+        fi
+        # Cross-repo join ledger (ADR-002 §7) — advisory unless a repo sets boundary.join: verify-row
+        JL="$REPO_ROOT/scripts/cto/join-ledger.sh"
+        if [ -f "$JL" ] && [ -f "$REPO_ROOT/.cto/projects.yaml" ]; then
+            JOUT="$(bash "$JL" --quiet 2>&1)"; JRC=$?
+            if [ "$JRC" -eq 3 ]; then
+                emit_warning "cross-repo boundary mismatch (ADR-002 §7) — a consumer calls a sibling in a shape the producer no longer has:"
+                printf '%s\n' "$JOUT" | grep -E 'MISMATCH|MISSING' | head -12 | sed 's/^/    /'
+                echo "    Full ledger: .cto/join-ledger.md — rule which side moves; the verify of the repo that moved the boundary carries the row."
+            fi
+        fi
+        ;;
+esac
+
 # ─── Summary line (always emitted) ───────────────────────────────────────────
 echo ""
 if [ "$CRITICAL_FAILURES" -gt 0 ]; then

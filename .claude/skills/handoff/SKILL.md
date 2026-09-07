@@ -271,6 +271,9 @@ def ensure(event, cmd, matcher="*"):
     arr.append({"matcher":matcher,"hooks":[{"type":"command","command":target}]})
 ensure("SessionStart", ".claude/hooks/auto-paste-brief.sh")
 ensure("Stop", ".claude/hooks/check-complete.sh")
+# ADR-002 reminder: tells the lane ONCE per new finding that a governed derived artifact is
+# stale. Inert unless the repo has .claude/derived-artifacts.yaml.
+ensure("Stop", ".claude/hooks/derived-artifact-reminder.sh")
 ensure("SessionEnd", ".claude/hooks/session-end-record.sh")
 # The no-self-commit guard: dev teams write artifacts; the CTO commits after the
 # independent Phase-3 review. Without this wired, a repo silently permits self-commit
@@ -311,6 +314,41 @@ PYMCP
   # old brief; the kickoff prompt points the session at the docs brief explicitly.
   rm -f "$REPO_PATH/.claude/pending-prompt.md"
 
+  # Standing deliverable — governed derived artifacts (ADR-002 §4 point 1). Rendered from the
+  # repo's manifest, so the CTO never adds it by hand and a covered sprint cannot miss it.
+  DERIVED_BLOCK=""; DERIVED_AC=""
+  if [ -f "$REPO_PATH/.claude/derived-artifacts.yaml" ]; then
+    DERIVED_LIST="$(python3 - "$REPO_PATH/.claude/derived-artifacts.yaml" <<'PYDA'
+import sys,re
+cur={}; rows=[]
+for raw in open(sys.argv[1]):
+    line=raw.split(" #",1)[0].rstrip()
+    if not line.strip() or line.lstrip().startswith("#"): continue
+    s=line.strip()
+    if s.startswith("- "): cur={}; rows.append(cur); s=s[2:]
+    if ":" in s and rows and cur is rows[-1]:
+        k,v=s.split(":",1); cur[k.strip()]=v.strip().strip("'\"")
+for r in rows:
+    if r.get("name") and r.get("generator"): print(f"- `{r['name']}` at `{r.get('path','?')}` — regenerate with `{r['generator']} build`, then `bash scripts/agentic/derived-artifact-gate.sh stamp {r['name']}` (mode: {r.get('mode','block')})")
+PYDA
+)"
+    DERIVED_BLOCK="
+## Standing deliverable — governed derived artifacts (ADR-002)
+
+This repo keeps code-derived artifacts current. If your changes touch a covered file, regenerate
+them BEFORE writing dev-report.md, and list the regeneration under Completed. Never hand-edit them.
+$DERIVED_LIST
+
+One command does all of it: \`bash scripts/agentic/derived-artifact-gate.sh --fix\`. Check any time with
+\`bash scripts/agentic/derived-artifact-gate.sh\`. The Stop hook reminds you once while one is stale;
+/sprint-verify records the gate as a conformance row; the CTO's commit is refused while it is stale.
+If a finding is wrong (a seam in a path that should be excluded, a root that moved), say so in
+dev-report.md under \`Mechanism gaps\` and continue — never edit the mechanism.
+"
+    DERIVED_AC="
+- Governed derived artifacts current: \`bash scripts/agentic/derived-artifact-gate.sh\` exits 0 (ADR-002)"
+  fi
+
   cat > "$BRIEF_FILE" <<BRIEFEOF
 # Mission Brief — sprint-$SPRINT (Phase 2 execution)
 
@@ -326,9 +364,9 @@ $(cat "$PLAN_PATH")
 - All tasks in the sprint plan complete
 - Tests pass (run them; report failures in dev-report.md)
 - dev-report.md committed to docs/sprints/sprint-$SPRINT/dev-report.md
-- demo-output.md if any [AUTO] demo steps exist
+- demo-output.md if any [AUTO] demo steps exist$DERIVED_AC
 - Sign-off: — Dev
-
+$DERIVED_BLOCK
 ## On crash recovery
 
 This session was launched via the CTO's \`/handoff\` skill. If you crash:

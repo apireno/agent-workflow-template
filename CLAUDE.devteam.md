@@ -276,6 +276,18 @@ file. A lane-scoped rule protects nothing; only a path-scoped one does.
 Edit/Write against matching paths, while leaving generator runs (which write via Bash) free. No
 file, no enforcement — the rule is inert until the project declares what is generated.
 
+**Keep governed derived artifacts CURRENT (the other direction of the same rule — ADR-002).** A
+code-derived artifact — a data-flow / call graph, a read-site registry, a capability matrix, a
+generated client — must be regenerated through its generator in the same change that alters its
+inputs. The repo declares them in `.claude/derived-artifacts.yaml`; `scripts/agentic/derived-artifact-gate.sh`
+asks the generator for the covered set and hashes it against a stamp. **Any sprint touching a
+covered file regenerates before `dev-report.md`** (one command: `derived-artifact-gate.sh --fix`) and
+lists it under Completed. The Stop hook reminds you once while one is stale; `/sprint-verify`
+records the gate as a conformance row; the CTO's commit is refused while it is stale. A finding you
+believe is wrong (a seam in a path that should be excluded, a root that moved) goes in
+`dev-report.md` under `Mechanism gaps` — the generator's roots and excludes are the VP of
+Engineering's to change, never yours mid-sprint. No manifest, no enforcement.
+
 Related: **no instance-level tokens in generic vocabulary.** Where a generated artifact carries
 vocabulary meant to be generic (stoplists, keyword lists, type signatures), proper nouns and
 instance identifiers — specific company/product/person names, tickers, registry IDs — must
@@ -323,6 +335,7 @@ and sprint artifacts, and the CUSTOMIZE block below.
 ### Technical Standards
 - Add your project's coding standards here
 - Generated-artifact paths for this repo: declare them in `.claude/generated-paths`
+- Governed derived artifacts (code graphs, registries) and their generators: declare them in `.claude/derived-artifacts.yaml` (ADR-002)
 - Domain-agnostic: yes / no  (drives the engine-purity rule above)
 
 ---

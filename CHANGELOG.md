@@ -6,6 +6,36 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-09-06 — governed derived artifacts: regenerate-on-change hygiene (ADR-002)
+
+A field CTO's request, on the CEO's mandate: repos whose code graphs are generated from the
+AST must keep them regenerated at every change, enforced where the fleet actually lands code.
+The RCA behind it: a data-flow graph 3.5 weeks and ~100 commits stale; the only gate was a
+pull-request CI workflow in a fleet that commits directly; the graph's roots pointed at a
+retired engine; no persona, brief, or skill carried the obligation. Two June promissory notes
+(ADR-001's `reindex` contract, the VP-Eng "UML derived from the AST" clause) had no mechanism.
+
+The unit is not "the code graph" but any **derived artifact** — the staleness direction of the
+declaration `.claude/generated-paths` already makes for hand-edits. Directional, not
+prescriptive: the template ships mechanism, guideline and reminders; rigor (`mode: block|warn`,
+`warn_until`, boundary typing, join strictness) is a per-repo knob the project CTO sets.
+
+- **`.claude/derived-artifacts.yaml`** (see `.example`): artifacts + generators, never files.
+- **`scripts/agentic/derived-artifact-gate.sh`**: stamp-based, never reads the artifact. Four
+  checks — STALE, LEAK (a seam outside the closure: the dark-mechanism detector), DEAD-ROOT
+  (the retired-engine case), NO-GENERATOR (never a silent pass). `--fix` rebuilds + stamps +
+  scoped-stages. 35-assertion fixture test.
+- **Enforced where the lane can still act, in order:** `/handoff` brief standing-deliverable
+  block → `derived-artifact-reminder.sh` Stop hook (once per new finding, never a loop) →
+  `/sprint-verify` standing rows → `.claude/githooks/pre-commit` backstop via local
+  `core.hooksPath` (chains an existing hook) → the same script in CI → `preflight.sh` §9 at
+  CTO session start for every `derived_artifacts: required` registry entry.
+- **Cross-repo boundaries** (§7): each graph stops at its edge; `scripts/cto/join-ledger.sh`
+  joins consumer-driven (needs ⊆ emits) into `.cto/join-ledger.md`; a mismatch never blocks a
+  commit — the CTO rules which side moves.
+- Text: `CLAUDE.devteam.md`, VP-Eng §6b item 8 (third automatic BLOCKER: stale derived
+  artifact) and §8, dev-team §9, CTO session-start step 5, sprint-plan DoD, dev-report row.
+
 ## 2026-09-03 — `default` is a devteam-model value, and now the built-in
 
 A field CTO wanting the fleet to follow Anthropic's default as it moves set

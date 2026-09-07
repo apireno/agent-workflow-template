@@ -51,7 +51,7 @@
         ]
       }
     ],
-    "_comment_Stop": "On every turn end, check if dev-report.md exists at the expected path and touch .claude/COMPLETE if so. Lets the CTO's /sprint-status detect completion automatically.",
+    "_comment_Stop": "On every turn end: check-complete touches .claude/COMPLETE when dev-report.md lands (so /sprint-status sees it); derived-artifact-reminder runs the ADR-002 gate in audit mode and tells the session ONCE per new finding that a governed derived artifact is stale (inert unless .claude/derived-artifacts.yaml exists).",
     "Stop": [
       {
         "matcher": "*",
@@ -59,11 +59,15 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/check-complete.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/derived-artifact-reminder.sh"
           }
         ]
       }
     ],
-    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand — INERT unless the repo declares globs in .claude/generated-paths.",
+    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand \u2014 INERT unless the repo declares globs in .claude/generated-paths.",
     "PreToolUse": [
       {
         "matcher": "Bash",
