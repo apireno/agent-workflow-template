@@ -1,0 +1,26 @@
+# .cto/model-budget.yaml — model policy + weekly budget calibration (CTO home only; gitignored).
+# Read by scripts/cto/model-budget.sh (preflight), scripts/cto/resolve-devteam-model.sh
+# (--alias, --is-stretch) and /handoff. Copy to .cto/model-budget.yaml.
+#
+# POLICY. Two families, named here and nowhere else, so a model release is a one-line edit:
+#   lane     the WORKHORSE: dev lanes, subagents, spawned sessions, routine CTO work.
+#   stretch  the STRETCH family: runs only when the CTO recommends it (MODEL ADVICE line)
+#            and the CEO approves AND switches. /handoff refuses a lane pinned to it unless
+#            the CEO passes --model= on that invocation.
+lane: opus
+stretch: fable
+
+# WEEKLY RESET, local time, as `/usage` shows it (day hh:mm). Without it the budget window
+# is a rolling 7 days and no runway is projected.
+reset: fri 17:00
+
+# CALIBRATION. Anthropic does not publish weekly allowances in tokens, so the script cannot
+# be told "N tokens". Instead: run /usage, and record the percent used for a limit at a time.
+# The script counts the weighted tokens it saw from the last reset to that moment and derives
+# the allowance as tokens / percent. One line per limit you want a runway for:
+#   <family|all>: <YYYY-MM-DDTHH:MM local> <percent used>
+# Re-calibrate after each reset, or when the projection and /usage disagree by >10 points —
+# the weighting (see model-budget.sh) is a price-shaped proxy, not Anthropic's meter.
+calibration:
+  fable: 2026-09-25T09:30 38
+  all: 2026-09-25T09:30 61

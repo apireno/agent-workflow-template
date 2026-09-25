@@ -6,6 +6,32 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-09-25 — model policy: lane model by default, stretch model by approval, weekly budget read
+
+A field CTO's request after the stretch model's weekly allowance ran out a day before the
+reset. Measured from the transcripts: 92% of the stretch model's weighted tokens went to the
+CTO session, and 265 of its 374 tool turns on it that week were pure shepherding (poll, sleep,
+send, peek, commit, log). Ten subagents inherited it from the parent. Six lane sessions came up
+on it — none through `/handoff`, whose pinned tabs all started on the lane model; every one was
+opened by hand, and a hand-typed `claude` takes whatever `/model` last saved.
+
+- **Policy** (`docs/personas/cto.md` "Model Policy", CTO contract Step 5b, `CLAUDE.devteam.md`):
+  lane family everywhere by default; the stretch family only for evidence-judgment work, on the
+  CTO's recommendation and the CEO's switch. Families are named once, in `.cto/model-budget.yaml`.
+- **`MODEL ADVICE` line** at session start and at every change in the kind of work. Advisory;
+  the CTO never switches the model. Lanes flag `## Next step is a design decision` instead of
+  escalating themselves.
+- **`scripts/cto/model-budget.sh`** (preflight §8b): tokens per model per repo since the weekly
+  reset, CTO share, last-24h rate, runway against a `/usage` calibration (allowances are not
+  published in tokens, so the CEO records a percent at a time and the script derives the rest).
+  Warns RUNWAY, LANE-ON-STRETCH (naming `/handoff` vs hand-opened), SUB-ON-STRETCH,
+  ROUTINE-ON-STRETCH (heuristic over the tool mix). 16-assertion fixture test.
+- **Pinning**: `/handoff` refuses a lane pinned to the stretch family unless the CEO passes
+  `--model=` on that invocation (a stale file line or a leftover env var is not approval).
+  `/vp-review` and `/sprint-fanout` print `AGENT_MODEL=` and every Agent call passes `model:`;
+  `resolve-devteam-model.sh` gains `--alias` and `--is-stretch`. The routing table's "inherit"
+  rows are gone.
+
 ## 2026-09-06 — governed derived artifacts: regenerate-on-change hygiene (ADR-002)
 
 A field CTO's request, on the CEO's mandate: repos whose code graphs are generated from the

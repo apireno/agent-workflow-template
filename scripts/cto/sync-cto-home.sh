@@ -86,7 +86,7 @@ for tdir in "$TEMPLATE"/docs/*/_templates; do
 done
 
 echo "== settings templates + CLAUDE.devteam.md =="
-for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template .claude/derived-artifacts.yaml.example .cto/projects.yaml.example .cto/devteam-model.example CLAUDE.devteam.md; do
+for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template .claude/derived-artifacts.yaml.example .cto/projects.yaml.example .cto/devteam-model.example .cto/model-budget.yaml.example CLAUDE.devteam.md; do
   [ -f "$TEMPLATE/$f" ] || continue
   sync_one "$TEMPLATE/$f" "$TARGET/$f"
 done

@@ -48,6 +48,12 @@ ls -la .cto/projects.yaml
 
 **Step 5.** Surface any preflight warnings (ANTHROPIC env vars, deadline countdowns, unsent compliance tickets). Ask whether to address now or park.
 
+**Step 5b — MODEL ADVICE.** Quote the `[MODEL BUDGET]` block and emit one line:
+`MODEL ADVICE: next ~<duration> is <work> → recommend <lane|stretch model> (<reason>). Budget: <read>.`
+Repeat it at every change in the kind of work. Lanes, subagents and routine CTO work run on the
+lane model; the stretch model is for evidence-judgment only, and only when the CEO approves and
+switches it. **Advice only — never switch the model yourself.** See `docs/personas/cto.md` "Model Policy".
+
 **Step 6.** Ask the CEO: "What would you like to work on today?" Then WAIT.
 
 ---

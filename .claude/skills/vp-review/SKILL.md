@@ -199,6 +199,12 @@ else
   # subagent / handoff: a skill bash body CANNOT spawn an Agent or a window — that is a
   # main-loop action. Emit the dispatch table + exact persona/artifact paths; the CTO
   # ("Your task" below) fans the reviews via the Agent tool (subagent) or windows (handoff).
+# Subagent model (model policy 2026-09-25): every Agent call passes `model:` explicitly. An
+  # Agent call that omits it inherits the PARENT's model — a CTO on the stretch model then runs
+  # every review/draft on it too. The alias comes from the lane pin (.cto/devteam-model;
+  # `default` maps to the policy's lane family, .cto/model-budget.yaml).
+  AGENT_MODEL="$(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" --alias 2>/dev/null)"; AGENT_MODEL="${AGENT_MODEL:-opus}"
+  echo "AGENT_MODEL=$AGENT_MODEL   # pass model: \"$AGENT_MODEL\" on EVERY Agent call below"
   echo "DISPATCH=$ENGINE   # the CTO must fan the reviews — the bash body cannot."
   echo "Write each verdict to ${VPR_DIR}/<vp>.md, then synthesize. Reviews to run:"
   for vp in "${VP_LIST[@]}"; do
@@ -234,7 +240,7 @@ engine), a plumbing failure is as likely as a bad review — check the log befor
 content.
 
 ### If `DISPATCH=subagent` (the default)
-The bash body did NOT run the reviews — you run them now, in parallel, via the **Agent tool** (in-session, subscription pool — bright-line clean). For EACH `vp=… persona=… out=…` line above, launch one `Task`/Agent call (send them in a single message so they run concurrently) with a prompt like:
+The bash body did NOT run the reviews — you run them now, in parallel, via the **Agent tool** (in-session, subscription pool — bright-line clean). For EACH `vp=… persona=… out=…` line above, launch one `Task`/Agent call (send them in a single message so they run concurrently), **passing `model: "<AGENT_MODEL>"` from the output above on every call — never omit it** (an omitted model inherits yours, and the model policy keeps subagents on the lane model), with a prompt like:
 
 > Adopt the VP persona defined in `<persona path>` — read it in full and operate strictly as that VP in REVIEW mode (markdown verdict only; never write code/config/sprint-plans). Review the artifact at `<ARTIFACT path>`. Produce your structured verdict: recommendation (APPROVE / APPROVE-WITH-CONDITIONS / REJECT), then findings by severity (BLOCKER / MAJOR / MINOR / NOTE) each with concrete file:line-style evidence, then sign as that VP. **Write your verdict to `<out path>` and also return it.**
 

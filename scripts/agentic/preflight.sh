@@ -193,6 +193,27 @@ case "$REPO_NAME" in
         ;;
 esac
 
+# ─── 8b. Weekly model budget (CTO homes only) — model policy 2026-09-25 ───────
+# Always prints a compact read (the CTO's MODEL ADVICE line at session start quotes it);
+# warnings (runway short of the reset, a lane or subagent on the stretch model, a CTO
+# session doing routine work on it) count as preflight warnings. Policy + calibration:
+# .cto/model-budget.yaml (see .example).
+case "$REPO_NAME" in
+    agent-workflow-template|*-cto)
+        MBS="$REPO_ROOT/scripts/cto/model-budget.sh"
+        if [ -f "$MBS" ]; then
+            MB_OUT="$(bash "$MBS" 2>/dev/null)"
+            echo "[MODEL BUDGET] $(printf '%s\n' "$MB_OUT" | head -1 | sed 's/^model-budget: //')"
+            printf '%s\n' "$MB_OUT" | grep -E '^  [a-z]+ \((STRETCH|lane)\):|^  runway ' | sed 's/^  /    /'
+            MB_WARN="$(printf '%s\n' "$MB_OUT" | sed -n '/^WARNINGS:/,$p' | sed '1d')"
+            if [ -n "$MB_WARN" ]; then
+                emit_warning "model budget — $(printf '%s\n' "$MB_WARN" | grep -c .) finding(s); the CTO names them in its first reply with a MODEL ADVICE line:"
+                printf '%s\n' "$MB_WARN" | cut -c1-230 | head -12 | sed 's/^  /    /'
+            fi
+        fi
+        ;;
+esac
+
 # ─── 9. Governed derived artifacts (CTO homes only) — ADR-002 ────────────────
 # For every registry entry flagged `derived_artifacts: required`, run the gate in audit mode
 # at HEAD and surface staleness the way an open sprint is surfaced. A required repo with no

@@ -170,3 +170,4 @@ docs/architecture/decisions/cto-*.md
 .qa-lanes
 **/.qa-lanes
 .cto/join-ledger.md
+.cto/model-budget.yaml

@@ -280,6 +280,12 @@ wait
 if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
   echo "All $ENGINE calls done at $(date)"
 else
+# Subagent model (model policy 2026-09-25): every Agent call passes `model:` explicitly. An
+  # Agent call that omits it inherits the PARENT's model — a CTO on the stretch model then runs
+  # every review/draft on it too. The alias comes from the lane pin (.cto/devteam-model;
+  # `default` maps to the policy's lane family, .cto/model-budget.yaml).
+  AGENT_MODEL="$(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" --alias 2>/dev/null)"; AGENT_MODEL="${AGENT_MODEL:-opus}"
+  echo "AGENT_MODEL=$AGENT_MODEL   # pass model: \"$AGENT_MODEL\" on EVERY Agent call below"
   echo "DISPATCH=$ENGINE — prompts staged; the CTO drafts each plan via the Agent tool (see Your task)."
 fi
 echo ""
@@ -335,7 +341,7 @@ fi
 
 **First check the `ENGINE=` / `DISPATCH=` lines in the script output.**
 
-**If `DISPATCH=subagent` (default) or `handoff`:** the plans were NOT drafted yet — you draft them now. For each `repo=… prompt=… plan=… dest=…` repo, launch one `Task`/Agent call in parallel (single message), instructing it to read the staged prompt file (`$OUT/<repo>-prompt.md`), draft the sprint plan exactly per the prompt's OUTPUT REQUIREMENTS (markdown only, this-repo-only, `NO_SCOPE_FOR_THIS_REPO` if it doesn't apply), and **write it to both `$OUT/<repo>-plan.md` and the dest `…/docs/sprints/sprint-<NN>/sprint-plan.md`** (unless `--dry-run`, then staging only). When all return, proceed to synthesize. (Engine is bright-line clean: in-session Agent = subscription pool.)
+**If `DISPATCH=subagent` (default) or `handoff`:** the plans were NOT drafted yet — you draft them now. For each `repo=… prompt=… plan=… dest=…` repo, launch one `Task`/Agent call in parallel (single message), **passing `model: "<AGENT_MODEL>"` from the output above on every call** (omitting it inherits your model), instructing it to read the staged prompt file (`$OUT/<repo>-prompt.md`), draft the sprint plan exactly per the prompt's OUTPUT REQUIREMENTS (markdown only, this-repo-only, `NO_SCOPE_FOR_THIS_REPO` if it doesn't apply), and **write it to both `$OUT/<repo>-plan.md` and the dest `…/docs/sprints/sprint-<NN>/sprint-plan.md`** (unless `--dry-run`, then staging only). When all return, proceed to synthesize. (Engine is bright-line clean: in-session Agent = subscription pool.)
 
 **If the CLI engine ran (gemini/kimi/codex/claude-p):** (note: `codex` is ⚠️ untested — sanity-check its output before trusting it the way you would gemini/kimi) plans are already drafted + landed above.
 

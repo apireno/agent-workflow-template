@@ -2,7 +2,7 @@
 name: handoff
 description: Phase 2 execution launcher. Writes per-repo mission briefs to each target repo's docs/sprints/<sprint>/brief.md and opens a Terminal tab per repo running claude interactively; the kickoff prompt tells each session to read its brief. Use when the CEO approves a sprint plan and wants to fan out dev work across repos.
 allowed-tools: Bash(*) Read Write
-argument-hint: <sprint-XX> [--repos repo1,repo2] [--model=<alias|full|inherit>] [--dry-run]
+argument-hint: <sprint-XX> [--repos repo1,repo2] [--model=<alias|full|inherit>  (the CEO's approval for a stretch model)] [--dry-run]
 ---
 
 # Phase 2 Handoff: $ARGUMENTS
@@ -133,11 +133,12 @@ ARGS="$ARGUMENTS"
 SPRINT=""
 REPOS_FILTER=""
 DRY_RUN=0
+CLI_MODEL=0
 
 for tok in $ARGS; do
   case "$tok" in
     --repos=*)   REPOS_FILTER="${tok#--repos=}" ;;
-    --model=*)   DEVTEAM_MODEL="${tok#--model=}"; export DEVTEAM_MODEL ;;
+    --model=*)   DEVTEAM_MODEL="${tok#--model=}"; export DEVTEAM_MODEL; CLI_MODEL=1 ;;
     --dry-run)   DRY_RUN=1 ;;
     --*)         echo "Unknown flag: $tok" >&2 ;;
     *)           [ -z "$SPRINT" ] && SPRINT="$tok" ;;
@@ -377,6 +378,37 @@ BRIEFEOF
   echo "  wrote $BRIEF_FILE"
   PATHS_TO_OPEN="$PATHS_TO_OPEN $REPO_PATH"
 done <<< "$TARGETS"
+
+# MODEL POLICY GATE (2026-09-25). Lanes run on the policy's `lane:` family
+# (.cto/model-budget.yaml). A lane PINNED to the `stretch:` family — by .cto/devteam-model,
+# a per-repo override, or a DEVTEAM_MODEL left exported in the shell — is refused here,
+# before any tab opens, unless the CEO passed --model= on THIS invocation: /handoff is
+# CEO-typed, so the flag on the command line is the approval, on the record. A stale file
+# line or a leftover env var is not. Runs in --dry-run too, so the preview tells the truth.
+STRETCH_REPOS=""
+for _p in $PATHS_TO_OPEN; do
+  _n="$(basename "$_p")"
+  bash "$ROOT/scripts/cto/resolve-devteam-model.sh" "$_n" --is-stretch 2>/dev/null && STRETCH_REPOS="$STRETCH_REPOS $_n"
+done
+if [ -n "$STRETCH_REPOS" ]; then
+  if [ "$CLI_MODEL" -eq 1 ]; then
+    echo ""
+    echo "MODEL: stretch model approved on the command line (--model=$DEVTEAM_MODEL) for:$STRETCH_REPOS"
+  else
+    echo ""
+    echo "REFUSED (model policy): these lanes resolve to the STRETCH model, which lanes do not run on"
+    echo "without the CEO's approval on this command:"
+    for _n in $STRETCH_REPOS; do
+      echo "    $_n -> $(bash "$ROOT/scripts/cto/resolve-devteam-model.sh" "$_n" 2>/dev/null)"
+    done
+    echo "  Source (first that applies): DEVTEAM_MODEL env, then .cto/devteam-model (incl. per-repo lines)."
+    bash "$ROOT/scripts/cto/resolve-devteam-model.sh" "$(echo $STRETCH_REPOS | cut -d' ' -f1)" --explain 2>&1 >/dev/null | sed 's/^/    /'
+    echo "  To run them on the stretch model deliberately: re-run with --model=<stretch model>."
+    echo "  To run them on the lane model: fix the pin (or unset DEVTEAM_MODEL) and re-run."
+    echo "  Briefs were written; no tab was opened."
+    exit 1
+  fi
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo ""

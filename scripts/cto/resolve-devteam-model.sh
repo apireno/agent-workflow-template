@@ -55,26 +55,65 @@
 # OUTPUT: the model on stdout, or EMPTY for `inherit`. Diagnostics to stderr so
 # `M=$(resolve-devteam-model.sh acme-core)` stays clean. --explain prints the why.
 #
-# USAGE: resolve-devteam-model.sh [repo-name] [--explain]
+# TWO MORE MODES (model policy, 2026-09-25 — .cto/model-budget.yaml names `lane:` and `stretch:`):
+#   --alias       print the Agent-tool alias (opus|sonnet|haiku|fable) for the resolved value,
+#                 so skills pass `model:` on every subagent call instead of inheriting the
+#                 PARENT's model. `default`/`inherit` map to the policy's `lane:` family,
+#                 because the Agent tool has no "account default" value and omitting `model`
+#                 is exactly the inheritance being removed.
+#   --is-stretch  exit 0 if the resolved value is the policy's `stretch:` family, 1 if not.
+#                 /handoff refuses a stretch pin unless the CEO passed --model= on that call.
+#
+# USAGE: resolve-devteam-model.sh [repo-name] [--explain | --alias | --is-stretch]
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_MODEL="default"
 REPO_NAME=""
 EXPLAIN=0
+MODE="value"
 
 for arg in "$@"; do
     case "$arg" in
         --explain) EXPLAIN=1 ;;
-        -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        --alias)   MODE="alias" ;;
+        --is-stretch) MODE="stretch" ;;
+        -h|--help) sed -n '2,72p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *)         [ -z "$REPO_NAME" ] && REPO_NAME="$arg" ;;
     esac
 done
 
 note() { [ "$EXPLAIN" -eq 1 ] && echo "resolve-devteam-model: $*" >&2; return 0; }
 
+policy() { # policy <lane|stretch> <fallback>: read .cto/model-budget.yaml beside the pin file
+    local key="$1" fb="$2" base v=""
+    for base in "${ROOT:-}" "$(cd "$HERE/../.." && pwd)"; do
+        [ -n "$base" ] && [ -f "$base/.cto/model-budget.yaml" ] || continue
+        v="$(sed -n "s/^$key:[[:space:]]*\([A-Za-z0-9._-]*\).*/\1/p" "$base/.cto/model-budget.yaml" | head -1)"
+        break
+    done
+    printf '%s' "${v:-$fb}" | tr '[:upper:]' '[:lower:]'
+}
+family() { # family <value> -> opus|sonnet|haiku|fable|<value>
+    case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+        *fable*) echo fable ;; *opus*) echo opus ;; *sonnet*) echo sonnet ;; *haiku*) echo haiku ;;
+        *) printf '%s\n' "$1" ;;
+    esac
+}
+
 emit() {
     # in: _M (resolved value)
+    if [ "$MODE" = "alias" ]; then
+        case "$_M" in
+            ""|default|inherit) policy lane opus; echo; note "alias: '$_M' -> the policy's lane family" ;;
+            *) family "$_M" ;;
+        esac
+        exit 0
+    fi
+    if [ "$MODE" = "stretch" ]; then
+        case "$_M" in ""|default|inherit) exit 1 ;; esac
+        [ "$(family "$_M")" = "$(policy stretch fable)" ] && exit 0 || exit 1
+    fi
     if [ "$_M" = "inherit" ]; then
         note "inherit — no --model flag; the tab takes the machine-global default."
         note "  That default is whatever /model last saved, in ANY window — which is"

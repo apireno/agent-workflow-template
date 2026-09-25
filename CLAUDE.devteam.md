@@ -254,6 +254,17 @@ The README must cover:
 
 If the repo already has a README, update it to reflect what was built this sprint.
 
+### Your model is the lane model — do not change it (BINDING)
+
+`/handoff` started this session on the fleet's **lane** model with `--model`, on purpose. Do not
+run `/model` in this window: it switches you *and* saves the pick as the machine-global default
+every later hand-opened session inherits. Do not pass a different `model` to subagents than the
+one you were given. If you reach a step that needs real design judgment — a choice between
+architectures, a contested reading of evidence, a cause you cannot find — **stop and say so**:
+add a `## Next step is a design decision` section to `dev-report.md` (what the decision is, the
+options you see, what evidence would settle it). The CTO decides whether it warrants the stretch
+model; you never escalate the model yourself.
+
 ### Generated artifacts change through their generator — never by hand (BINDING)
 
 Some files in a repo are **build outputs**: produced by a generator, a tuning/derivation
