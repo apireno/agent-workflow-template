@@ -6,6 +6,26 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-03 — the last unguarded `claude -p` paths: IDEO Phase 5 re-routed, call-dev-team quarantined
+
+A field CTO's report. `scripts/cto/ideo-cross-repo.sh` ran its Phase 5 cross-repo synthesis by
+piping the aggregate prompt into `claude -p` — the metered Agent SDK pool — while the per-repo
+phases already resolved their engine. Preflight had flagged it since June.
+
+- **IDEO Phase 5 resolves through `resolve-review-engine.sh`** against the CTO home, up front,
+  before phases 1–4 spend anything. kimi → `openrouter-chat.sh`; gemini/codex → their CLIs;
+  `claude-p` only with `REVIEW_ALLOW_METERED=1` (the resolver's standard refusal otherwise);
+  `subagent`/`handoff` write the prompt, skip the call, and print
+  `SYNTHESIS=deferred-to-orchestrator prompt=… out=…` for the CTO session. An empty or failed
+  engine answer is a failure (exit 3), never a synthesis file. `--engine` overrides per run.
+  `CLAUDE_BIN` is gone.
+- **Phase 6 routes only from a real synthesis**; otherwise it says it skipped.
+- **`call-dev-team.sh` is quarantined, not re-routed.** It runs a whole dev-team sprint as a
+  tool-using agent, which no chat engine can, and `/handoff` superseded it. It refuses without
+  `REVIEW_ALLOW_METERED=1` and points at `/handoff`; `orchestrate-sprint.sh` inherits the gate.
+- `scripts/cto/test-ideo-cross-repo.sh`: 22 assertions, stubbed phases and stubbed `claude`;
+  14 of its checks failed against the pre-fix script. The preflight warning is gone.
+
 ## 2026-09-25 — model policy: lane model by default, stretch model by approval, weekly budget read
 
 A field CTO's request after the stretch model's weekly allowance ran out a day before the

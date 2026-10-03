@@ -1,6 +1,13 @@
 #!/bin/bash
 # call-dev-team.sh — Invoke a dev team (claude -p) in a project repo
 #
+# ⛔ QUARANTINED (2026-10-03): METERED. `claude -p` draws from the Agent SDK credit pool, not
+# the subscription (the 2026-06-15 billing change). This script runs a WHOLE dev-team sprint as
+# a tool-using agent, which no review engine (kimi/gemini/codex: chat only) can do, so it cannot
+# be re-routed — it is superseded by /handoff, which opens an interactive (subscription) window
+# per repo. It now refuses unless REVIEW_ALLOW_METERED=1 is set for the invocation, the same
+# opt-in every other metered path uses. orchestrate-sprint.sh calls it and inherits the gate.
+#
 # Sends a goal prompt to a dev team's Claude Code instance running in the
 # context of a specific project repo (reads that repo's own CLAUDE.md).
 #
@@ -63,6 +70,14 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown argument: $1" >&2; usage ;;
     esac
 done
+
+# ─── Metered quarantine (before anything else can run) ───────────────────────
+if [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
+    echo "ERROR: call-dev-team.sh runs \`claude -p\` — the METERED Anthropic API path (bright-line)." >&2
+    echo "  It runs ONLY with REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing." >&2
+    echo "  Use /handoff instead: it opens an interactive dev-team window per repo on the subscription." >&2
+    exit 3
+fi
 
 # ─── Validate ─────────────────────────────────────────────────────────────────
 if [ -z "$REPO_PATH" ]; then

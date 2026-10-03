@@ -18,7 +18,16 @@
 #     [--repos project1,project2,...] \
 #     [--votes N] \
 #     [--timeout 600] \
+#     [--engine kimi|gemini|codex|claude-p|subagent|handoff]
 #     [--dry-run]
+#
+# ENGINE (Phase 5 synthesis). Resolved like every other fleet LLM call, through
+# scripts/agentic/resolve-review-engine.sh against THIS CTO home: --engine > REVIEW_ENGINE env
+# > <cto-home>/.review-engine > built-in `subagent`. CLI engines (kimi, gemini, codex) run the
+# synthesis here. `claude-p` is the METERED Anthropic API and runs only with
+# REVIEW_ALLOW_METERED=1 (the resolver refuses otherwise). `subagent`/`handoff` cannot run from a
+# script: the prompt is written, the call is skipped, and SYNTHESIS=deferred-to-orchestrator is
+# printed so the CTO session runs it. Phases 1-4 resolve per repo inside ideo-sprint.sh.
 #
 # If --repos is omitted, reads all active projects from .cto/projects.yaml.
 #
@@ -48,7 +57,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 IDEO_SCRIPT="${TEMPLATE_ROOT}/scripts/agentic/ideo-sprint.sh"
 CTO_CONFIG="${TEMPLATE_ROOT}/.cto/projects.yaml"
-CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+RESOLVER="${TEMPLATE_ROOT}/scripts/agentic/resolve-review-engine.sh"
 
 if [ ! -x "$IDEO_SCRIPT" ]; then
     echo "Error: ideo-sprint.sh not found or not executable at: $IDEO_SCRIPT" >&2
@@ -72,10 +81,11 @@ REPOS_ARG=""
 VOTES=3
 TIMEOUT=600
 DRY_RUN=0
+ENGINE_ARG=""
 
 # ─── Parse arguments ──────────────────────────────────────────────────────────
 usage() {
-    echo "Usage: $0 --goal FILE --output-dir DIR [--repos p1,p2,...] [--votes N] [--timeout N] [--dry-run]" >&2
+    echo "Usage: $0 --goal FILE --output-dir DIR [--repos p1,p2,...] [--votes N] [--timeout N] [--engine NAME] [--dry-run]" >&2
     exit 2
 }
 
@@ -86,6 +96,7 @@ while [[ $# -gt 0 ]]; do
         --repos)      REPOS_ARG="$2";  shift 2 ;;
         --votes)      VOTES="$2";      shift 2 ;;
         --timeout)    TIMEOUT="$2";    shift 2 ;;
+        --engine)     ENGINE_ARG="$2"; shift 2 ;;
         --dry-run)    DRY_RUN=1;       shift 1 ;;
         --help|-h)    usage ;;
         *) echo "Unknown argument: $1" >&2; usage ;;
@@ -97,6 +108,25 @@ if [ -z "$OUTPUT_DIR" ]; then echo "Error: --output-dir is required" >&2; exit 2
 if [ ! -f "$GOAL_FILE" ]; then echo "Error: goal file not found: $GOAL_FILE" >&2; exit 2; fi
 
 mkdir -p "${OUTPUT_DIR}/repos"
+
+# ─── Resolve the Phase 5 engine BEFORE spending anything ─────────────────────
+# Up front so a refused or unknown engine stops the run before phases 1-4 spend their
+# per-repo budget. --engine is passed through the same resolver (as REVIEW_ENGINE), so the
+# quarantine and the alias rules apply to it too.
+if [ -n "$ENGINE_ARG" ]; then export REVIEW_ENGINE="$ENGINE_ARG"; fi
+if [ ! -x "$RESOLVER" ]; then
+    echo "Error: shared engine resolver not found at $RESOLVER" >&2; exit 2
+fi
+SYNTH_ENGINE="$(REPO_ROOT="$TEMPLATE_ROOT" "$RESOLVER")" || true
+case "$SYNTH_ENGINE" in
+    claude-p-blocked)
+        # The resolver already printed the standard quarantine refusal on stderr.
+        echo "Refusing: Phase 5 would run on the metered claude-p engine. Nothing was run." >&2
+        exit 2 ;;
+    kimi|gemini|codex|claude-p|subagent|handoff) : ;;
+    *) echo "Error: unknown engine '$SYNTH_ENGINE' for Phase 5 (use kimi|gemini|codex|subagent|handoff|claude-p)." >&2; exit 2 ;;
+esac
+echo "Phase 5 engine: $SYNTH_ENGINE"
 
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 SUMMARY_FILE="${OUTPUT_DIR}/summary.md"
@@ -371,38 +401,70 @@ End your response with: SYNTHESIS_COMPLETE
 SYNTH_PROMPT_FILE="${OUTPUT_DIR}/phase5-synthesis-prompt.md"
 echo "$AGGREGATE_CONTEXT" > "$SYNTH_PROMPT_FILE"
 
-# Run synthesis via claude -p in CTO repo context
+# Run the synthesis on the resolved engine (see ENGINE in the header). A script cannot spawn
+# an Agent call, so subagent/handoff defer to the CTO session rather than fail or fake it.
 cd "$TEMPLATE_ROOT"
-
+AGENTIC="${TEMPLATE_ROOT}/scripts/agentic"
 SYNTH_EXIT=0
-if [ -n "$TIMEOUT_BIN" ]; then
-    SYNTH_RESPONSE=$(echo "$AGGREGATE_CONTEXT" | env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
-        "$TIMEOUT_BIN" 300 "$CLAUDE_BIN" -p --max-turns 3 2>&1) || SYNTH_EXIT=$?
-else
-    SYNTH_RESPONSE=$(echo "$AGGREGATE_CONTEXT" | env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
-        "$CLAUDE_BIN" -p --max-turns 3 2>&1) || SYNTH_EXIT=$?
-fi
+SYNTH_DEFERRED=0
+SYNTH_RAW="${OUTPUT_DIR}/phase5-synthesis-raw.md"
+run_synth() { # stdin: prompt; stdout: synthesis
+    case "$SYNTH_ENGINE" in
+        kimi)   "${AGENTIC}/openrouter-chat.sh" 2>"${OUTPUT_DIR}/phase5.kimi-stderr.log" ;;
+        codex)  "${AGENTIC}/codex-exec.sh" 2>"${OUTPUT_DIR}/phase5.codex-stderr.log" ;;  # ⚠️ untested engine
+        gemini) gemini 2>"${OUTPUT_DIR}/phase5.gemini-stderr.log" ;;
+        claude-p)
+            # ⚠️ METERED Anthropic API — reachable only because the resolver saw
+            # REVIEW_ALLOW_METERED=1. Defense in depth: check again at the call site.
+            [ "${REVIEW_ALLOW_METERED:-0}" = "1" ] || { echo "Error: claude-p is metered; set REVIEW_ALLOW_METERED=1." >&2; return 1; }
+            env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN claude -p --max-turns 3 2>"${OUTPUT_DIR}/phase5.claude-stderr.log" ;;
+    esac
+}
 
-{
-    echo "# Cross-Repo IDEO Synthesis"
-    echo ""
-    echo "**Generated:** $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "**Repos synthesized:** $(IFS=', '; echo "${PROJECT_NAMES[*]}")"
-    echo ""
-    echo "---"
-    echo ""
-    echo "$SYNTH_RESPONSE"
-} > "$SYNTHESIS_FILE"
-
-if [ $SYNTH_EXIT -ne 0 ]; then
-    echo "  ⚠️  Synthesis call returned exit $SYNTH_EXIT — partial results in $SYNTHESIS_FILE"
-else
-    echo "  ✅ Synthesis complete → $SYNTHESIS_FILE"
-fi
+case "$SYNTH_ENGINE" in
+    subagent|handoff)
+        SYNTH_DEFERRED=1
+        echo "  ⏸  Phase 5 not run here: engine '$SYNTH_ENGINE' needs the orchestrator."
+        echo "SYNTHESIS=deferred-to-orchestrator prompt=${SYNTH_PROMPT_FILE} out=${SYNTHESIS_FILE}"
+        echo "  CTO: run the prompt (one Agent call with an explicit model, or a /handoff window),"
+        echo "  write the result to ${SYNTHESIS_FILE}, then do Phase 6 routing by hand."
+        ;;
+    *)
+        if [ -n "$TIMEOUT_BIN" ]; then
+            "$TIMEOUT_BIN" 300 bash -c "$(declare -f run_synth); SYNTH_ENGINE='$SYNTH_ENGINE' OUTPUT_DIR='$OUTPUT_DIR' AGENTIC='$AGENTIC' run_synth" \
+                < "$SYNTH_PROMPT_FILE" > "$SYNTH_RAW" || SYNTH_EXIT=$?
+        else
+            run_synth < "$SYNTH_PROMPT_FILE" > "$SYNTH_RAW" || SYNTH_EXIT=$?
+        fi
+        if [ "$SYNTH_EXIT" -ne 0 ] || [ ! -s "$SYNTH_RAW" ]; then
+            # An empty answer is a failed synthesis, never a finished one.
+            echo "  ❌ Phase 5 synthesis failed on '$SYNTH_ENGINE' (exit $SYNTH_EXIT, $(wc -c < "$SYNTH_RAW" | tr -d ' ') bytes)."
+            echo "     Logs: ${OUTPUT_DIR}/phase5.${SYNTH_ENGINE%%-*}-stderr.log · prompt kept at $SYNTH_PROMPT_FILE"
+            SYNTH_DEFERRED=1; [ "$SYNTH_EXIT" -eq 0 ] && SYNTH_EXIT=3
+        else
+            {
+                echo "# Cross-Repo IDEO Synthesis"
+                echo ""
+                echo "**Generated:** $(date '+%Y-%m-%d %H:%M:%S') · **Engine:** $SYNTH_ENGINE"
+                echo "**Repos synthesized:** $(IFS=', '; echo "${PROJECT_NAMES[*]}")"
+                echo ""
+                echo "---"
+                echo ""
+                cat "$SYNTH_RAW"
+            } > "$SYNTHESIS_FILE"
+            echo "  ✅ Synthesis complete ($SYNTH_ENGINE) → $SYNTHESIS_FILE"
+        fi
+        rm -f "$SYNTH_RAW"
+        ;;
+esac
 
 # ─── Phase 6: Routing ─────────────────────────────────────────────────────────
-# Extract routing recommendations from synthesis and write as actionable plan
-
+# Extract routing recommendations from synthesis and write as actionable plan.
+# Only from a real synthesis: a routing plan written over nothing reads as a finished session.
+if [ ! -s "$SYNTHESIS_FILE" ]; then
+    echo "Phase 6: skipped — no synthesis at $SYNTHESIS_FILE yet (route after it exists)."
+    ROUTING_FILE="(not written — Phase 5 deferred or failed)"
+else
 {
     echo "# Cross-Repo IDEO — PRD Routing Plan"
     echo ""
@@ -439,6 +501,7 @@ fi
 } > "$ROUTING_FILE"
 
 echo "  ✅ Routing plan → $ROUTING_FILE"
+fi
 echo ""
 
 # ─── Write final summary ──────────────────────────────────────────────────────
@@ -485,5 +548,7 @@ echo "  🏆 Synthesis:  $SYNTHESIS_FILE"
 echo "  📬 Routing:    $ROUTING_FILE"
 echo ""
 
-# Exit 0 if all succeeded, 1 if mixed
+# Exit 0 if all repos succeeded and Phase 5 either ran or was deliberately deferred to the
+# orchestrator; 1 if any repo failed; 3 if a CLI-engine synthesis failed.
+[ "$SYNTH_EXIT" -ne 0 ] && exit 3
 [ "$FAIL_COUNT" -eq 0 ] && exit 0 || exit 1
