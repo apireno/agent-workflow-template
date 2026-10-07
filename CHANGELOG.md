@@ -6,6 +6,23 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-07 — `agy` review engine (Google Antigravity CLI, Gemini 3.x)
+
+The Gemini CLI engine died for this plan on 2026-06-19; Antigravity's own CLI, `agy`, works. And the
+review engine turned out to be most of the fleet's OpenRouter bill: ~$22 of ~$31 in the last 30 days,
+547 kimi reviews averaging ~10k output tokens each. `agy` runs on the Antigravity plan's quota.
+
+- `scripts/agentic/agy-exec.sh`: stdin → stdout like the other executors. Verified against agy
+  1.3.1: `-p` takes the prompt as its value (no stdin), so it is passed as an argument (refused
+  above 900 KB). Runs in an empty scratch dir, `--mode plan`, `--disable-slash-commands` (review
+  prompts quote skill names), never auto-approving tools; reports any file the session creates.
+  Gemini models only (default `gemini-3.1-pro-high`, `AGY_MODEL` overrides) — agy also offers
+  Claude, and a "cross-family" review on Claude is not one. Empty output = failure (exit 3).
+- Wired everywhere `codex` is: resolver, `set-review-engine.sh` menu, `vp-review.sh`,
+  `ideo-sprint.sh`, `ideo-cross-repo.sh`, `request-merge.sh`, `vp-author.sh`, `/vp-review`,
+  `/sprint-fanout`.
+- Live run: a VP-Eng review of a 39 KB prompt in 35 s, 4.6 KB structured verdict, repo untouched.
+
 ## 2026-10-03 — the last unguarded `claude -p` paths: IDEO Phase 5 re-routed, call-dev-team quarantined
 
 A field CTO's report. `scripts/cto/ideo-cross-repo.sh` ran its Phase 5 cross-repo synthesis by

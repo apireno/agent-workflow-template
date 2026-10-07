@@ -198,7 +198,7 @@ menu (`resolve-review-engine.sh`): `subagent` (default) | `kimi` | `codex` (⚠�
 quarantined). The `kimi` engine (OpenRouter, default `moonshotai/kimi-k2.6`, `OPENROUTER_MODEL`
 overridable to deepseek/qwen/etc.) is the **cross-family independent reviewer**: a different
 model family judging Claude-authored work avoids shared-method bias (the VP-DS concern that
-killed same-family gold judging). Prefer `kimi` over `subagent` when independence matters —
+killed same-family gold judging). The `agy` engine (Google Antigravity CLI, Gemini 3.x via `agy-exec.sh`; verified live 2026-10-07) is a SECOND cross-family reviewer that runs on the Antigravity plan's quota instead of OpenRouter credit — about 35s per review against kimi's minutes, and no per-token bill. Use `agy` for routine plan and dev-report reviews; keep `kimi` for accept-gates and statistical claims, and run both when two independent families matter. Prefer `kimi` over `subagent` when independence matters —
 Phase-3 dev-report reviews, statistical claims, accept-gates — and as the fallback when
 subscription limits are hit mid-sprint. Cost is pennies per review (~$0.55/M in, $3.20/M out);
 each call prints a token-usage line to its log.

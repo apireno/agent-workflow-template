@@ -23,11 +23,12 @@
 
 set -uo pipefail
 
-SELECTABLE="subagent kimi codex handoff"
+SELECTABLE="subagent kimi agy codex handoff"
 
 print_menu() {
     printf 'subagent\t$0\tClaude Code Agent tool, in-session. Subscription pool, no API key, no external CLI. Same-family: Claude reviewing Claude.\n'
     printf 'kimi\t~pennies\tOpenRouter (moonshotai/kimi-k2.6). Cross-FAMILY independent reviewer — the strongest accept-gate. Metered but non-Anthropic. Needs OPENROUTER_API_KEY.\n'
+    printf 'agy\tplan quota\tGoogle Antigravity CLI (agy -p), Gemini 3.x. A second cross-family reviewer on the Antigravity plan, not OpenRouter credit. Needs the agy CLI.\n'
     printf 'codex\t~pennies\tOpenAI Codex CLI (codex exec). A second cross-family reviewer. UNTESTED — treat first run as a smoke test. Needs the codex CLI.\n'
     printf 'handoff\t$0\tReview runs in its own interactive Claude window. Subscription pool. Slowest; use when a review needs tools.\n'
 }
@@ -72,6 +73,9 @@ esac
 # Warn but do not refuse: a project may configure the engine before the key is in the shell.
 if [ "$ENGINE" = "kimi" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
     echo "NOTE: OPENROUTER_API_KEY is not set in this shell — 'kimi' needs it at review time." >&2
+fi
+if [ "$ENGINE" = "agy" ] && ! command -v agy >/dev/null 2>&1; then
+    echo "NOTE: the 'agy' CLI is not on PATH — 'agy' needs it at review time." >&2
 fi
 if [ "$ENGINE" = "codex" ] && ! command -v codex >/dev/null 2>&1; then
     echo "NOTE: the 'codex' CLI is not on PATH — 'codex' needs it at review time." >&2

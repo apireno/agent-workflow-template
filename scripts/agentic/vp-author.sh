@@ -21,7 +21,7 @@
 #      artifact. The prompt says so explicitly, and the stamp makes it checkable.
 #
 # Engine: resolved by resolve-review-engine.sh (REVIEW_ENGINE env -> .review-engine ->
-# default). CLI engines only (kimi/gemini/codex/claude-p) — subagent/handoff are
+# default). CLI engines only (kimi/gemini/agy/codex/claude-p) — subagent/handoff are
 # orchestrator-driven and rejected, same contract as vp-review.sh.
 #
 # Usage:
@@ -102,6 +102,7 @@ EOF
 
 case "$ENGINE" in
     kimi)     RUNNER="$SCRIPT_DIR/openrouter-chat.sh" ;;
+    agy)      RUNNER="$SCRIPT_DIR/agy-exec.sh" ;;
     codex)    RUNNER="$SCRIPT_DIR/codex-exec.sh" ;;
     gemini)   RUNNER="" ;;
     claude-p) RUNNER="" ;;

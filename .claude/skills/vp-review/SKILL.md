@@ -1,8 +1,8 @@
 ---
 name: vp-review
-description: Run multi-VP review on a sprint plan, ADR, RCA, PRD, dev-report, or other artifact via parallel VP personas (engine configurable — subagent | kimi | codex (untested) | gemini | handoff | claude-p), then have the CTO synthesize a verdict. Defaults to vp-prod + vp-eng (the always-relevant pair). Add specialty VPs (vp-security, vp-devops, vp-datascience) via the --vps flag when the artifact touches their domain — see docs/personas/cto.md "VP Review Composition" for the policy. Use when the CEO says "review this", "get VP feedback on X", "what would the VPs say about Y", or wants multi-perspective critique on a file path. Auto-fire whenever conversation references reviewing an artifact at a specific path.
+description: Run multi-VP review on a sprint plan, ADR, RCA, PRD, dev-report, or other artifact via parallel VP personas (engine configurable — subagent | kimi | agy | codex (untested) | gemini | handoff | claude-p), then have the CTO synthesize a verdict. Defaults to vp-prod + vp-eng (the always-relevant pair). Add specialty VPs (vp-security, vp-devops, vp-datascience) via the --vps flag when the artifact touches their domain — see docs/personas/cto.md "VP Review Composition" for the policy. Use when the CEO says "review this", "get VP feedback on X", "what would the VPs say about Y", or wants multi-perspective critique on a file path. Auto-fire whenever conversation references reviewing an artifact at a specific path.
 allowed-tools: Bash(mkdir *) Bash(rm *) Bash(scripts/agentic/*) Bash(cat *) Bash(ls *) Read Write Task
-argument-hint: <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|codex|gemini|handoff]
+argument-hint: <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|agy|codex|gemini|handoff]
 ---
 
 # VP Review of: $ARGUMENTS
@@ -133,7 +133,7 @@ done
 
 if [ -z "$ART" ] || [ ! -f "$ART" ]; then
   echo "ERROR: artifact not found at $ART"
-  echo "Usage: /vp-review <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|codex|gemini|handoff]"
+  echo "Usage: /vp-review <path-to-artifact> [--vps=vp-prod,vp-eng,...] [--engine subagent|kimi|agy|codex|gemini|handoff]"
   exit 1
 fi
 [ "$VPS" = "all" ] && VPS="vp-prod,vp-eng,vp-security,vp-devops,vp-datascience"
@@ -170,7 +170,7 @@ persona_file() {
 
 IFS=',' read -A VP_LIST <<< "$VPS" 2>/dev/null || IFS=',' read -ra VP_LIST <<< "$VPS"
 
-if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
+if [ "$ENGINE" = "gemini" ] || [ "$ENGINE" = "kimi" ] || [ "$ENGINE" = "agy" ] || [ "$ENGINE" = "codex" ] || [ "$ENGINE" = "claude-p" ]; then
   # CLI engines: LAUNCH DETACHED, do not wait here.
   #
   # This body used to fire the reviews and `wait`. A skill shell has a ~2-minute budget and a
@@ -219,7 +219,7 @@ fi
 
 **First read the `ENGINE=` and `DISPATCH=` lines in the script output above** — they tell you whether the reviews are RUNNING DETACHED (poll them), or whether YOU must fan them out.
 
-### If `DISPATCH=detached` (engine = gemini, kimi, codex, or claude-p)
+### If `DISPATCH=detached` (engine = gemini, kimi, agy, codex, or claude-p)
 The reviews are **running**, not finished. Nothing is on disk yet. Do this, in order:
 
 1. **Run the `WAIT_CMD=` line above** as a Bash call. It polls until every review lands or the
@@ -233,7 +233,7 @@ The reviews are **running**, not finished. Nothing is on disk yet. Do this, in o
 **Never read a verdict file before the wait returns.** A file that is absent mid-run is a
 review in flight, not a review that failed — and `<vp>.md` is now published by atomic rename,
 so if it exists it has a body. A FAILED row means no verdict was produced at all: read
-`<VPR_DIR>/<vp>.log` and the `.{kimi,codex,claude}-stderr.log` beside it for the cause, and
+`<VPR_DIR>/<vp>.log` and the `.{kimi,agy,codex,claude}-stderr.log` beside it for the cause, and
 report the failure rather than synthesizing around a missing VP. For `kimi`, per-VP token
 usage lines are in the same `.log` if the CEO asks about spend. For `codex` (⚠️ untested
 engine), a plumbing failure is as likely as a bad review — check the log before blaming the

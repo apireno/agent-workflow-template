@@ -69,7 +69,7 @@ case "$ENGINE" in claude) ENGINE=claude-p;; dual) ENGINE=gemini;; none|"") ENGIN
 # claude-p-blocked = metered quarantine refused. Exit with guidance instead of misfiring.
 if [ "$ENGINE" = "subagent" ] || [ "$ENGINE" = "handoff" ] || [ "$ENGINE" = "claude-p-blocked" ]; then
     echo "ERROR: engine '$ENGINE' is not runnable by this CLI script (CLI engines only)." >&2
-    echo "  Set REVIEW_ENGINE=kimi (OpenRouter), REVIEW_ENGINE=codex (OpenAI, untested), REVIEW_ENGINE=gemini, or REVIEW_ENGINE=claude-p REVIEW_ALLOW_METERED=1 (metered)," >&2
+    echo "  Set REVIEW_ENGINE=kimi (OpenRouter), REVIEW_ENGINE=agy (Antigravity/Gemini), REVIEW_ENGINE=codex (OpenAI, untested), REVIEW_ENGINE=gemini, or REVIEW_ENGINE=claude-p REVIEW_ALLOW_METERED=1 (metered)," >&2
     echo "  or run the review via a subagent-capable orchestrator (CTO fans Agent calls)." >&2
     exit 2
 fi
@@ -229,6 +229,9 @@ HEADER
         kimi)
             cat "$PROMPT_FILE" | "$(dirname "$0")/openrouter-chat.sh" > "$OUTPUT_FILE" 2>"${OUTPUT_FILE}.kimi-stderr.log"
             ;;
+        agy)
+            cat "$PROMPT_FILE" | "$(dirname "$0")/agy-exec.sh" > "$OUTPUT_FILE" 2>"${OUTPUT_FILE}.agy-stderr.log"
+            ;;
         codex)
             # ⚠️ UNTESTED (2026-07-02) — see codex-exec.sh header.
             cat "$PROMPT_FILE" | "$(dirname "$0")/codex-exec.sh" > "$OUTPUT_FILE" 2>"${OUTPUT_FILE}.codex-stderr.log"
@@ -239,7 +242,7 @@ HEADER
             cat "$PROMPT_FILE" | "$CLAUDE_CMD" -p --max-turns 1 > "$OUTPUT_FILE" 2>/dev/null
             ;;
         *)
-            echo "Error: engine '$ENGINE' is not a CLI engine here (use gemini | kimi | codex (untested) | claude-p)." >&2
+            echo "Error: engine '$ENGINE' is not a CLI engine here (use gemini | kimi | agy | codex (untested) | claude-p)." >&2
             exit 1
             ;;
     esac

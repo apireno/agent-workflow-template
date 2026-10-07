@@ -23,6 +23,10 @@
 #               (pennies per review) — bright-line clean. The cross-FAMILY independent
 #               reviewer now that gemini-CLI is gone; also the fallback when Claude
 #               subscription limits are hit mid-sprint. Requires OPENROUTER_API_KEY.
+#   agy       — Google Antigravity's CLI in print mode via `agy-exec.sh` (Gemini 3.x; default
+#               gemini-3.1-pro-high, AGY_MODEL overrides; non-Gemini models refused). A SECOND
+#               cross-family reviewer beside kimi, on the Antigravity plan's quota instead of
+#               per-token OpenRouter credit. Verified live 2026-10-07 (agy 1.3.1). Needs `agy`.
 #   codex     — ⚠️ UNTESTED (2026-07-02, no live `codex` install to verify against — built from
 #               OpenAI's published docs only, see codex-exec.sh header for specifics). OpenAI
 #               Codex CLI's non-interactive `codex exec` mode via `codex-exec.sh`. A SECOND
@@ -79,14 +83,14 @@ case "$engine" in
   # reads as a passed review. Warn on stderr (NOT stdout — callers capture stdout) and
   # degrade to the built-in default so the review still actually happens.
   none|"")       note "alias: '${engine:-empty}' -> 'subagent'"; engine="subagent" ;;
-  gemini|kimi|codex|subagent|handoff|claude-p) : ;;
+  gemini|kimi|agy|codex|subagent|handoff|claude-p) : ;;
   *)             note "unknown engine '$engine' from $src -> falling back to 'subagent'"; engine="subagent" ;;
 esac
 
 if [ "$engine" = "gemini" ] && [ "${REVIEW_ALLOW_GEMINI:-0}" != "1" ]; then
   echo "WARNING: engine 'gemini' (from $src) is UNAVAILABLE — no CLI access on this plan, and the" >&2
   echo "  API path is not in use. Falling back to 'subagent' so the review actually runs." >&2
-  echo "  Fix the source: set that .review-engine to subagent|kimi|codex|handoff." >&2
+  echo "  Fix the source: set that .review-engine to subagent|kimi|agy|codex|handoff." >&2
   engine="subagent"
 fi
 
@@ -96,7 +100,7 @@ note "resolved '$engine' (from $src; raw='$raw')"
 # explicitly opted into metered API for THIS invocation.
 if [ "$engine" = "claude-p" ] && [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
   echo "ERROR: engine 'claude-p' is the METERED Anthropic API path (bright-line). It runs ONLY with" >&2
-  echo "  REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing. Pick kimi|codex|gemini|subagent|handoff," >&2
+  echo "  REVIEW_ALLOW_METERED=1 set explicitly for this invocation. Refusing. Pick kimi|agy|codex|gemini|subagent|handoff," >&2
   echo "  or re-run with REVIEW_ALLOW_METERED=1 if you truly intend to spend API credit." >&2
   echo "claude-p-blocked"
   exit 3

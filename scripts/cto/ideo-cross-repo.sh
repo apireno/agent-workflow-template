@@ -18,12 +18,12 @@
 #     [--repos project1,project2,...] \
 #     [--votes N] \
 #     [--timeout 600] \
-#     [--engine kimi|gemini|codex|claude-p|subagent|handoff]
+#     [--engine kimi|agy|gemini|codex|claude-p|subagent|handoff]
 #     [--dry-run]
 #
 # ENGINE (Phase 5 synthesis). Resolved like every other fleet LLM call, through
 # scripts/agentic/resolve-review-engine.sh against THIS CTO home: --engine > REVIEW_ENGINE env
-# > <cto-home>/.review-engine > built-in `subagent`. CLI engines (kimi, gemini, codex) run the
+# > <cto-home>/.review-engine > built-in `subagent`. CLI engines (kimi, agy, gemini, codex) run the
 # synthesis here. `claude-p` is the METERED Anthropic API and runs only with
 # REVIEW_ALLOW_METERED=1 (the resolver refuses otherwise). `subagent`/`handoff` cannot run from a
 # script: the prompt is written, the call is skipped, and SYNTHESIS=deferred-to-orchestrator is
@@ -123,8 +123,8 @@ case "$SYNTH_ENGINE" in
         # The resolver already printed the standard quarantine refusal on stderr.
         echo "Refusing: Phase 5 would run on the metered claude-p engine. Nothing was run." >&2
         exit 2 ;;
-    kimi|gemini|codex|claude-p|subagent|handoff) : ;;
-    *) echo "Error: unknown engine '$SYNTH_ENGINE' for Phase 5 (use kimi|gemini|codex|subagent|handoff|claude-p)." >&2; exit 2 ;;
+    kimi|agy|gemini|codex|claude-p|subagent|handoff) : ;;
+    *) echo "Error: unknown engine '$SYNTH_ENGINE' for Phase 5 (use kimi|agy|gemini|codex|subagent|handoff|claude-p)." >&2; exit 2 ;;
 esac
 echo "Phase 5 engine: $SYNTH_ENGINE"
 
@@ -411,6 +411,7 @@ SYNTH_RAW="${OUTPUT_DIR}/phase5-synthesis-raw.md"
 run_synth() { # stdin: prompt; stdout: synthesis
     case "$SYNTH_ENGINE" in
         kimi)   "${AGENTIC}/openrouter-chat.sh" 2>"${OUTPUT_DIR}/phase5.kimi-stderr.log" ;;
+        agy)    "${AGENTIC}/agy-exec.sh" 2>"${OUTPUT_DIR}/phase5.agy-stderr.log" ;;
         codex)  "${AGENTIC}/codex-exec.sh" 2>"${OUTPUT_DIR}/phase5.codex-stderr.log" ;;  # ⚠️ untested engine
         gemini) gemini 2>"${OUTPUT_DIR}/phase5.gemini-stderr.log" ;;
         claude-p)
