@@ -13,15 +13,32 @@
 #   - `-p` takes the prompt as its VALUE (`-p='…'`); it does NOT read stdin, and a bare `-p`
 #     is an error. So the prompt is passed as an argument (macOS ARG_MAX is 1 MiB; refused
 #     above PROMPT_MAX_BYTES with a clear message rather than an opaque exec failure).
-#   - `--model gemini-3.1-pro-low --mode plan -p='Reply with exactly OK'` -> "OK" in ~14s,
-#     nothing written to the working directory.
+#   - `--model gemini-3.1-pro-low -p='Reply with exactly OK'` -> "OK" in ~14s, nothing written
+#     to the working directory. (That smoke test could not have caught the RCA below: a prompt
+#     that invites no tool never calls one.)
+#
+# RCA 2026-10-12 (docs/rca/2026-10-12-agy-empty-completions.md). ~28% of agy reviews came back
+# EMPTY: agy is an agent, and review prompts invite tool use (the persona says "read …", the
+# artifact quotes file paths), so the model calls `read_file` or a shell `command`. Headless print
+# mode cannot prompt for that permission, auto-denies it, and the denial ABORTS the whole turn —
+# "jetski: no output produced". Prompt-dependent, not size- or version-dependent: the same prompt
+# failed 6/6 in plan mode, default mode, and plan+slash-disabled; with the NO_TOOLS preamble below
+# it returned a full verdict 2/2, then 6/6 through vp-review.sh on three other dev-reports whose
+# lanes had logged the failure (vp-eng + vp-prod each, 46-116 s). Separately, `--mode plan` was a
+# no-op all along: agy ignores it when slash commands are disabled ("--mode plan has no effect
+# while slash command expansion is disabled"), so it was never a guard and is no longer passed.
 #
 # GUARDS (why each exists):
+#   - NO_TOOLS PREAMBLE, first in every prompt. Everything a review needs is inline; telling the
+#     model so is what stops the tool call that aborts the turn. It also means no prompt can begin
+#     with "/", so it can never be read as a slash command.
 #   - EMPTY SCRATCH CWD. agy is an agent with tools; a review must not read or write the repo.
-#     It runs in a fresh temp dir, in `--mode plan`, never with --dangerously-skip-permissions.
-#     Any file that appears there afterwards is reported on stderr (a tool ran that shouldn't).
+#     It runs in a fresh temp dir and never with --dangerously-skip-permissions, so any tool call
+#     is denied rather than run. Any file that appears there afterwards is reported on stderr.
 #   - --disable-slash-commands. Review prompts quote skill names (/vp-review, /handoff); in
 #     print mode those would otherwise be EXPANDED as commands rather than read as text.
+#   - TOOL-DENIED is named. If the model still reaches for a tool, the failure says so (exit 3)
+#     with the tool's name, instead of reading as a generic empty answer.
 #   - GEMINI ONLY. agy's menu includes Claude models. A "cross-family" review that silently ran
 #     on Claude is the shared-method bias this engine exists to avoid, so a non-gemini model is
 #     refused unless AGY_ALLOW_NON_GEMINI=1.
@@ -49,11 +66,14 @@ cat > "$WORK/.prompt"
 BYTES=$(wc -c < "$WORK/.prompt" | tr -d ' ')
 [ "$BYTES" -gt 0 ] || { echo "agy-exec: empty prompt on stdin." >&2; exit 2; }
 [ "$BYTES" -le "$PROMPT_MAX_BYTES" ] || { echo "agy-exec: prompt is $BYTES bytes; agy takes it as an argument and the limit here is $PROMPT_MAX_BYTES. Trim the artifact." >&2; exit 2; }
-PROMPT="$(cat "$WORK/.prompt")"; rm -f "$WORK/.prompt"
+NO_TOOLS='IMPORTANT: Everything you need is in this message. Do not call any tools, do not run commands, do not read files. Reply with the review as plain markdown text only.
+
+'
+PROMPT="${NO_TOOLS}$(cat "$WORK/.prompt")"; rm -f "$WORK/.prompt"
 mkdir -p "$WORK/cwd"
 
 START=$(date +%s)
-( cd "$WORK/cwd" && "$AGY_BIN" --model "$MODEL" --mode plan --disable-slash-commands \
+( cd "$WORK/cwd" && "$AGY_BIN" --model "$MODEL" --disable-slash-commands \
       --print-timeout "${TIMEOUT_S}s" -p="$PROMPT" ) > "$WORK/out" 2> "$WORK/err"
 RC=$?
 SECS=$(( $(date +%s) - START ))
@@ -66,6 +86,14 @@ fi
 if [ "$RC" -ne 0 ]; then
     tail -20 "$WORK/err" >&2
     exit "$RC"
+fi
+if [ "$OUTB" -eq 0 ] && grep -q 'no output produced' "$WORK/err"; then
+    TOOL="$(grep -oE 'required the "[^"]+"' "$WORK/err" | head -1 | sed 's/required the //')"
+    echo "agy-exec: TOOL-DENIED — the model called a tool (${TOOL:-unknown}) despite the no-tools preamble;" >&2
+    echo "  headless mode auto-denied it and agy aborted the turn with no output. This is a failed" >&2
+    echo "  review, not an empty one. Re-run on another engine (REVIEW_ENGINE=kimi) and report the" >&2
+    echo "  prompt if it recurs. See docs/rca/2026-10-12-agy-empty-completions.md." >&2
+    exit 3
 fi
 if [ "$OUTB" -eq 0 ] || ! grep -q '[^[:space:]]' "$WORK/out"; then
     echo "agy-exec: empty completion (exit 0, no text). Treating as a failed review." >&2

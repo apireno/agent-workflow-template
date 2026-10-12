@@ -6,6 +6,20 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-12 — `agy` empty completions: root cause and fix (RCA `docs/rca/2026-10-12-agy-empty-completions.md`)
+
+~28% of `agy` reviews since 10-08 came back empty ("jetski: no output produced — a tool required the
+"read_file" permission … auto-denied"). Review prompts invite tool use; headless mode auto-denies the
+tool and the denial aborts the turn. Prompt-dependent, not size-dependent. `--mode plan` was a silent
+no-op beside `--disable-slash-commands` and was never a guard. Reproduced 6/6 on a captured failing
+prompt across three configurations; a no-tools preamble fixed it 2/2 there and 6/6 through
+`vp-review.sh` on three other failing dev-reports.
+
+- `agy-exec.sh`: no-tools preamble first in every prompt; `--mode plan` dropped; a tool denial exits 3
+  as `TOOL-DENIED` naming the tool. `test-agy-exec.sh`: 15 offline assertions.
+- `CLAUDE.devteam.md`: what a lane does when its review engine is down — record the gap with the
+  exact error, never switch engines, close with `Phase-3 reviews pending: engine <name> down`.
+
 ## 2026-10-07 — `agy` review engine (Google Antigravity CLI, Gemini 3.x)
 
 The Gemini CLI engine died for this plan on 2026-06-19; Antigravity's own CLI, `agy`, works. And the

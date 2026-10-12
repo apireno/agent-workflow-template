@@ -122,6 +122,14 @@ Then WAIT. Do not write any code until the CEO explicitly approves.
 > Never leave a zero-byte review on disk: downstream it is indistinguishable from a review that
 > ran and found nothing to say. Reporting "the vp-prod review failed, engine error in the log"
 > is a complete and acceptable Phase-3 outcome. Producing an empty file is not.
+>
+> **If the review ENGINE is down** — every attempt fails with the same engine-level error
+> (`agy-exec: TOOL-DENIED`, an auth or quota message, a CLI not found) — that is a mechanism gap,
+> not a sprint failure. Record it in `dev-report.md` under `Mechanism gaps` with the engine name and
+> the exact error line, **do not** switch engines yourself (no `REVIEW_ENGINE=`, no edit to
+> `.review-engine`), finish the rest of Phase 3, and close with `DEV_REPORT_READY` plus the line
+> `Phase-3 reviews pending: engine <name> down`. The CTO re-runs them on a working engine. A lane
+> never accepts its own work without its reviews, and never invents them.
 
 **Step 11. MANDATORY — EXECUTE these bash commands:**
 
