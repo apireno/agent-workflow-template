@@ -9,6 +9,8 @@ argument-hint: <symbol-or-query> [--repo <name>]
 
 The NAVIGATION-layer interface of ADR-001. The engine is project-owned and pluggable; this skill is the engine-agnostic query surface. The template names no engine: a project says which MCP server is its code-graph engine in `.claude/code-graph-server` (one line: the server's name in `.mcp.json`), or with `CODE_GRAPH_SERVER`.
 
+**Plug in your engine here.** **codegram** (code graph + doc RAG, exposed as an MCP server) is the reference implementation; it is not open source yet. Until it is, plug in your own RAG / code-graph implementation here — anything that meets the contract below works (Sourcegraph, a language-server index, your own retrieval service). With codegram the file holds `codegram` and its tools are `mcp__codegram__*`.
+
 ## Probe the engine
 
 ```!
