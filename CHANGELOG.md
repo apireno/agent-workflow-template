@@ -6,6 +6,29 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — weekend defects from a fleet CTO: authoring engine, human gates, bug ids, ACK watcher
+
+- **`/sprint-fanout` drafts on the AUTHORING engine** — `resolve-review-engine.sh --role author`:
+  `AUTHOR_ENGINE` env > `.author-engine` > `subagent`. The review engine (agy/kimi) is for judging, not
+  drafting; a fleet on agy had every plan drafted by a chat call that could not see the repo.
+  `--sprint` is required for a real run (the old default wrote `sprint-XX-TBD` dirs) and takes a
+  slug; a leading `sprint-` is stripped. Zero plans from a CLI engine exits 3 ("FAILED: 0 of N");
+  the subagent path no longer prints "Writing plans…" before anything is drafted.
+- **Human-only gates get a CEO path that no agent can take.** `ceo-authorize.sh` (the CEO runs it in a
+  real terminal; needs /dev/tty; retype-the-gate confirmation; sealed record in
+  `CEO-AUTHORIZATION.md`) and `check-authorization.sh` (token line OR a valid sealed record). New
+  `deny-authorization-forge.sh` hook (CTO home + dev repos) blocks sessions from writing the record or
+  running the recorder. The request had the CTO write the authorization on the CEO's word; that is
+  the forged sign-off the classifier refused four times, under a new file name, so it was not built.
+- **`next-bug-id.sh`**: one fleet bug sequence in the CTO home, locked, seeded above every id cited in
+  any registered repo's docs; 3-digit ids. Bug template and dev-team contract point at it.
+- **`wait-for-ack.sh`**: assistant messages only, appended after start, `ACK <TAG>` on its own line —
+  the CTO's prompt and a lane's promise in prose never match. Resolves a repo, name, window id or file.
+- **`session-for-path.sh`** + `qa-send.sh` fallback: a lane launched in the main checkout that moved
+  into a worktree recorded its session id there; qa-send now finds the session working in the dir.
+- Tests: `test-next-bug-id.sh` (8, incl. 10 parallel calls), `test-ceo-authorization.sh` (9, incl.
+  tamper), `test-wait-for-ack.sh` (6).
+
 ## 2026-10-19 — a skill's parse error stops it; it never widens it
 
 `/sprint-fanout … --repos a,b --sprint 07` printed "Unknown flag", dropped the repo list, and drafted

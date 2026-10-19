@@ -158,12 +158,27 @@ Then WAIT for CEO verdict.
 
 ---
 
+### Human-only gates (BINDING)
+
+If a step needs a human sign-off (a security sign-off token, a signed pre-registration, any
+`…: GRANTED` line), you never write it — not for the CTO, not on anyone's word relayed to you.
+Author the artifact, stop, and record `signature-pending: <gate>` in `dev-report.md`. The CEO
+records their own authorization with `scripts/agentic/ceo-authorize.sh` in a terminal; gates check
+it with `scripts/agentic/check-authorization.sh`. Sessions are hook-blocked from writing
+`CEO-AUTHORIZATION.md`.
+
+When the CTO asks for an acknowledgement, reply with `ACK <TAG>` **alone on its own line**, only
+when the thing is actually done — the CTO's watcher waits for exactly that line.
+
 ### Bug Handling During Sprints
 
 If you discover a bug during a sprint:
 
 - **Related to this sprint's scope?** Fix it. Note it in the dev report under Deviations.
-- **Out of scope?** Write a bug report at `docs/backlog/bugs/BUG-XXX-description.md`. Do NOT fix it here. Tell the CEO: "Found an out-of-scope bug — filed as BUG-XXX for triage."
+- **Get the id first:** `ID=$(./scripts/agentic/next-bug-id.sh)` — one sequence for the whole
+  fleet, kept in the CTO home. Never pick the next number by looking at this repo's backlog:
+  every repo doing that is how the same id ended up on different bugs in different repos.
+- **Out of scope?** Write a bug report at `docs/backlog/bugs/$ID-description.md`. Do NOT fix it here. Tell the CEO: "Found an out-of-scope bug — filed as BUG-XXX for triage."
 - **Out of scope but blocks your work?** File the bug report AND tell the CEO immediately.
 
 ---

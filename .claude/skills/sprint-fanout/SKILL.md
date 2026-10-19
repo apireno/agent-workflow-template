@@ -2,12 +2,12 @@
 name: sprint-fanout
 description: Draft per-repo sprint plans in parallel through the resolved review engine for a given PRD or goal. Each plan lands at the target repo's docs/sprints/sprint-XX/sprint-plan.md path. Use when the CEO wants to start a multi-repo sprint based on a PRD or shared goal, wants to see how the dev teams would scope a piece of work, or says things like "draft plans for X across these repos" or "let's scope work for this PRD". Auto-fire when the CEO references a PRD/goal path and asks for sprint planning. CEO can still type the slash for explicit gating.
 allowed-tools: Bash(*) Read Write
-argument-hint: <prd-or-goal-path> [--repos repo1,repo2] [--sprint NN] [--dry-run]
+argument-hint: <prd-or-goal-path> --sprint <slug-or-NN> [--repos repo1,repo2] [--dry-run]
 ---
 
 # Sprint Fanout: $ARGUMENTS
 
-Drafts a sprint-plan.md per active repo by feeding the PRD/goal + per-repo CLAUDE.md to the **configured engine** in parallel. Engine resolved by `scripts/agentic/resolve-review-engine.sh` (`REVIEW_ENGINE` env → `.review-engine` file → default `subagent`). For CLI engines (`gemini`/`kimi`/`claude-p`) the body drafts inline; for `subagent`/`handoff` the body stages per-repo prompts and the CTO drafts them via the Agent tool.
+Drafts a sprint-plan.md per active repo by feeding the PRD/goal + per-repo CLAUDE.md to the **configured engine** in parallel. Engine resolved by `scripts/agentic/resolve-review-engine.sh --role author` (`AUTHOR_ENGINE` env → `.author-engine` file → default `subagent`) — the AUTHORING engine, separate from the review engine. For CLI engines (`gemini`/`kimi`/`claude-p`) the body drafts inline; for `subagent`/`handoff` the body stages per-repo prompts and the CTO drafts them via the Agent tool.
 
 ## Setup + dispatch
 
@@ -159,14 +159,19 @@ done
 
 if [ -z "$PRD_PATH" ] || [ ! -f "$PRD_PATH" ]; then
   echo "ERROR: provide a path to a PRD or goal file as the first argument"
-  echo "Usage: /sprint-fanout <path> [--repos r1,r2] [--sprint NN] [--dry-run]"
+  echo "Usage: /sprint-fanout <path> --sprint <slug-or-NN> [--repos r1,r2] [--dry-run]"
   exit 1
 fi
 
 # Resolve sprint number — default to next available across repos, but for v1
 # require explicit --sprint if not provided
+# The sprint name is REQUIRED for a real run: the old default "XX-TBD" wrote plans into a
+# sprint-XX-TBD dir in every repo. A slug or a number both work; a leading "sprint-" is
+# stripped so `--sprint sprint-foo` does not become sprint-sprint-foo.
+SPRINT="${SPRINT#sprint-}"
 if [ -z "$SPRINT" ]; then
-  SPRINT="XX-TBD"
+  if [ "$DRY_RUN" -eq 1 ]; then SPRINT="XX-TBD"
+  else echo "ERROR: --sprint <slug-or-NN> is required (it names docs/sprints/sprint-<it>/ in every repo). Refusing." >&2; exit 2; fi
 fi
 
 # Output dir for staging + summary
@@ -213,7 +218,9 @@ fi
 
 # Resolve the engine (shared resolver) — configurable per CEO 2026-06-19, not hardcoded gemini.
 RESOLVER="$ROOT/scripts/agentic/resolve-review-engine.sh"
-ENGINE=$( [ -x "$RESOLVER" ] && "$RESOLVER" || echo subagent ) || true
+# AUTHORING engine, not the review engine (2026-10-19): drafting a plan needs the repo in front of
+# it, which only a subagent has. AUTHOR_ENGINE env > <cto-home>/.author-engine > subagent.
+ENGINE=$( [ -x "$RESOLVER" ] && REPO_ROOT="$ROOT" "$RESOLVER" --role author || echo subagent ) || true
 case "$ENGINE" in claude) ENGINE=claude-p;; dual) ENGINE=gemini;; none|"") ENGINE=subagent;; esac
 [ "$ENGINE" = "claude-p-blocked" ] && { echo "ENGINE=claude-p refused (metered; set REVIEW_ALLOW_METERED=1)"; exit 3; }
 [ "$ENGINE" = "claude-p" ] && [ "${REVIEW_ALLOW_METERED:-0}" != "1" ] && { echo "ERROR: claude-p is metered; set REVIEW_ALLOW_METERED=1."; exit 1; }
@@ -324,7 +331,24 @@ while IFS=$'\t' read -r REPO_NAME REPO_PATH; do
   printf "%-32s %-12s %s %s\n" "$REPO_NAME" "$STATUS" "$PLAN" "$NOTE"
 done < "$OUT/repos.tsv"
 
-if [ "$DRY_RUN" -eq 1 ]; then
+IS_CLI=0
+case "$ENGINE" in gemini|kimi|agy|codex|claude-p) IS_CLI=1 ;; esac
+if [ "$IS_CLI" -eq 1 ]; then
+  N_ALL=$(grep -c . "$OUT/repos.tsv"); N_OK=$(cat "$OUT"/*.status 2>/dev/null | grep -cx SUCCESS)
+  if [ "${N_OK:-0}" -eq 0 ]; then
+    echo ""
+    echo "FAILED: no engine call produced a plan (0 of $N_ALL; engine=$ENGINE). Nothing was written."
+    echo "  Per-repo logs: $OUT/<repo>.log. Fix the engine or re-run with AUTHOR_ENGINE=subagent."
+    exit 3
+  fi
+  [ "$N_OK" -lt "$N_ALL" ] && echo "PARTIAL: $N_OK of $N_ALL repos produced a plan; only those are written."
+fi
+
+if [ "$IS_CLI" -eq 0 ]; then
+  echo ""
+  echo "NOT WRITTEN YET: engine=$ENGINE — the plans are drafted by the CTO session (see Your task),"
+  echo "  which writes each one to its dest. Nothing has been written to any repo by this body."
+elif [ "$DRY_RUN" -eq 1 ]; then
   echo ""
   echo "DRY-RUN: plans staged at $OUT but NOT written to per-repo sprint dirs."
   echo "Review the plans, then re-run without --dry-run to land them."

@@ -175,7 +175,14 @@ if [ -z "$TRANSCRIPT" ] && [ -n "$REPO" ]; then
         TRANSCRIPT="$(ls -1 "$HOME/.claude/projects/"*/"$SID.jsonl" 2>/dev/null | head -1)"
         [ -n "$TRANSCRIPT" ] || echo "qa-send: WARNING — no transcript found for session $SID under ~/.claude/projects (processing cannot be verified)" >&2
     else
-        echo "qa-send: WARNING — $SID_FILE not found; processing cannot be verified" >&2
+        # A lane launched in the main checkout that moved into this worktree recorded its id
+        # THERE, not here (2026-10-19). Find the session whose latest cwd is this directory.
+        TRANSCRIPT="$(bash "$(dirname "$0")/session-for-path.sh" "$REPO" 2>/dev/null)"
+        if [ -n "$TRANSCRIPT" ]; then
+            echo "qa-send: no $SID_FILE — verifying against the session working in $REPO now: $(basename "$TRANSCRIPT" .jsonl)" >&2
+        else
+            echo "qa-send: WARNING — $SID_FILE not found and no session's latest cwd is $REPO; processing cannot be verified" >&2
+        fi
     fi
 fi
 TRANSCRIPT_SIZE_BEFORE=0

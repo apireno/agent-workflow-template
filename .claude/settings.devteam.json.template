@@ -67,7 +67,7 @@
         ]
       }
     ],
-    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand \u2014 INERT unless the repo declares globs in .claude/generated-paths.",
+    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand \u2014 INERT unless the repo declares globs in .claude/generated-paths. deny-authorization-forge: no session writes CEO-AUTHORIZATION.md or runs ceo-authorize.sh \u2014 only the CEO records an authorization, in a real terminal.",
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -75,6 +75,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-self-commit.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-authorization-forge.sh"
           }
         ]
       },
@@ -84,6 +88,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-generated-edit.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-authorization-forge.sh"
           }
         ]
       }

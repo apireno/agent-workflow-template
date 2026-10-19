@@ -1,3 +1,5 @@
+<!-- The id comes from ./scripts/agentic/next-bug-id.sh (one fleet-wide sequence). Never choose
+     the next number by hand from this repo's backlog: per-repo numbering collides across repos. -->
 # Bug Report: {BUG-XXX} — {short description}
 
 **Reported By:** {Dev Team on initiative INIT-XXX | CEO | VP Eng}

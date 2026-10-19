@@ -59,13 +59,30 @@ set -uo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 EXPLAIN=0
-[ "${1:-}" = "--explain" ] && EXPLAIN=1
+ROLE=review
+# ROLE (2026-10-19). `--role author` resolves the engine that DRAFTS (sprint plans from
+# /sprint-fanout), separately from the one that REVIEWS. They want different things: a reviewer
+# should be a different model family (independence); an author needs the repo in front of it, which
+# only an in-session subagent has. Precedence for author: AUTHOR_ENGINE env > <repo>/.author-engine
+# > built-in `subagent`. A fleet that switched its REVIEW engine to agy had every plan drafted by a
+# chat call that could not see the repo — and failed whole when that engine's model was retired.
+for _a in "$@"; do
+  case "$_a" in
+    --explain) EXPLAIN=1 ;;
+    --role=author|author) ROLE=author ;;
+    --role=review|review) ROLE=review ;;
+  esac
+done
 
 note() { [ "$EXPLAIN" -eq 1 ] && echo "resolve-review-engine: $*" >&2; return 0; }
 
 raw=""
 src=""
-if [ -n "${REVIEW_ENGINE:-}" ]; then
+if [ "$ROLE" = "author" ]; then
+  if [ -n "${AUTHOR_ENGINE:-}" ]; then raw="$AUTHOR_ENGINE"; src="AUTHOR_ENGINE env"
+  elif [ -f "$REPO_ROOT/.author-engine" ]; then raw="$(tr -d '[:space:]' < "$REPO_ROOT/.author-engine")"; src="$REPO_ROOT/.author-engine"
+  else raw="subagent"; src="built-in author default"; fi
+elif [ -n "${REVIEW_ENGINE:-}" ]; then
   raw="$REVIEW_ENGINE"; src="REVIEW_ENGINE env"
 elif [ -f "$REPO_ROOT/.review-engine" ]; then
   raw="$(tr -d '[:space:]' < "$REPO_ROOT/.review-engine")"; src="$REPO_ROOT/.review-engine"

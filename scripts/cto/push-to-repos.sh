@@ -173,6 +173,7 @@ required_files=(
   "$TEMPLATE/.claude/hooks/deny-generated-edit.sh"
   "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh"
   "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh"
+  "$TEMPLATE/.claude/hooks/deny-authorization-forge.sh"
   "$TEMPLATE/.claude/githooks/pre-commit"
 )
 for f in "${required_files[@]}"; do
@@ -278,8 +279,9 @@ PYEOF
   cp "$TEMPLATE/.claude/hooks/deny-generated-edit.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh" "$DEST/.claude/hooks/"
+  cp "$TEMPLATE/.claude/hooks/deny-authorization-forge.sh" "$DEST/.claude/hooks/"
   chmod +x "$DEST/.claude/hooks/"*.sh
-  echo "      wrote $DEST/.claude/hooks/ (7: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit, derived-artifact-reminder)"
+  echo "      wrote $DEST/.claude/hooks/ (8: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit, derived-artifact-reminder, deny-authorization-forge)"
 
   # 3a. Git pre-commit backstop for governed derived artifacts (ADR-002 §4 point 4). Lives
   # under .claude/ (already untracked in upstream mode) and is wired through the LOCAL

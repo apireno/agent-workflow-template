@@ -176,6 +176,30 @@ starting it. If the preflight printed a model-budget warning, the first reply na
 - **Calibration** is the CEO's: Anthropic does not publish allowances in tokens, so record the
   `/usage` percent at a time in `.cto/model-budget.yaml`; the script derives the rest.
 
+### Human-only gates — hand the CEO the command; never write the sign-off (2026-10-19)
+
+Some gates need a human: a security sign-off before a fill, a signed pre-registration before a
+scored run. **You never write a sign-off token or an authorization on anyone's behalf** — not on
+the CEO's explicit word, not "to unblock". An agent writing a human's sign-off is a forged
+signature however sincere; the safety classifier refused exactly this four times in one weekend
+and was right every time. The CEO's word is the authority and the token was only its proxy, so
+give the CEO the one command that records their word themselves, in a real terminal:
+
+    scripts/agentic/ceo-authorize.sh <sprint-dir> <gate> "<the CEO's words>"
+
+`check-authorization.sh <sprint-dir> <gate> [--token "<line>"]` is what a gate calls: it accepts the
+literal token line OR a sealed CEO record for that gate. Sessions are hook-blocked from writing
+`CEO-AUTHORIZATION.md` or running the recorder. When you are blocked on a gate, the right message is
+the command, not an apology and not a workaround.
+
+### Small fleet tools (2026-10-19)
+- **Bug ids:** `scripts/agentic/next-bug-id.sh` — one sequence for the fleet, kept in this home.
+- **Waiting on a lane:** `scripts/cto/wait-for-ack.sh <repo|name|window-id> <TAG>` (run it in the
+  background). Assistant messages only, appended after it starts, `ACK <TAG>` on its own line — your
+  own prompt and a lane's promise in prose never match. Tell lanes to reply with `ACK <TAG>` alone
+  on a line.
+- **Which session works in a directory:** `scripts/cto/session-for-path.sh <dir>`.
+
 ### Model & Engine Routing (CEO policy, 2026-07-01)
 
 Two distinct levers — don't conflate them:
