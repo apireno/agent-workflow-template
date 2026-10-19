@@ -49,7 +49,14 @@ MAIN=os.environ["RW_MAIN"]; ONLY=os.environ["RW_ONLY"]; DATA=os.environ["RW_DATA
 WINS=set(os.environ["RW_WINS"].split()); CWDS=[os.path.realpath(p) for p in os.environ["RW_CWDS"].splitlines() if p]
 ARGS=os.environ["RW_ARGS"].splitlines()
 def git(*a, cwd=MAIN): return subprocess.run(["git","-C",cwd,*a],capture_output=True,text=True)
-base=git("symbolic-ref","--short","refs/remotes/origin/HEAD").stdout.strip() or git("symbolic-ref","--short","HEAD").stdout.strip()
+# Base: what origin/HEAD names (origin/main). "Merged" is judged against BOTH origin/<base> and the
+# LOCAL <base> (fleet report 2026-10-19): a fleet that lands locally and pushes rarely has origins that
+# lag, and judging only against origin kept every locally-merged worktree alive forever. A worktree
+# whose commits are in the local base is safe to reap — the commits stay in the repo; only the
+# checkout goes. The row says which ("merged-local" = in local base, not yet pushed).
+obase=git("symbolic-ref","--short","refs/remotes/origin/HEAD").stdout.strip()
+lbase=obase.split("/",1)[1] if "/" in obase else (git("symbolic-ref","--short","HEAD").stdout.strip())
+base=obase or lbase
 # worktrees
 wts=[]; cur={}
 for line in git("worktree","list","--porcelain").stdout.splitlines()+[""]:
@@ -127,18 +134,24 @@ for w in wts:
         if path in t or name in t: refs.append(f"LANE {f}"); break
     branch=w.get("branch","").replace("refs/heads/","") if isinstance(w.get("branch"),str) else ""
     ref=branch or w.get("HEAD","")
-    merged = bool(base) and git("merge-base","--is-ancestor",ref,base).returncode==0
+    m_origin = bool(obase) and git("merge-base","--is-ancestor",ref,obase).returncode==0
+    m_local = bool(lbase) and git("rev-parse","--verify","-q",lbase).returncode==0 and git("merge-base","--is-ancestor",ref,lbase).returncode==0
+    merged = m_origin or m_local
+    mstate = "merged" if m_origin else ("merged-local" if m_local else "unmerged")
     st=git("status","--porcelain",cwd=path).stdout.splitlines()
     dirty=sum(1 for l in st if not l.startswith("??")); untracked=sum(1 for l in st if l.startswith("??"))
     try: age=int((time.time()-int(git("log","-1","--format=%ct",cwd=path).stdout.strip() or 0))/86400)
     except ValueError: age=-1
     verdict="REAPABLE" if merged and not dirty and not refs else "KEEP"
-    why=[] if verdict=="REAPABLE" else (["not merged into "+base] if not merged else [])+([f"{dirty} uncommitted edit(s)"] if dirty else [])+refs
-    print("\t".join([verdict, path, branch or "(detached)", "merged" if merged else "unmerged", str(dirty), str(untracked), str(age), " | ".join(why)]))
+    why=([] if verdict=="REAPABLE" else (["not merged into "+lbase+" or "+(obase or "-")] if not merged else []))+([f"{dirty} uncommitted edit(s)"] if dirty else [])+refs
+    if verdict=="REAPABLE" and mstate=="merged-local": why=[f"in local {lbase}, not yet on {obase} — commits stay in the repo; push {lbase} soon"]
+    print("\t".join([verdict, path, branch or "(detached)", mstate, str(dirty), str(untracked), str(age), " | ".join(why)]))
 PY
 PLAN="$(cat "$PLANF")"
-printf '%-9s %-46s %-26s %-8s %5s %5s %4s  %s\n' VERDICT WORKTREE BRANCH MERGED DIRTY UNTRK AGE WHY
-printf '%s\n' "$PLAN" | awk -F'\t' 'NF{printf "%-9s %-46s %-26s %-8s %5s %5s %3sd  %s\n",$1,substr($2,length($2)-45),substr($3,1,26),$4,$5,$6,$7,$8}'
+# WORKTREE shows the name next to the repo (fleet report: the old column cut the leading characters
+# off a long absolute path — "rs/apireno/…"); the full path is on the line below each row.
+printf '%-9s %-40s %-24s %-12s %5s %5s %4s  %s\n' VERDICT WORKTREE BRANCH MERGED DIRTY UNTRK AGE WHY
+printf '%s\n' "$PLAN" | awk -F'\t' 'NF{n=$2; sub(/.*\//,"",n); printf "%-9s %-40s %-24s %-12s %5s %5s %3sd  %s\n          %s\n",$1,n,substr($3,1,24),$4,$5,$6,$7,$8,$2}'
 N_REAP=$(printf '%s\n' "$PLAN" | grep -c '^REAPABLE')
 echo ""; echo "reap-worktrees: $(printf '%s\n' "$PLAN" | grep -c .) linked worktree(s); $N_REAP reapable; archive root $ARCH"
 if [ -n "$ONLY" ]; then

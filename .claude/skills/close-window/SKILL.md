@@ -197,6 +197,10 @@ if [ "$FORCE" -ne 1 ]; then
 fi
 
 echo "Closing Terminal window id $WIN_ID for $REPO_NAME..."
+# A DELIBERATE close kills the claude process, and the SessionEnd hook used to read that as a crash
+# and leave .claude/CRASHED (fleet report 2026-10-19). Leave a note first; session-end-record.sh
+# treats a fresh CLOSING note as a clean exit and removes it.
+mkdir -p "$REPO_PATH/.claude" && printf 'window=%s ts=%s by=/close-window\n' "$WIN_ID" "$(date -u +%FT%TZ)" > "$REPO_PATH/.claude/CLOSING"
 # Close strategy (revised 2026-06-22 — the prior "close then click Terminate" in ONE script
 # DEADLOCKED: Terminal's `close` BLOCKS on the "terminate running processes?" sheet, so the
 # click code that came AFTER it never ran — the agent had to click Terminate / type exit by

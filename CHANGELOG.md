@@ -6,6 +6,20 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — Sprint A field-test fixes (fleet report)
+
+- **reap-worktrees: "merged" also counts the LOCAL base.** A fleet that lands locally and pushes rarely
+  has origins that lag; judging only against `origin/<base>` kept every locally-merged worktree alive
+  forever. Rows now say `merged` (on origin) or `merged-local` (in local base, not pushed — reapable,
+  with "push <base> soon"). The WORKTREE column no longer truncates long paths. Test: 11.
+- **deny-authorization-forge matches what a command DOES, not what it mentions.** It blocked a memo
+  heredoc that named the recorder. Now shlex-tokenized: the recorder blocks only at a command position
+  (incl. behind bash/env/nohup/script), heredoc bodies are commands only when fed to a shell, and a
+  data heredoc blocks only for real write code. `test-authorization-forge-guard.sh`: 17 cases.
+- **/close-window no longer leaves CRASHED.** It writes `.claude/CLOSING` before killing the session;
+  `session-end-record.sh` treats a fresh note as a deliberate close.
+- ADR-003 / changelog corrected: the worktree-hooks gap applies only where `.claude/` is untracked.
+
 ## 2026-10-19 — repo hygiene in the mechanism: /sprint-accept lands the sprint (ADR-003, Sprint A)
 
 A fleet audit: ~2 months of unpushed work, 103 abandoned worktrees (74 GB), 300+ merged branches,
@@ -21,7 +35,8 @@ a feature branch acting as main, CI red unnoticed; then live worktrees deleted b
   file, data manifest or live lane's sprint dir references. No `--force`.
 - **`.claude/githooks/pre-push`**: no direct pushes to base unless `land-lane.sh` made them;
   `ALLOW_BASE_PUSH` is a logged exception. **Installer fix:** `core.hooksPath` is now ABSOLUTE — a
-  relative path resolved per worktree, so no hook had run in any lane worktree.
+  relative path resolves per worktree, so where `.claude/` is untracked no hook ran in a lane worktree.
+  (Corrected 2026-10-19: where `.claude/githooks` is tracked, worktrees had the hooks all along.)
 - **`pinned-worktree.sh`** + `.claude/pins.yaml`: idempotent, sparse, refuses a moved pin.
 - **Derived artifacts at their pin** (amends ADR-002): `pin_lock`/`pin_key`/`pin_arg`/`external`;
   `--fix` reproduces the pin, `repin` moves it, external-without-pin refused.

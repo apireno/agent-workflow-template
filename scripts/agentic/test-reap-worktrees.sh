@@ -8,11 +8,13 @@ PASS=0; FAIL=0; ok(){ PASS=$((PASS+1)); echo "  ok   $1"; }; fail(){ FAIL=$((FAI
 W="$(mktemp -d "${TMPDIR:-/tmp}/reap.XXXXXX")"; W="$(cd "$W" && pwd -P)"; SLP=""
 trap '[ -n "$SLP" ] && kill $SLP 2>/dev/null; rm -rf "$W"' EXIT
 M="$W/acme-x"; git init -q --bare "$W/origin.git"; git clone -q "$W/origin.git" "$M" 2>/dev/null
-git -C "$M" config user.email t@t; git -C "$M" config user.name t
+git -C "$M" config user.email t@t; git -C "$M" config user.name t; git -C "$M" checkout -q -b main 2>/dev/null
 echo a > "$M/a"; git -C "$M" add -A; git -C "$M" commit -qm init; git -C "$M" push -q origin HEAD:main 2>/dev/null
 git -C "$M" remote set-head origin main >/dev/null 2>&1
 wt(){ git -C "$M" worktree add -q "$W/acme-x-wt-$1" -b "wt-$1" >/dev/null 2>&1; }
-wt done; wt busy; wt pinned; wt manifest; wt unmerged; wt dirty
+wt done; wt busy; wt pinned; wt manifest; wt unmerged; wt dirty; wt localmerged
+echo lm > "$W/acme-x-wt-localmerged/lm"; git -C "$W/acme-x-wt-localmerged" add -A; git -C "$W/acme-x-wt-localmerged" commit -qm lm
+git -C "$M" merge -q --ff-only wt-localmerged      # merged into LOCAL main only — origin/main lags
 echo b > "$W/acme-x-wt-unmerged/b"; git -C "$W/acme-x-wt-unmerged" add -A; git -C "$W/acme-x-wt-unmerged" commit -qm b
 echo edit >> "$W/acme-x-wt-dirty/a"
 mkdir -p "$M/.claude" "$W/data/run1"; printf -- '- repo: acme-x\n  sha: abc\n  path: %s/acme-x-wt-pinned\n' "$W" > "$M/.claude/pins.yaml"
@@ -26,6 +28,7 @@ row busy | grep -q 'KEEP.*PROCESS cwd' && ok "a process cwd'd into it -> KEEP (P
 row pinned | grep -q 'KEEP.*PIN .*pins.yaml' && ok "named in .claude/pins.yaml -> KEEP (PIN)" || fail "pinned" "$OUT"
 row manifest | grep -q 'KEEP.*MANIFEST .*records.json' && ok "named in a data manifest -> KEEP (MANIFEST)" || fail "manifest" "$OUT"
 row unmerged | grep -q 'KEEP.*not merged' && ok "unmerged -> KEEP" || fail "unmerged" "$OUT"
+row localmerged | grep -q 'REAPABLE.*merged-local.*not yet on origin/main' && ok "merged into local main only -> REAPABLE, flagged 'merged-local' (push soon)" || fail "localmerged" "$OUT"
 row dirty | grep -q 'KEEP.*1 uncommitted edit' && ok "uncommitted edit -> KEEP" || fail "dirty" "$OUT"
 [ -d "$W/acme-x-wt-done" ] && ok "report-only removes nothing" || fail "report removed something"
 CTO_HOME= HOME="$W/h" bash "$X" "$M" --worktree "$W/acme-x-wt-busy" --data-root "$W/data" >/dev/null 2>&1; [ $? -eq 3 ] && ok "--worktree on a live one exits 3" || fail "--worktree exit"

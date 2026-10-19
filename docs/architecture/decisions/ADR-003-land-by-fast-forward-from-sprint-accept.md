@@ -61,9 +61,11 @@ Server-side enforcement is a paid-plan decision. Until then the gate lives in ou
   file. But the decision is committed *before* the push (it must land with the work, and the worktree
   holding it is removed afterwards), so it cannot also record the push's outcome. The outcome goes to
   `<main-repo>/.claude/landings.log` and the tag message; `/sprint-accept` reports it.
-- **Hooks path is absolute.** Found while testing: a relative `core.hooksPath` resolves per worktree, and
-  lane worktrees have no untracked `.claude/`, so *no* hook had been running in lane worktrees. The
-  installer now sets the main checkout's absolute `.claude/githooks`.
+- **Hooks path is absolute.** Found while testing: a relative `core.hooksPath` resolves per worktree, so
+  in a repo where `.claude/` is NOT tracked (e.g. an upstream-mode install) a lane worktree has no
+  `.claude/githooks` and no hook runs there. *Correction (fleet test, 2026-10-19):* the first version of
+  this note said no hook had run in any lane worktree; in a fleet that tracks `.claude/githooks` the
+  worktrees have the hooks and they did run. The absolute path makes both cases work.
 - **SESSION and LANE references** in the reap are verified against live transcripts, not in the
   offline fixture (a fixture cannot fake a running Claude session).
 

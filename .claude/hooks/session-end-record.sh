@@ -23,6 +23,18 @@ EXIT_REASON=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin
 TS=$(date -u +%FT%TZ)
 echo "session_id=$SESSION_ID reason=$EXIT_REASON ts=$TS ended" >> "$CLAUDE_DIR/session.log"
 
+# A deliberate /close-window leaves .claude/CLOSING just before it kills the session. A fresh note
+# (< 10 min) means this end was intended, not a crash. Checked here and in the main checkout, since a
+# lane may run in a linked worktree while /close-window addresses the repo.
+MAIN_CLAUDE="$(cd "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO_ROOT/.git")/.." 2>/dev/null && pwd -P)/.claude"
+for _c in "$CLAUDE_DIR/CLOSING" "$MAIN_CLAUDE/CLOSING"; do
+    if [ -f "$_c" ] && [ -z "$(find "$_c" -mmin +10 2>/dev/null)" ]; then
+        echo "deliberate close ($(cat "$_c")) — not a crash" >> "$CLAUDE_DIR/session.log"
+        rm -f "$_c"; rm -f "$CLAUDE_DIR/CRASHED"
+        exit 0
+    fi
+done
+
 # Detect unclean exit
 case "$EXIT_REASON" in
     "clear"|"compact"|"quit"|"exit"|"logout")
