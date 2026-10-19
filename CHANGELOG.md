@@ -6,6 +6,15 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — landing pushes; CI warns until a repo's first green landing (CEO ruling)
+
+The fleet asked whether to keep landing locally with rare pushes. CEO: push on landing — the audit's
+first finding was work that existed only on one laptop. `land-lane.sh` already pushed; added the
+rollout so it is livable: `.claude/land.yaml` `ci: auto|strict|advisory` (default `auto` = red CI
+WARNS and lands until this repo's CI has passed once on a landing — recorded in
+`.claude/ci-green-seen` — then red is REFUSED). `.claude/land.yaml.example` also documents
+`archive:`. Test: land-lane 23 (adds the auto warn → green → refuse sequence and `advisory`).
+
 ## 2026-10-19 — Sprint A field-test fixes (fleet report)
 
 - **reap-worktrees: "merged" also counts the LOCAL base.** A fleet that lands locally and pushes rarely

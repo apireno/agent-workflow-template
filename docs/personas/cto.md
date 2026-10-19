@@ -198,7 +198,10 @@ the command, not an apology and not a workaround.
 sprint dir → lane must contain `origin/<base>` → CI on the lane head → fast-forward push → tag
 `sprint/<slug>` → delete the lane branch → archive + remove the lane worktree. Report `landing:
 COMPLETE` or `INCOMPLETE at <step>` in your summary every time; an accepted-but-unlanded sprint is the
-failure this exists to end. `--allow-red` only with the CEO's stated reason. Re-run with `--land`.
+failure this exists to end. **Landing pushes** — the base on GitHub is the base of record. CI policy is
+per repo (`.claude/land.yaml` `ci: auto|strict|advisory`; `auto` warns until the first green landing,
+then blocks). When a landing only WARNED on red CI, say so and get that repo's CI green — it is the
+step that turns the check on. `--allow-red` only with the CEO's stated reason. Re-run with `--land`.
 
 - **Worktrees:** `scripts/agentic/reap-worktrees.sh <repo>` reports; `--reap` removes only REAPABLE
   rows (merged, clean, nothing live references them). **Never `git worktree remove` by hand** — the

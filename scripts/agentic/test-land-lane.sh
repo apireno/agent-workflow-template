@@ -41,13 +41,33 @@ setup behind; ( cd "$M" && echo x > x && git add x && git commit -qm "base moved
 OUT=$(bash "$L" "$S" 2>&1); RC=$?
 [ $RC -eq 3 ] && echo "$OUT" | grep -q "does not contain origin/main" && echo "$OUT" | grep -q "base moved: fix X" && ok "refused, naming the missing commit" || fail "behind rc=$RC" "$OUT"
 grep -q $'\tINCOMPLETE\tcontains-base\t' "$M/.claude/landings.log" && ok "INCOMPLETE row logged" || fail "log row"
-echo "== 3. red CI, then --allow-red =="
-setup red ci
+echo "== 3. red CI under ci: strict, then --allow-red =="
+setup red ci; printf 'ci: strict\n' > "$M/.claude/land.yaml"
 OUT=$(STUB_CI=failure bash "$L" "$S" 2>&1); RC=$?
 [ $RC -eq 3 ] && echo "$OUT" | grep -q "CI on .* is 'red:failure'" && ok "red CI refused" || fail "red rc=$RC" "$OUT"
 OUT=$(STUB_CI=failure bash "$L" "$S" --allow-red "flaky upstream test, tracked as BUG-1" 2>&1); RC=$?
 [ $RC -eq 0 ] && git -C "$M" show "origin/main:docs/sprints/sprint-s1/cto-decision-20261019.md" 2>/dev/null | grep -q "CI override:.*flaky upstream" && ok "--allow-red lands; the reason is in the LANDED decision file" || fail "allow-red rc=$RC" "$OUT"
 grep -q "flaky upstream" "$W/data/land-overrides.log" && [ "$(stat -f %Lp "$W/data/land-overrides.log")" = 600 ] && ok "override logged outside the repo, mode 600" || fail "override log"
+echo "== 3b. ci: auto (default) — warns until the repo's first green, then blocks =="
+setup auto ci
+OUT=$(STUB_CI=failure bash "$L" "$S" 2>&1); RC=$?
+[ $RC -eq 0 ] && echo "$OUT" | grep -q "WARNING ONLY" && echo "$OUT" | grep -q "landing: COMPLETE" && ok "first red landing (no green yet): warns and lands" || fail "auto first rc=$RC" "$OUT"
+[ ! -f "$M/.claude/ci-green-seen" ] && ok "a red landing does not mark the repo green" || fail "green marker after red"
+# second lane, green CI -> records the first green
+git -C "$M" fetch -q origin; git -C "$M" worktree add -q "$W/lane2" -b lane-s2 origin/main >/dev/null 2>&1
+echo two > "$W/lane2/two.txt"; git -C "$W/lane2" add two.txt; git -C "$W/lane2" commit -qm two
+mkdir -p "$W/lane2/docs/sprints/sprint-s2"; printf 'Decision: APPROVED\n' > "$W/lane2/docs/sprints/sprint-s2/cto-decision-1.md"
+OUT=$(STUB_CI=success bash "$L" "$W/lane2/docs/sprints/sprint-s2" 2>&1); RC=$?
+[ $RC -eq 0 ] && [ -f "$M/.claude/ci-green-seen" ] && ok "first green landing recorded (.claude/ci-green-seen)" || fail "green record rc=$RC" "$OUT"
+git -C "$M" fetch -q origin; git -C "$M" worktree add -q "$W/lane3" -b lane-s3 origin/main >/dev/null 2>&1
+echo three > "$W/lane3/three.txt"; git -C "$W/lane3" add three.txt; git -C "$W/lane3" commit -qm three
+mkdir -p "$W/lane3/docs/sprints/sprint-s3"; printf 'Decision: APPROVED\n' > "$W/lane3/docs/sprints/sprint-s3/cto-decision-1.md"
+OUT=$(STUB_CI=failure bash "$L" "$W/lane3/docs/sprints/sprint-s3" 2>&1); RC=$?
+[ $RC -eq 3 ] && echo "$OUT" | grep -q "INCOMPLETE at ci" && ok "after the first green, red CI is REFUSED" || fail "auto strict rc=$RC" "$OUT"
+printf 'ci: advisory\n' > "$M/.claude/land.yaml"
+OUT=$(STUB_CI=failure bash "$L" "$W/lane3/docs/sprints/sprint-s3" 2>&1); RC=$?
+[ $RC -eq 0 ] && echo "$OUT" | grep -q "WARNING ONLY" && ok "ci: advisory overrides — red warns and lands" || fail "advisory rc=$RC" "$OUT"
+
 echo "== 4. clean landing =="
 setup clean ci
 OUT=$(bash "$L" "$S" 2>&1); RC=$?

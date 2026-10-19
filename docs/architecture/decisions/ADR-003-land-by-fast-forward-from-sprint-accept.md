@@ -35,7 +35,12 @@ Server-side enforcement is a paid-plan decision. Until then the gate lives in ou
    its head sha (red/missing refuses; `--allow-red "<reason>"` records the CEO's reason in the decision
    and an out-of-repo log) → **fast-forward** `origin/<base>` (never `--force`) → annotated tag
    `sprint/<slug>` → delete the lane branch on origin → archive, verify and remove the lane worktree →
-   delete the local branch. Any refusal stops and reports `landing: INCOMPLETE at <step>`;
+   delete the local branch. **Landing pushes** (CEO ruling 2026-10-19: push on landing — the audit's
+   first finding was two months of work that existed only on one laptop). CI is judged per repo by
+   `.claude/land.yaml` `ci:` — default `auto` warns until the repo's CI has passed once on a landing,
+   then refuses red; `strict` and `advisory` are explicit choices. Pushing on every landing starts CI
+   running where it never ran, and some of it is red; strict-from-day-one would block every landing.
+   Any refusal stops and reports `landing: INCOMPLETE at <step>`;
    `/sprint-accept <dir> --land` re-runs only the landing. Base = whatever `origin/HEAD` names.
 2. **Fast-forward only.** Because step 3 proves the lane contains the base, landing is a pointer move
    on the remote; nothing is merged on a laptop. The sprint's record is the tag and the decision file.

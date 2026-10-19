@@ -364,7 +364,8 @@ Above are the sprint plan, dev report, and all VP reviews. Synthesize a final ac
        bash scripts/agentic/land-lane.sh <sprint-dir> [--allow-red "<reason>"]
 
    It commits the sprint dir (decision included, scoped add), refuses a lane that lacks the latest base,
-   waits for CI on the lane's head, fast-forwards the base, tags `sprint/<slug>`, deletes the lane
+   waits for CI on the lane's head (per the repo's `.claude/land.yaml` `ci:` policy — by default red CI
+   only WARNS until that repo's CI has passed once on a landing, then it refuses), fast-forwards the base, tags `sprint/<slug>`, deletes the lane
    branch, and archives + removes the lane worktree. **Never** use `--allow-red` on your own judgment:
    only with the CEO's stated reason, which it records. Run the CI wait in the background if CI is slow.
    - `landing: COMPLETE` → report it. Then offer the CEO a reap of anything else this lane left behind:

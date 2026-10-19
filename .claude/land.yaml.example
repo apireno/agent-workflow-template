@@ -1,0 +1,14 @@
+# .claude/land.yaml — per-repo landing policy (ADR-003). Copy to <repo>/.claude/land.yaml in the MAIN
+# checkout. Read by scripts/agentic/land-lane.sh (/sprint-accept) and archive-worktree.sh.
+
+# CI on the lane head before landing:
+#   auto      (default) WARN until this repo's CI has passed once on a landing, then REFUSE red.
+#             The first green run is recorded in .claude/ci-green-seen; delete it to go back to warning.
+#   strict    refuse red / missing CI from day one
+#   advisory  always warn and land (red is still printed, logged in .claude/landings.log)
+# --allow-red "<reason>" on a single landing is always available and always recorded.
+ci: auto
+
+# Ignored (gitignored) paths whose contents are ARCHIVED when a lane worktree is reaped. Untracked,
+# non-ignored files are always archived; other ignored paths (venvs, caches, build output) are not.
+archive: [outputs, data]

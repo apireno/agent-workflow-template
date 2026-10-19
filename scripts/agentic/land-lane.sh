@@ -20,6 +20,11 @@
 #               for the run on the lane's HEAD sha. Red / cancelled / missing / no `gh` -> refuse,
 #               unless --allow-red "<reason>": the reason goes into the decision file (step 2 commits
 #               it) and into <data-root>/land-overrides.log (outside the repo, mode 600).
+#               CI POLICY per repo, <main-repo>/.claude/land.yaml `ci:` (CEO 2026-10-19: push on landing,
+#               with CI warning first): `auto` (default) = ADVISORY until this repo's CI has passed once
+#               on a landing, then STRICT; `strict` = red refuses from day one; `advisory` = red warns and
+#               lands. Pushing on every landing starts CI running in repos whose CI was never exercised —
+#               some is red — so strict-from-day-one would block every landing until it is fixed.
 #   5 LAND      fast-forward ONLY: `git push origin <sha>:refs/heads/<base>` (never --force),
 #               with LAND_LANE=1 so the pre-push hook lets it through. Rejected -> INCOMPLETE.
 #   6 TAG       annotated `sprint/<slug>` at the landed sha (message: decision file + verdict); pushed.
@@ -118,9 +123,19 @@ else: print("success" if all(x.get("conclusion") in ("success","skipped","neutra
         done
     fi
 fi
+CI_POLICY="$(sed -n 's/^ci:[[:space:]]*\([a-z]*\).*/\1/p' "$MAIN/.claude/land.yaml" 2>/dev/null | head -1)"; CI_POLICY="${CI_POLICY:-auto}"
+GREEN_SEEN="$MAIN/.claude/ci-green-seen"
+case "$CI_POLICY" in
+    strict) CI_STRICT=1 ;; advisory) CI_STRICT=0 ;;
+    *) CI_STRICT=0; [ -f "$GREEN_SEEN" ] && CI_STRICT=1 ;;
+esac
+[ "$CI" = success ] && [ "$DRY" = 0 ] && [ ! -f "$GREEN_SEEN" ] && printf 'first green CI on a landing: %s %s\n' "$SHA" "$(date -u +%FT%TZ)" > "$GREEN_SEEN"
 case "$CI" in
     success|no-ci|"(dry run"*) say "CI: $CI" ;;
-    *)  if [ -n "$ALLOW_RED" ]; then
+    *)  if [ -z "$ALLOW_RED" ] && [ "$CI_STRICT" = 0 ]; then
+            say "CI: $CI — WARNING ONLY (policy '$CI_POLICY': this repo's CI has not yet passed on a landing; it becomes blocking after the first green run). Landing anyway."
+            CI="$CI (advisory)"
+        elif [ -n "$ALLOW_RED" ]; then
             say "CI: $CI — OVERRIDDEN: $ALLOW_RED"
             if [ "$DRY" = 0 ]; then mkdir -p "$DATA"; printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SLUG" "$SHA" "$CI" "$ALLOW_RED" >> "$DATA/land-overrides.log"; chmod 600 "$DATA/land-overrides.log"; fi
         else stop "CI on ${SHA:0:12} is '$CI'. Fix it, or land deliberately with --allow-red \"<reason>\" (recorded in the decision and the override log)"; fi ;;
