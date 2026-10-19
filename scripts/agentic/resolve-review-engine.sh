@@ -75,6 +75,8 @@ for _a in "$@"; do
   esac
 done
 
+note() { [ "$EXPLAIN" -eq 1 ] && echo "resolve-review-engine: $*" >&2; return 0; }
+
 # FALLBACK (CEO 2026-10-19: "agy, but fall back to kimi with warnings"). The engine a CLI review
 # tries when the primary produced nothing: REVIEW_ENGINE_FALLBACK env > <repo>/.review-engine-fallback
 # > none. Kept OUT of .review-engine on purpose — a dozen scripts read that file as one word. Must be
@@ -93,7 +95,6 @@ if [ "$ROLE" = "fallback" ]; then
   esac
 fi
 
-note() { [ "$EXPLAIN" -eq 1 ] && echo "resolve-review-engine: $*" >&2; return 0; }
 
 raw=""
 src=""
