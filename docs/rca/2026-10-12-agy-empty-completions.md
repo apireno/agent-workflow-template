@@ -81,9 +81,10 @@ dir). `scripts/agentic/test-agy-exec.sh` (15 assertions, offline, stub `agy`) ho
 ## Not done, deliberately
 
 - **No retirement.** The fix holds on every prompt that failed; the resolver keeps `agy`.
-- **No automatic fallback to another engine.** A silent switch to a metered engine changes spend
-  without anyone deciding it. If the fleet wants it, it is a one-line per-repo setting to add
-  (`agy,kimi` in `.review-engine`, tried in order, each attempt logged) — a CEO/CTO call.
+- **No automatic fallback to another engine** — *amended 2026-10-19 by CEO ruling: "agy, but fall
+  back to kimi with warnings."* A fallback now runs only where `.review-engine-fallback` is set, and
+  never silently: a stderr warning, a stamp at the top of the verdict naming the engine that ran and
+  why, a row in `.claude/engine-fallbacks.log`, and a count in the CTO preflight.
 - **Lane procedure when an engine is down** is now written into `CLAUDE.devteam.md`, beside the Phase-3
   review rule: record
   the gap with the exact error, do not switch engines, finish Phase 3, close with

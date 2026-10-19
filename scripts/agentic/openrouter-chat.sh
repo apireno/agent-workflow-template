@@ -17,6 +17,15 @@
 #                          deepseek/deepseek-chat-v3.1, qwen/..., etc.)
 #   OPENROUTER_MAX_TOKENS  default: 16000
 #   OPENROUTER_TIMEOUT     seconds, default: 600
+#   OPENROUTER_TEMPERATURE optional float; sent only when set (else the provider default)
+#   OPENROUTER_JSON        optional: 1 -> response_format {"type":"json_object"} (JSON mode)
+#   OPENROUTER_SYSTEM      optional system message text
+#
+# SCOPE (2026-10-19). This is the REVIEW-ENGINE executor. A fleet census found production code
+# routing through it and silently losing temperature and JSON mode, because it sent only the
+# model, one user message and max_tokens. Those are now pass-throughs, but production LLM calls
+# belong in a project's own client: this wrapper has no retries, no schema validation and no
+# per-call provenance. Anything set here is echoed on the usage line so it is never invisible.
 #
 # stdout: the completion text only. stderr: diagnostics + usage line. Non-zero exit on
 # HTTP error, API error object, or empty completion (so retry wrappers see the failure).
@@ -33,11 +42,25 @@ if not prompt.strip():
     sys.exit(1)
 
 model = os.environ.get("OPENROUTER_MODEL", "moonshotai/kimi-k2.6")
+msgs = []
+if os.environ.get("OPENROUTER_SYSTEM"):
+    msgs.append({"role": "system", "content": os.environ["OPENROUTER_SYSTEM"]})
+msgs.append({"role": "user", "content": prompt})
 body = {
     "model": model,
-    "messages": [{"role": "user", "content": prompt}],
+    "messages": msgs,
     "max_tokens": int(os.environ.get("OPENROUTER_MAX_TOKENS", "16000")),
 }
+extras = []
+if os.environ.get("OPENROUTER_TEMPERATURE", "") != "":
+    try: body["temperature"] = float(os.environ["OPENROUTER_TEMPERATURE"]); extras.append("temperature=%s" % body["temperature"])
+    except ValueError:
+        sys.stderr.write("openrouter-chat: OPENROUTER_TEMPERATURE is not a number: %r\n" % os.environ["OPENROUTER_TEMPERATURE"]); sys.exit(2)
+if os.environ.get("OPENROUTER_JSON") == "1":
+    body["response_format"] = {"type": "json_object"}; extras.append("json_mode=1")
+if msgs[0]["role"] == "system": extras.append("system=yes")
+if os.environ.get("OPENROUTER_DRY_RUN") == "1":   # test hook: print the request body, call nothing
+    sys.stdout.write(json.dumps(body)); sys.exit(0)
 req = urllib.request.Request(
     "https://openrouter.ai/api/v1/chat/completions",
     data=json.dumps(body).encode(),
@@ -69,7 +92,7 @@ if not content.strip():
 sys.stdout.write(content)
 u = resp.get("usage") or {}
 sys.stderr.write(
-    "openrouter-chat: model=%s prompt_tokens=%s completion_tokens=%s\n"
-    % (resp.get("model", model), u.get("prompt_tokens"), u.get("completion_tokens"))
+    "openrouter-chat: model=%s prompt_tokens=%s completion_tokens=%s%s\n"
+    % (resp.get("model", model), u.get("prompt_tokens"), u.get("completion_tokens"), (" " + " ".join(extras)) if extras else "")
 )
 '

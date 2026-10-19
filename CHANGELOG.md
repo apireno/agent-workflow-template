@@ -6,6 +6,20 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — review engine: agy with a stamped kimi fallback (CEO ruling); OpenRouter pass-throughs
+
+- **Fallback.** `.review-engine-fallback` (or `REVIEW_ENGINE_FALLBACK`) names a CLI engine that
+  `vp-review.sh` tries once when the primary's retries produced nothing (including a primary CLI
+  that is not installed). Never silent: a stderr warning; the verdict's first line reads
+  "Engine fallback: this review ran on kimi because agy produced none (<reason>)"; a row in
+  `<repo>/.claude/engine-fallbacks.log`; preflight §8c counts the last 7 days per repo. A non-CLI
+  fallback is ignored; claude-p still needs `REVIEW_ALLOW_METERED=1`. `resolve-review-engine.sh
+  --fallback`. `test-review-fallback.sh`: 12 assertions. Amends the 10-12 RCA's "no automatic
+  fallback" line.
+- **`openrouter-chat.sh`**: opt-in `OPENROUTER_TEMPERATURE`, `OPENROUTER_JSON=1` (JSON mode),
+  `OPENROUTER_SYSTEM`; echoed on the usage line. The default request is byte-identical. The header
+  now says it is the review executor, not a production client.
+
 ## 2026-10-19 — weekend defects from a fleet CTO: authoring engine, human gates, bug ids, ACK watcher
 
 - **`/sprint-fanout` drafts on the AUTHORING engine** — `resolve-review-engine.sh --role author`:

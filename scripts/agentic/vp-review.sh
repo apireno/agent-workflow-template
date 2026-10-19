@@ -413,11 +413,9 @@ run_with_retry() {
     done
 
     echo "[vp-review] ${label}: FAILED after $VP_REVIEW_MAX_ATTEMPTS attempts (last diag=$diag)" >&2
-    # Deliberately NO automatic fallback to another engine. Engines are not
-    # interchangeable evidence: the reason to run kimi or codex is that a DIFFERENT model
-    # family reviewed the work, and silently substituting one would leave a verdict
-    # labelled with an engine that never ran it. Fail loudly, name the override, let a
-    # human choose the substitute knowingly.
+    # No SILENT fallback. Engines are not interchangeable evidence. A fallback runs only when
+    # one is configured (.review-engine-fallback, CEO 2026-10-19), and the verdict is then
+    # stamped with the engine that actually ran it — see the FALLBACK block at dispatch.
     {
         # $* here would be the FUNCTION's args, not the script's — reconstruct from the
         # parsed positionals so the suggested command is actually runnable.
@@ -425,7 +423,8 @@ run_with_retry() {
         echo "    REVIEW_ENGINE=kimi     $0 ${PERSONA:-<vp>} ${INPUT_FILE:-<artifact>} ${OUTPUT_FILE:-<out.md>}   # OpenRouter, needs OPENROUTER_API_KEY"
         echo "    REVIEW_ENGINE=subagent ...          # in-session Agent tool, via the /vp-review skill"
         echo "  Or change this repo's default:  echo <engine> > .review-engine"
-        echo "  NOT auto-substituted on purpose — a verdict must name the engine that actually produced it."
+        echo "  Or configure a stamped fallback:  echo kimi > .review-engine-fallback"
+        echo "  Never auto-substituted silently — a verdict must name the engine that actually produced it."
     } >&2
     rm -f "$out_file"
     return 1
@@ -485,21 +484,22 @@ if [ -n "${VP_REVIEW_DRY_RUN:-}" ]; then
     esac
 fi
 
-echo "Requesting $PERSONA review of $(basename "$INPUT_FILE") [engine: $ENGINE]..."
-
-case "$ENGINE" in
+# One engine attempt (with its retries) into $OUT_TMP. Prerequisite failures RETURN rather than
+# exit, so a configured fallback still gets its turn when the primary is not even installed.
+dispatch_engine() {
+case "$_ENG" in
     gemini)
         run_with_retry run_gemini "$OUT_TMP" "gemini"
         ;;
     kimi)
         if [ -z "${OPENROUTER_API_KEY:-}" ]; then
             echo "Error: engine 'kimi' requires OPENROUTER_API_KEY in the environment." >&2
-            exit 1
+            return 1
         fi
         run_with_retry run_kimi "$OUT_TMP" "kimi"
         ;;
     agy)
-        command -v "${AGY_BIN:-agy}" >/dev/null 2>&1 || { echo "Error: engine 'agy' requires the agy CLI on PATH." >&2; exit 1; }
+        command -v "${AGY_BIN:-agy}" >/dev/null 2>&1 || { echo "Error: engine 'agy' requires the agy CLI on PATH." >&2; return 1; }
         run_with_retry run_agy "$OUT_TMP" "agy"
         ;;
     codex)
@@ -517,7 +517,7 @@ case "$ENGINE" in
         # enforced REVIEW_ALLOW_METERED=1; this is a defense-in-depth second gate.
         if [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
             echo "Error: engine 'claude-p' is the metered API path; set REVIEW_ALLOW_METERED=1 to opt in." >&2
-            exit 1
+            return 1
         fi
         run_with_retry run_claude "$OUT_TMP" "claude-p"
         ;;
@@ -531,17 +531,53 @@ case "$ENGINE" in
         exit 2
         ;;
     *)
-        echo "Error: Unknown engine '$ENGINE'. Use: kimi | agy | codex (untested) | gemini | claude-p (metered) | subagent | handoff" >&2
-        exit 1
+        echo "Error: Unknown engine '$_ENG'. Use: kimi | agy | codex (untested) | gemini | claude-p (metered) | subagent | handoff" >&2
+        return 1
         ;;
 esac
+}
+
+echo "Requesting $PERSONA review of $(basename "$INPUT_FILE") [engine: $ENGINE]..."
+_ENG="$ENGINE"; dispatch_engine || true
+ENGINE_USED="$ENGINE"; FALLBACK_NOTE=""
+
+# FALLBACK (CEO 2026-10-19: "agy, but fall back to kimi with warnings"). Only when one is configured
+# (.review-engine-fallback / REVIEW_ENGINE_FALLBACK), only after the primary's own retries produced
+# nothing, and never silently: a warning here, a visible stamp at the top of the verdict naming the
+# engine that actually ran and why, and a row in <repo>/.claude/engine-fallbacks.log that the CTO's
+# preflight counts. A verdict must always name the engine that produced it.
+if [ ! -s "$OUT_TMP" ]; then
+    # `|| true` on every capture below: this script runs under set -euo pipefail, and a capture
+    # that finds nothing (no stderr log when the CLI is not even installed) would end the script
+    # right here — before the fallback it exists to run.
+    FALLBACK="$( { [ -x "$RESOLVER" ] && "$RESOLVER" --fallback 2>/dev/null; } || true )"
+    if [ -n "$FALLBACK" ] && [ "$FALLBACK" != "$ENGINE" ]; then
+        _ERRLOG="${OUTPUT_FILE}.${ENGINE%%-*}-stderr.log"
+        REASON="$( { grep -hE 'TOOL-DENIED|no usable model|not on PATH|empty completion|requires|ERROR|Error' "$_ERRLOG" 2>/dev/null | tail -1 | cut -c1-160; } || true )"
+        if [ -z "$REASON" ] && ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1 && [ "$ENGINE" = agy ]; then REASON="agy CLI not installed"; fi
+        REASON="${REASON:-no review after $VP_REVIEW_MAX_ATTEMPTS attempts}"
+        echo "[vp-review] WARNING: engine '$ENGINE' produced no review ($REASON)." >&2
+        echo "[vp-review] WARNING: FALLING BACK to '$FALLBACK'. This verdict is NOT from '$ENGINE'; it will say so at the top." >&2
+        _ENG="$FALLBACK"; dispatch_engine || true
+        if [ -s "$OUT_TMP" ]; then
+            ENGINE_USED="$FALLBACK"
+            FALLBACK_NOTE="> ⚠️ **Engine fallback:** this review ran on **$FALLBACK** because **$ENGINE** produced none ($REASON) — $(date -u +%Y-%m-%dT%H:%MZ)."
+            mkdir -p "$REPO_ROOT/.claude" 2>/dev/null
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$ENGINE" "$FALLBACK" "$PERSONA" "$INPUT_FILE" "$REASON" >> "$REPO_ROOT/.claude/engine-fallbacks.log" 2>/dev/null || true
+        fi
+    fi
+fi
+if [ -s "$OUT_TMP" ] && [ -n "$FALLBACK_NOTE" ]; then
+    { printf '%s\n\n' "$FALLBACK_NOTE"; cat "$OUT_TMP"; } > "$OUT_TMP.stamped" && mv "$OUT_TMP.stamped" "$OUT_TMP"
+fi
+
 
 # --- Verify output (defense-in-depth: retry wrapper already cleaned
 #     up + returned non-zero on failure; this is the final gate) ---
 if [ -s "$OUT_TMP" ]; then
     mv "$OUT_TMP" "$OUTPUT_FILE"          # atomic publish — the only way $OUTPUT_FILE appears
     LINES=$(wc -l < "$OUTPUT_FILE" | tr -d ' ')
-    echo "Review written to: $OUTPUT_FILE ($LINES lines)"
+    echo "Review written to: $OUTPUT_FILE ($LINES lines, engine: $ENGINE_USED$( [ -n "$FALLBACK_NOTE" ] && echo " — FALLBACK from $ENGINE"))"
 else
     echo "[vp-review] FAIL: no review body after retries — publishing NOTHING rather than an empty file."
     rm -f "$OUT_TMP"

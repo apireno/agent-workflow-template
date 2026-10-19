@@ -71,8 +71,27 @@ for _a in "$@"; do
     --explain) EXPLAIN=1 ;;
     --role=author|author) ROLE=author ;;
     --role=review|review) ROLE=review ;;
+    --fallback) ROLE=fallback ;;
   esac
 done
+
+# FALLBACK (CEO 2026-10-19: "agy, but fall back to kimi with warnings"). The engine a CLI review
+# tries when the primary produced nothing: REVIEW_ENGINE_FALLBACK env > <repo>/.review-engine-fallback
+# > none. Kept OUT of .review-engine on purpose — a dozen scripts read that file as one word. Must be
+# a CLI engine (an in-session subagent cannot be a script's fallback); claude-p still needs
+# REVIEW_ALLOW_METERED=1. Prints nothing when no fallback is configured.
+if [ "$ROLE" = "fallback" ]; then
+  fb="${REVIEW_ENGINE_FALLBACK:-}"; fsrc="REVIEW_ENGINE_FALLBACK env"
+  if [ -z "$fb" ] && [ -f "$REPO_ROOT/.review-engine-fallback" ]; then fb="$(tr -d '[:space:]' < "$REPO_ROOT/.review-engine-fallback")"; fsrc="$REPO_ROOT/.review-engine-fallback"; fi
+  fb="$(printf '%s' "$fb" | tr '[:upper:]' '[:lower:]')"
+  [ -z "$fb" ] && { note "no fallback engine configured"; exit 0; }
+  case "$fb" in
+    kimi|agy|codex|gemini) note "fallback '$fb' (from $fsrc)"; echo "$fb"; exit 0 ;;
+    claude-p) if [ "${REVIEW_ALLOW_METERED:-0}" = "1" ]; then echo "$fb"; exit 0; fi
+              echo "resolve-review-engine: fallback 'claude-p' is metered and REVIEW_ALLOW_METERED is not set — no fallback." >&2; exit 0 ;;
+    *) echo "resolve-review-engine: fallback '$fb' (from $fsrc) is not a CLI engine — ignored. Use kimi|agy|codex|gemini." >&2; exit 0 ;;
+  esac
+fi
 
 note() { [ "$EXPLAIN" -eq 1 ] && echo "resolve-review-engine: $*" >&2; return 0; }
 

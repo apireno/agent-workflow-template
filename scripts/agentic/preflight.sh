@@ -214,6 +214,43 @@ case "$REPO_NAME" in
         ;;
 esac
 
+# ─── 8c. Review-engine fallbacks (CTO homes only) — CEO 2026-10-19 ──────────
+# Reviews may fall back from the configured engine (agy) to the fallback (kimi). Each fallback is
+# stamped in its verdict and logged in <repo>/.claude/engine-fallbacks.log; this surfaces the count
+# so a primary engine that is quietly failing shows up here, not on the OpenRouter bill.
+case "$REPO_NAME" in
+    agent-workflow-template|*-cto)
+        if [ -f "$REPO_ROOT/.cto/projects.yaml" ]; then
+            FB_OUT="$(python3 - "$REPO_ROOT/.cto/projects.yaml" "$REPO_ROOT" <<'PYFB'
+import re, sys, os, datetime, collections
+t=open(sys.argv[1]).read(); paths=[sys.argv[2]]
+for b in re.split(r'(?=- name:)', t):
+    p=re.search(r'path:\s*(\S+)', b)
+    if p: paths.append(p.group(1))
+cut=datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=7)
+per=collections.Counter(); why=collections.Counter()
+for root in paths:
+    f=os.path.join(root,".claude","engine-fallbacks.log")
+    if not os.path.isfile(f): continue
+    for line in open(f, errors="replace"):
+        c=line.rstrip("\n").split("\t")
+        if len(c)<6: continue
+        try: ts=datetime.datetime.fromisoformat(c[0].replace("Z","+00:00"))
+        except ValueError: continue
+        if ts>=cut: per[(os.path.basename(root), c[1], c[2])]+=1; why[c[5][:70]]+=1
+for (repo,a,b),n in per.most_common(8): print(f"{repo:<28} {a} -> {b}  x{n}")
+if why: print("top reason: "+why.most_common(1)[0][0])
+PYFB
+)"
+            if [ -n "$FB_OUT" ]; then
+                emit_warning "review-engine fallbacks in the last 7 days (the primary engine failed; each verdict is stamped):"
+                printf '%s\n' "$FB_OUT" | sed 's/^/    /'
+                echo "    Fix the primary engine, or this spend is landing on the fallback's bill."
+            fi
+        fi
+        ;;
+esac
+
 # ─── 9. Governed derived artifacts (CTO homes only) — ADR-002 ────────────────
 # For every registry entry flagged `derived_artifacts: required`, run the gate in audit mode
 # at HEAD and surface staleness the way an open sprint is surfaced. A required repo with no
