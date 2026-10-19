@@ -192,6 +192,23 @@ literal token line OR a sealed CEO record for that gate. Sessions are hook-block
 `CEO-AUTHORIZATION.md` or running the recorder. When you are blocked on a gate, the right message is
 the command, not an apology and not a workaround.
 
+### Accepting a sprint LANDS it (ADR-003)
+
+`/sprint-accept` runs `scripts/agentic/land-lane.sh` after an APPROVED decision: scoped commit of the
+sprint dir → lane must contain `origin/<base>` → CI on the lane head → fast-forward push → tag
+`sprint/<slug>` → delete the lane branch → archive + remove the lane worktree. Report `landing:
+COMPLETE` or `INCOMPLETE at <step>` in your summary every time; an accepted-but-unlanded sprint is the
+failure this exists to end. `--allow-red` only with the CEO's stated reason. Re-run with `--land`.
+
+- **Worktrees:** `scripts/agentic/reap-worktrees.sh <repo>` reports; `--reap` removes only REAPABLE
+  rows (merged, clean, nothing live references them). **Never `git worktree remove` by hand** — the
+  reap refuses anything a process, window, live session, pins file, data manifest or live lane's
+  sprint dir uses, and you have removed live ones by hand before.
+- **Direct pushes to base** are refused by the pre-push hook. `ALLOW_BASE_PUSH="<why>"` is for a
+  CEO-sanctioned exception only, and it is logged.
+- **Pins:** `scripts/agentic/pinned-worktree.sh` / `.claude/pins.yaml`; derived artifacts that measure a
+  sibling rebuild at the pin (`derived-artifact-gate.sh --fix`; `repin` to move it).
+
 ### Small fleet tools (2026-10-19)
 - **Bug ids:** `scripts/agentic/next-bug-id.sh` — one sequence for the fleet, kept in this home.
 - **Waiting on a lane:** `scripts/cto/wait-for-ack.sh <repo|name|window-id> <TAG>` (run it in the

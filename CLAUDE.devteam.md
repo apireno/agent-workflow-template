@@ -342,6 +342,19 @@ build green as itself a violation** of this rule — the exemption is the defect
 Declare the status in this file's project header (e.g. `Domain-agnostic: yes`). Application and
 integration repos are legitimately domain-bearing; this rule does not apply to them.
 
+### Branches, worktrees and pins (BINDING — ADR-003)
+
+- **One branch per sprint; never commit to the base branch** (the one `origin/HEAD` names). The CTO lands
+  your branch when the sprint is accepted: it must contain the latest base, so if the base moved, merge
+  it into your branch before you report done.
+- **Never push to the base branch.** A pre-push hook refuses it; a direct push skips every landing check.
+  If one ever happens, say so in `dev-report.md` — it is an incident, not a shortcut.
+- **Put run outputs under `outputs/` or `data/`** (or the project's `.claude/land.yaml` `archive:` list).
+  When your worktree is reaped those are archived; other ignored files are treated as regenerable.
+- **A sibling engine at a fixed commit comes from `.claude/pins.yaml`** and
+  `scripts/agentic/pinned-worktree.sh` — never a hard-coded `<repo>-wt-<sha>` path. A pin you add goes
+  in that file, with `why:`. Never move or delete a pinned worktree; never delete any worktree yourself.
+
 ### Workflow mechanism is not yours to edit (BINDING)
 
 The files that define *how the workflow runs* are owned by the template team and arrive in this

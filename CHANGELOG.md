@@ -6,6 +6,29 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — repo hygiene in the mechanism: /sprint-accept lands the sprint (ADR-003, Sprint A)
+
+A fleet audit: ~2 months of unpushed work, 103 abandoned worktrees (74 GB), 300+ merged branches,
+a feature branch acting as main, CI red unnoticed; then live worktrees deleted by hand, twice.
+
+- **`land-lane.sh`** (called by `/sprint-accept`; `--land` re-runs it): scoped commit of the sprint dir →
+  refuse a lane missing `origin/<base>` → CI on the lane head (red refused; `--allow-red "<reason>"`
+  recorded) → fast-forward push → `sprint/<slug>` tag → delete the lane branch → archive + remove the
+  worktree → delete the local branch. `landing: COMPLETE | INCOMPLETE at <step>`; `.claude/landings.log`.
+- **`archive-worktree.sh`**: untracked files + allowlisted ignored outputs, secret-shaped files withheld,
+  sha256-verified before any removal; a failed archive keeps the worktree.
+- **`reap-worktrees.sh`**: report / `--reap`; refuses anything a process, window, live session, pins
+  file, data manifest or live lane's sprint dir references. No `--force`.
+- **`.claude/githooks/pre-push`**: no direct pushes to base unless `land-lane.sh` made them;
+  `ALLOW_BASE_PUSH` is a logged exception. **Installer fix:** `core.hooksPath` is now ABSOLUTE — a
+  relative path resolved per worktree, so no hook had run in any lane worktree.
+- **`pinned-worktree.sh`** + `.claude/pins.yaml`: idempotent, sparse, refuses a moved pin.
+- **Derived artifacts at their pin** (amends ADR-002): `pin_lock`/`pin_key`/`pin_arg`/`external`;
+  `--fix` reproduces the pin, `repin` moves it, external-without-pin refused.
+- **CHECK F** in `lint-skills.sh`: a bare `mcp__<server>` allow rule (covers no tools since Claude Code
+  2.1.299). Removed the bare entries from the settings templates.
+- Tests: land-lane 18, archive 10, reap 10, pinned-worktree 7, pins 10.
+
 ## 2026-10-19 — review engine: agy with a stamped kimi fallback (CEO ruling); OpenRouter pass-throughs
 
 - **Fallback.** `.review-engine-fallback` (or `REVIEW_ENGINE_FALLBACK`) names a CLI engine that

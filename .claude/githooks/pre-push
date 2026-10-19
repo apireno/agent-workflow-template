@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# pre-push — no direct pushes to the base branch (Free-plan mitigation; ADR-003).
+#
+# On GitHub Free a private repo has no branch protection, so a plain `git push origin HEAD:main`
+# skips every landing check: contains-base, CI, the sprint tag, the reap. This hook refuses a push
+# that updates the remote's base branch (the one origin/HEAD names) unless it comes from
+# scripts/agentic/land-lane.sh, which sets LAND_LANE=1. Other branches push freely.
+#
+# It is CLIENT-SIDE and says so: a machine without the hook, or `git push --no-verify`, still gets
+# through. The daily hygiene report flags base commits that carry no sprint/ tag.
+# Deliberate exception, logged:  ALLOW_BASE_PUSH="<why>" git push …
+set -uo pipefail
+REMOTE="${1:-origin}"
+LEGACY="$(git rev-parse --absolute-git-dir 2>/dev/null)/hooks/pre-push"
+if [ -x "$LEGACY" ] && [ "$(cd "$(dirname "$LEGACY")" && pwd -P)" != "$(cd "$(dirname "$0")" && pwd -P)" ]; then
+    INPUT="$(cat)"; printf '%s\n' "$INPUT" | "$LEGACY" "$@" || exit $?
+else
+    INPUT="$(cat)"
+fi
+[ "${LAND_LANE:-0}" = "1" ] && exit 0
+BASE="$(git symbolic-ref --quiet --short "refs/remotes/$REMOTE/HEAD" 2>/dev/null)"; BASE="${BASE#"$REMOTE"/}"
+[ -n "$BASE" ] || exit 0          # remote HEAD unknown: nothing to protect yet (land-lane refuses until it is set)
+while read -r _lref _lsha rref _rsha; do
+    [ "$rref" = "refs/heads/$BASE" ] || continue
+    if [ -n "${ALLOW_BASE_PUSH:-}" ]; then
+        LOG="$(git rev-parse --show-toplevel)/.claude/land-overrides.log"; mkdir -p "$(dirname "$LOG")"
+        printf '%s\tdirect-base-push\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$BASE" "$_lsha" "$ALLOW_BASE_PUSH" >> "$LOG"
+        echo "pre-push: direct push to '$BASE' ALLOWED by ALLOW_BASE_PUSH (logged): $ALLOW_BASE_PUSH" >&2
+        exit 0
+    fi
+    echo "pre-push: REFUSED — this pushes straight to '$BASE', skipping the landing checks." >&2
+    echo "  Land a sprint with /sprint-accept (scripts/agentic/land-lane.sh): it checks the lane contains" >&2
+    echo "  $BASE, waits for CI, tags the sprint, deletes the branch and reaps the worktree." >&2
+    echo "  Deliberate exception (logged): ALLOW_BASE_PUSH=\"<why>\" git push …" >&2
+    exit 1
+done <<< "$INPUT"
+exit 0

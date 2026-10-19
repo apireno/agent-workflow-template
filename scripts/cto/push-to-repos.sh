@@ -175,6 +175,7 @@ required_files=(
   "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh"
   "$TEMPLATE/.claude/hooks/deny-authorization-forge.sh"
   "$TEMPLATE/.claude/githooks/pre-commit"
+  "$TEMPLATE/.claude/githooks/pre-push"
 )
 for f in "${required_files[@]}"; do
   if [ ! -f "$f" ]; then
@@ -230,7 +231,7 @@ for repo in "${TARGETS[@]}"; do
     fi
     echo "      would write: $DEST/.claude/settings.json (from template, _comment_* stripped)"
     [ -f "$DEST/.claude/settings.json" ] && echo "        (overwrites existing)"
-    echo "      would write: $DEST/.claude/githooks/pre-commit + core.hooksPath (ADR-002 backstop; inert without a manifest)"
+    echo "      would write: $DEST/.claude/githooks/{pre-commit,pre-push} + absolute core.hooksPath (ADR-002 backstop; ADR-003 no direct base push)"
     echo "      would write: $DEST/.claude/hooks/ (7: inject-devteam-contract, auto-paste-brief, derived-artifact-reminder,"
     echo "                     session-end-record, check-complete, deny-self-commit, deny-generated-edit)"
     echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
@@ -304,13 +305,19 @@ PYEOF
   # told so — its owner chains the gate from there.
   mkdir -p "$DEST/.claude/githooks"
   cp "$TEMPLATE/.claude/githooks/pre-commit" "$DEST/.claude/githooks/pre-commit"
-  chmod +x "$DEST/.claude/githooks/pre-commit"
+  cp "$TEMPLATE/.claude/githooks/pre-push" "$DEST/.claude/githooks/pre-push"
+  chmod +x "$DEST/.claude/githooks/pre-commit" "$DEST/.claude/githooks/pre-push"
   if git -C "$DEST" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     CUR_HP="$(git -C "$DEST" config --get core.hooksPath 2>/dev/null || true)"
+    # ABSOLUTE, not relative: git resolves a relative core.hooksPath against each WORKTREE's root,
+    # and lane worktrees have no untracked .claude/ — so with ".claude/githooks" no hook ran in any
+    # lane worktree (found 2026-10-19). Every worktree shares this config, so one absolute path
+    # covers the main checkout and all its worktrees.
+    ABS_HP="$(cd "$DEST" && pwd -P)/.claude/githooks"
     case "$CUR_HP" in
-      ""|.claude/githooks)
-        git -C "$DEST" config core.hooksPath .claude/githooks
-        echo "      wrote $DEST/.claude/githooks/pre-commit + core.hooksPath=.claude/githooks (chains .git/hooks/pre-commit if present)" ;;
+      ""|.claude/githooks|"$ABS_HP")
+        git -C "$DEST" config core.hooksPath "$ABS_HP"
+        echo "      wrote $DEST/.claude/githooks/{pre-commit,pre-push} + core.hooksPath=$ABS_HP (chains .git/hooks/* if present)" ;;
       *)
         echo "      NOTE: core.hooksPath is already '$CUR_HP' — left alone. To enforce the derived-artifact gate at commit,"
         echo "            call .claude/githooks/pre-commit from that hook (it is installed, just not wired)." ;;

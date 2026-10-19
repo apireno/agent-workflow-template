@@ -32,6 +32,20 @@ artifacts:
     generator: scripts/graph/build.py
     mode: block
 
+  # An artifact that MEASURES A SIBLING REPO: rebuilt at the commit its lock pins, never from the
+  # sibling's working tree. `--fix` reproduces the current pin; moving it is a separate, deliberate
+  #   derived-artifact-gate.sh repin <name> <sha>
+  # The generator takes `<pin_arg> <sha>` on build and rewrites its own lock. `external: true`
+  # without pin_lock makes --fix refuse rather than read whatever the sibling has on disk.
+  - name: sibling-flow-matrix
+    path: docs/architecture/flow-matrix/
+    generator: scripts/derived/flow_matrix.py
+    mode: block
+    external: true
+    pin_lock: docs/architecture/flow-matrix/sibling.lock   # JSON file (or a bare-sha file)
+    pin_key: sibling_sha                                   # JSON key; leave empty for a bare-sha file
+    pin_arg: --rev                                         # default --rev
+
   - name: read-site-registry
     path: docs/architecture/read-sites.json
     generator: scripts/graph/read_sites.py

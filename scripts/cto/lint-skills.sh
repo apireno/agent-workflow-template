@@ -19,6 +19,7 @@
 #            A later block referencing $ROOT/$CTO_REGISTRY without re-anchoring silently uses
 #            an empty value. /sprint-status' second block did exactly this.
 #
+#   CHECK F  a bare MCP server in a settings allow-list (covers no tools since Claude Code 2.1.299)
 #   CHECK E  a positional parameter inside a `!` block
 #            The skill runtime rewrites every dollar-followed-by-digits token in the FILE with
 #            the invocation's arguments before the shell runs — document-wide, no code-fence
@@ -291,6 +292,27 @@ for name in sorted(os.listdir(skills_dir)):
                 f"token in this FILE with invocation-argument text before the shell, awk, or the "
                 f"reader sees it. Use a named variable; read arguments from the ARGUMENTS placeholder."
             )
+
+# ── CHECK F: a bare MCP server in a settings allow-list (2026-10-19) ──────────────────────
+# Since Claude Code 2.1.299 an MCP allow rule matches only the exact name it gives: a bare
+# "mcp__<server>" no longer covers that server's tools, so it grants nothing while looking like it
+# grants everything. List each tool as mcp__<server>__<tool>.
+import json as _json
+for sf in (".claude/settings.permissive.json", ".claude/settings.devteam.json.template",
+           ".claude/settings.cto.json.template", ".cto/settings-overlay.json.example",
+           ".cto/settings-overlay.json"):
+    sp = os.path.join(root, sf)
+    if not os.path.isfile(sp):
+        continue
+    try:
+        txt = "\n".join(l for l in open(sp).read().split("\n") if '"_comment' not in l)
+        allow = (_json.loads(txt).get("permissions") or {}).get("allow") or []
+    except Exception:
+        continue
+    for rule in allow:
+        if isinstance(rule, str) and rule.startswith("mcp__") and rule.count("__") == 1:
+            findings.append(f"F  {sf}  `{rule}` — a bare MCP server rule covers none of its tools "
+                            f"(Claude Code >= 2.1.299). List each tool: {rule}__<tool>.")
 
 if findings:
     print(f"lint-skills: {len(findings)} finding(s)\n")

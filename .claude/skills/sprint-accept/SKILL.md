@@ -115,6 +115,14 @@ fi
 CTO_REGISTRY="$ROOT/.cto/projects.yaml"
 cd "$ROOT" || { echo "ERROR: cannot enter $ROOT" >&2; exit 1; }
 # <<< CTO-HOME ANCHOR <<<
+# (placed after the anchor: it needs $ROOT)
+# `--land` re-runs ONLY the landing for an already-decided sprint (ADR-003), e.g. after fixing the
+# cause of `landing: INCOMPLETE`. Flags are split off here so SPRINT_DIR stays a path.
+LAND_ONLY=0
+case " $SPRINT_DIR " in *" --land "*) LAND_ONLY=1; SPRINT_DIR="$(printf '%s' "$SPRINT_DIR" | sed 's/ *--land *//')";; esac
+if [ "$LAND_ONLY" = 1 ]; then
+  bash "$ROOT/scripts/agentic/land-lane.sh" "$SPRINT_DIR"; echo "LAND_ONLY=1 — report the landing result above; no new decision."; exit 0
+fi
 if [ -z "$SPRINT_DIR" ] || [ ! -d "$SPRINT_DIR" ]; then
   echo "ERROR: provide a path to a sprint directory"
   echo "Usage: /sprint-accept <path-to-sprint-XX/>"
@@ -270,6 +278,7 @@ CTO_REGISTRY="$ROOT/.cto/projects.yaml"
 cd "$ROOT" || { echo "ERROR: cannot enter $ROOT" >&2; exit 1; }
 # <<< CTO-HOME ANCHOR <<<
 SPRINT_DIR="$ARGUMENTS"
+case " $SPRINT_DIR " in *" --land "*) echo "LAND_ONLY — nothing to synthesize."; exit 0 ;; esac
 [ -n "${ZSH_VERSION:-}" ] && setopt no_nomatch sh_word_split
 
 # Emit all relevant artifacts into context so CTO can synthesize
@@ -338,7 +347,7 @@ Above are the sprint plan, dev report, and all VP reviews. Synthesize a final ac
      (that was the failure mode this gate exists to prevent).
 6. **Cross-VP convergence on remaining issues** — name them.
 7. **Decision** — one of:
-   - `APPROVED` — sprint shipped, ready to merge
+   - `APPROVED` — sprint shipped; step 9 lands it
    - `APPROVED-WITH-CONDITIONS` — minor follow-ups recorded but ship is OK
    - `REJECTED-FOR-REVISION` — material blockers remain, sprint continues
    - `ESCALATE-TO-CEO` — judgment call only CEO can make
@@ -348,6 +357,23 @@ Above are the sprint plan, dev report, and all VP reviews. Synthesize a final ac
    - Conformance disposition — the NOT-MET/UNVERIFIED items being accepted as known-issues (with follow-up owners) vs. those that blocked
    - Action items if APPROVED-WITH-CONDITIONS or REJECTED
    - PRD status update guidance for VP Prod
-9. **Present 5-line summary to CEO.**
+9. **LAND IT (APPROVED or APPROVED-WITH-CONDITIONS only) — ADR-003.** The CEO typing `/sprint-accept` is
+   the approval to ship; landing is part of accepting, not a later chore. Run, in this order:
+
+       bash scripts/agentic/land-lane.sh <sprint-dir> --dry-run      # show the plan
+       bash scripts/agentic/land-lane.sh <sprint-dir> [--allow-red "<reason>"]
+
+   It commits the sprint dir (decision included, scoped add), refuses a lane that lacks the latest base,
+   waits for CI on the lane's head, fast-forwards the base, tags `sprint/<slug>`, deletes the lane
+   branch, and archives + removes the lane worktree. **Never** use `--allow-red` on your own judgment:
+   only with the CEO's stated reason, which it records. Run the CI wait in the background if CI is slow.
+   - `landing: COMPLETE` → report it. Then offer the CEO a reap of anything else this lane left behind:
+     `bash scripts/agentic/reap-worktrees.sh <repo>` (report-only; `--reap` removes only REAPABLE rows,
+     never anything a live lane uses).
+   - `landing: INCOMPLETE at <step>` → the sprint is ACCEPTED but NOT LANDED. Say so plainly, give the
+     step and reason, and fix the cause (e.g. merge the base into the lane). Re-run only the landing with
+     `/sprint-accept <sprint-dir> --land`.
+   - REJECTED / ESCALATE → nothing lands.
+10. **Present 5-line summary to CEO** — including the landing line (COMPLETE, or INCOMPLETE at which step).
 
 Sign as: — CTO

@@ -48,7 +48,7 @@
 
 set -uo pipefail
 
-SOURCE="worktree"; AUDIT=0; FIX=0; REQUIRE=0; REPO=""; MANIFEST=""; CMD="check"; STAMP_NAME=""
+SOURCE="worktree"; AUDIT=0; FIX=0; REQUIRE=0; REPO=""; MANIFEST=""; CMD="check"; STAMP_NAME=""; REPIN_SHA=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --worktree|--staged|--head) SOURCE="${1#--}" ;;
@@ -58,6 +58,7 @@ while [ $# -gt 0 ]; do
         --repo)     REPO="$2"; shift ;;
         --manifest) MANIFEST="$2"; shift ;;
         stamp)      CMD="stamp"; STAMP_NAME="${2:-}"; [ -n "$STAMP_NAME" ] && shift ;;
+        repin)      CMD="repin"; STAMP_NAME="${2:-}"; REPIN_SHA="${3:-}"; [ -n "$STAMP_NAME" ] && shift; [ -n "$REPIN_SHA" ] && shift ;;
         check)      CMD="check" ;;
         -h|--help)  sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "derived-artifact-gate: unknown argument '$1'" >&2; exit 4 ;;
@@ -65,6 +66,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 [ "$CMD" = "stamp" ] && [ -z "$STAMP_NAME" ] && { echo "derived-artifact-gate: stamp needs an artifact name" >&2; exit 4; }
+[ "$CMD" = "repin" ] && { [ -z "$STAMP_NAME" ] || [ -z "$REPIN_SHA" ]; } && { echo "derived-artifact-gate: repin needs an artifact name and a sha" >&2; exit 4; }
 [ "$AUDIT" -eq 1 ] && FIX=0
 
 if [ -z "$REPO" ]; then
@@ -83,14 +85,15 @@ if [ ! -f "$MANIFEST" ]; then
 fi
 
 export DAG_REPO="$REPO" DAG_MANIFEST="$MANIFEST" DAG_SOURCE="$SOURCE" DAG_AUDIT="$AUDIT" \
-       DAG_FIX="$FIX" DAG_CMD="$CMD" DAG_STAMP_NAME="$STAMP_NAME" DAG_SELF="$0"
+       DAG_FIX="$FIX" DAG_CMD="$CMD" DAG_STAMP_NAME="$STAMP_NAME" DAG_SELF="$0" DAG_REPIN_SHA="$REPIN_SHA"
 
 python3 - <<'PY'
-import os, re, sys, subprocess, hashlib, datetime, shlex, stat
+import os, re, sys, json, subprocess, hashlib, datetime, shlex, stat
 
 REPO = os.environ["DAG_REPO"]; MANIFEST = os.environ["DAG_MANIFEST"]; SOURCE = os.environ["DAG_SOURCE"]
 AUDIT = os.environ["DAG_AUDIT"] == "1"; FIX = os.environ["DAG_FIX"] == "1"
 CMD = os.environ["DAG_CMD"]; STAMP_NAME = os.environ["DAG_STAMP_NAME"]; SELF = os.environ["DAG_SELF"]
+REPIN_SHA = os.environ.get("DAG_REPIN_SHA", "")
 REL_SELF = os.path.relpath(SELF, REPO) if SELF.startswith(REPO) else SELF
 
 # ---------- manifest ----------
@@ -189,11 +192,45 @@ def gen_cmd(gen):
     if p.endswith(".sh"): return ["bash", p]
     return None
 
-def run_gen(cmd, sub):
-    r = subprocess.run(cmd + [sub], cwd=REPO, capture_output=True, text=True)
+def run_gen(cmd, sub, extra=()):
+    r = subprocess.run(cmd + [sub] + list(extra), cwd=REPO, capture_output=True, text=True)
     if r.returncode != 0:
-        raise RuntimeError(f"`{' '.join(shlex.quote(c) for c in cmd)} {sub}` exited {r.returncode}: {r.stderr.strip()[:300]}")
+        raise RuntimeError(f"`{' '.join(shlex.quote(c) for c in cmd + [sub] + list(extra))}` exited {r.returncode}: {r.stderr.strip()[:300]}")
     return [l for l in (x.rstrip() for x in r.stdout.splitlines()) if l and not l.startswith("#")]
+
+# ---------- pins (2026-10-19) ----------
+# An artifact that MEASURES a sibling repo must be rebuilt at the sibling commit its lock file pins,
+# never from the sibling's working tree: `--fix` used to call `build` bare, the generator then read
+# whatever the sibling had on disk (mid-sprint dirt included), and the stamped artifact described an
+# engine state that existed in no commit. Manifest keys (flat, so no YAML library is needed):
+#   pin_lock: <repo-relative lock file>   pin_key: <JSON key, or empty for a bare-sha file>
+#   pin_arg:  <flag the generator takes>  (default --rev)
+#   external: true                         (measures a sibling; with no pin_lock, --fix refuses)
+SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+def truthy(v): return str(v).strip().lower() in ("1", "true", "yes", "on")
+def pinned_sha(art):
+    lock = norm(str(art.get("pin_lock") or ""))
+    if not lock: return None
+    full = os.path.join(REPO, lock)
+    if not os.path.isfile(full): raise RuntimeError(f"pin_lock '{lock}' does not exist")
+    key = str(art.get("pin_key") or "").strip()
+    txt = open(full, encoding="utf-8", errors="replace").read()
+    if key:
+        try: val = json.loads(txt).get(key, "")
+        except Exception as e: raise RuntimeError(f"pin_lock '{lock}' is not JSON ({e}); set pin_key empty for a bare-sha file")
+        m = SHA_RE.search(str(val))
+    else:
+        m = SHA_RE.search(txt)
+    if not m: raise RuntimeError(f"no sha found in pin_lock '{lock}'" + (f" under key '{key}'" if key else ""))
+    return m.group(0)
+def build_args(art, sha=None):
+    """Extra args for `build`: the pin flag + sha; [] if not pinned; raises if external and unpinned."""
+    sha = sha or pinned_sha(art)
+    if sha: return [str(art.get("pin_arg") or "--rev"), sha]
+    if truthy(art.get("external", "")):
+        raise RuntimeError("UNPINNED: this artifact measures a sibling repo (external: true) but declares no pin_lock — "
+                           "a build would read the sibling's working tree. Declare pin_lock (and pin_key), or repin it.")
+    return []
 
 def stamp_path(art_path):
     full = os.path.join(REPO, art_path)
@@ -310,6 +347,51 @@ def check_artifact(art):
             findings.append(("STALE", f"closure changed ({detail}) and '{name}' was not regenerated. Run: {fix_cmd}"))
     return findings, pairs, gen_blob
 
+def rebuild_and_stamp(art, sha=None):
+    """Run the generator's build (at the pin, if any), then stamp from the worktree and stage."""
+    path = norm(str(art["path"])); gen = norm(str(art["generator"])); cmd = gen_cmd(gen)
+    if cmd is None: raise RuntimeError(f"generator '{gen}' missing")
+    extra = build_args(art, sha)
+    run_gen(cmd, "build", extra)
+    # Re-walk after build: the closure is what the tree now says, hashed from the WORKTREE
+    # (what `git add` will stage). A --staged re-check after adding must then match.
+    closure = sorted({norm(l) for l in run_gen(cmd, "closure")} - {""})
+    wt = []
+    for p in closure:
+        fp = os.path.join(REPO, p)
+        if os.path.isfile(fp):
+            data = open(fp, "rb").read(); h = hashlib.sha1(); h.update(f"blob {len(data)}\0".encode()); h.update(data); wt.append((p, h.hexdigest()))
+        else:
+            wt.append((p, None))
+    gdata = open(os.path.join(REPO, gen), "rb").read(); gh = hashlib.sha1(); gh.update(f"blob {len(gdata)}\0".encode()); gh.update(gdata)
+    sp = stamp_path(path); write_stamp(sp, wt, gh.hexdigest())
+    if IN_GIT:
+        paths = [path.rstrip("/"), sp]
+        lock = norm(str(art.get("pin_lock") or ""))
+        if lock: paths.append(lock)
+        subprocess.run(["git", "-C", REPO, "add", "--"] + paths, capture_output=True)
+    how = f"at pin {extra[1][:12]}" if extra else "(unpinned)"
+    return len(wt), how
+
+# ---------- repin subcommand: the deliberate act of MOVING a pin ----------
+if CMD == "repin":
+    art = next((a for a in ARTS if a.get("name") == STAMP_NAME), None)
+    if art is None:
+        print(f"derived-artifact-gate: no artifact named '{STAMP_NAME}' in {MANIFEST}"); sys.exit(4)
+    if not norm(str(art.get("pin_lock") or "")):
+        print(f"derived-artifact-gate: '{STAMP_NAME}' declares no pin_lock — nothing to repin."); sys.exit(4)
+    try:
+        before = pinned_sha(art)
+        n, how = rebuild_and_stamp(art, REPIN_SHA)
+        after = pinned_sha(art)
+    except RuntimeError as e:
+        print(f"derived-artifact-gate: repin failed: {e}"); sys.exit(3)
+    if not after.startswith(REPIN_SHA[:len(after)]) and not REPIN_SHA.startswith(after):
+        print(f"derived-artifact-gate: the generator built at {REPIN_SHA} but its lock still says {after} — "
+              "the generator must rewrite its own lock on build. Artifact NOT trustworthy."); sys.exit(3)
+    print(f"repinned {STAMP_NAME}: {before[:12]} -> {after[:12]}; rebuilt + stamped + staged ({n} files in closure)")
+    sys.exit(0)
+
 # ---------- stamp subcommand ----------
 if CMD == "stamp":
     art = next((a for a in ARTS if a.get("name") == STAMP_NAME), None)
@@ -333,27 +415,13 @@ for art in ARTS:
     name = str(art.get("name") or "?"); mode = effective_mode(art)
     findings, pairs, gen_blob = check_artifact(art)
     if FIX and any(f[0] in ("STALE", "NO-STAMP") for f in findings):
-        path = norm(str(art["path"])); gen = norm(str(art["generator"])); cmd = gen_cmd(gen)
         try:
-            run_gen(cmd, "build")
-            # Re-walk after build: the closure is what the tree now says, hashed from the WORKTREE
-            # (what `git add` will stage). A --staged re-check after adding must then match.
-            closure = sorted({norm(l) for l in run_gen(cmd, "closure")} - {""})
-            wt = []
-            for p in closure:
-                fp = os.path.join(REPO, p)
-                if os.path.isfile(fp):
-                    data = open(fp, "rb").read(); h = hashlib.sha1(); h.update(f"blob {len(data)}\0".encode()); h.update(data); wt.append((p, h.hexdigest()))
-                else:
-                    wt.append((p, None))
-            gdata = open(os.path.join(REPO, gen), "rb").read(); gh = hashlib.sha1(); gh.update(f"blob {len(gdata)}\0".encode()); gh.update(gdata)
-            sp = stamp_path(path); write_stamp(sp, wt, gh.hexdigest())
-            if IN_GIT:
-                subprocess.run(["git", "-C", REPO, "add", "--", path.rstrip("/"), sp], capture_output=True)
+            n, how = rebuild_and_stamp(art)
             findings = [f for f in findings if f[0] not in ("STALE", "NO-STAMP")]
-            print(f"  {name:<24} {mode:<6} {'FIXED':<13} rebuilt + stamped + staged ({len(wt)} files in closure)")
+            print(f"  {name:<24} {mode:<6} {'FIXED':<13} rebuilt {how} + stamped + staged ({n} files in closure)")
         except RuntimeError as e:
-            findings.append(("GEN-ERROR", f"--fix failed: {e}"))
+            st = "UNPINNED" if str(e).startswith("UNPINNED") else "GEN-ERROR"
+            findings.append((st, f"--fix refused: {e}" if st == "UNPINNED" else f"--fix failed: {e}"))
     if not findings:
         print(f"  {name:<24} {mode:<6} {'OK':<13}")
         continue

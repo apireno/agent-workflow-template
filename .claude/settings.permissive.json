@@ -9,7 +9,6 @@
       "Grep",
       "WebFetch",
       "WebSearch",
-      "mcp__domshell",
       "mcp__domshell__domshell_execute"
     ]
   }
