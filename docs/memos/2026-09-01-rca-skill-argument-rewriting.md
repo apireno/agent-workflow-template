@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-01 · **Author:** CTO (template) · **Class:** rendering defect in skill-embedded shell
 **Severity:** HIGH — one skill hard-down, twelve silently degraded, for six weeks
-**Reported by:** kgspin-cto, `INCIDENT-handoff-skill-arg-interpolation-20260901.md`
+**Reported by:** acme-cto, `INCIDENT-handoff-skill-arg-interpolation-20260901.md`
 **Introduced by:** `ed27f56` (2026-08-14) — this template, fixing the *previous* anchoring defect
 
 ---

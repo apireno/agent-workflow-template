@@ -2,7 +2,7 @@
 
 **Status:** **Accepted** — mechanism design. Round 1 (2026-06-17): RICE added, phasing reordered INTENT→ENFORCEMENT→NAVIGATION, async re-index. Round 2 (2026-06-17, after the engine/generic-consumer seam was codified): **both vp-eng + vp-devops APPROVE**; folded in lint-DX actionable errors, audit-mode-then-blocking rollout, NAVIGATION owner/budget + Tier-1 reliability. The project ADOPTION (engine retrieval extension + RACI content) is a separate project FLEET-ADR.
 **Author:** CTO (template) · **Date:** 2026-06-17
-**Origin:** kgspin CTO memo `MEMO-template-cto-arch-tooling-raci-uml-codegram-20260617.md`
+**Origin:** acme CTO memo `MEMO-template-cto-arch-tooling-raci-uml-code-graph-20260617.md`
 **Scope:** the **portable mechanism** the template ships. Project-specific *engines* (a code-index tool) and *content* (the actual RACI, per-repo boundary rules) are out of scope — they live in each project's repos.
 
 ---
@@ -34,7 +34,7 @@ We want tooling that makes *who-owns-what / don't-dupe / stay-in-lane* explicit,
 | Layer | What | Property |
 |---|---|---|
 | **INTENT** | A project **RACI + C4 component map**: which repo owns what + the contracts crossing each boundary. | **Hand-curated, ADR-gated, stable.** Normative (what *should* be) — not derivable from code. |
-| **NAVIGATION** | A **code-derived cross-repo index** (symbol / call / import graph), always-current, queryable by any agent. Derived UML (class/sequence) is **generated from it**, never hand-drawn. | **Always-current, engine-pluggable** (codegram is one impl; Sourcegraph/Glean/a language-server are others). |
+| **NAVIGATION** | A **code-derived cross-repo index** (symbol / call / import graph), always-current, queryable by any agent. Derived UML (class/sequence) is **generated from it**, never hand-drawn. | **Always-current, engine-pluggable** (an MCP code-graph server is one impl; Sourcegraph/Glean/a language-server are others). |
 | **ENFORCEMENT** | **Import-boundary tests as definition-of-done** — a repo declares its forbidden cross-lane imports; a lane violation **fails CI**. | **Ratchets.** Docs describe; tests enforce. |
 
 **Keystone:** the RACI is **validated against the navigation engine's actual import graph** — a lint that fails when reality diverges from declared intent. INTENT declares the line, NAVIGATION supplies reality, ENFORCEMENT fails the build on the diff. This is the *general* form of a single hardcoded `test_no_X_import`: derive **all** forbidden edges from the RACI and check them. The RACI therefore can't silently drift.
@@ -43,18 +43,18 @@ We want tooling that makes *who-owns-what / don't-dupe / stay-in-lane* explicit,
 
 **Portable (this template) — the engine-agnostic logic + contracts (the reusable "HOW to build the artifacts"):**
 - **Personas:** CTO owns + maintains the RACI/component map and **consults the cross-repo graph at decomposition** to prevent dupes *before* firing teams; dev-team **definition-of-done** adds (a) import-boundary tests for the repo's lane, (b) a code-index re-index of changed modules, (c) a "checked the RACI — in my lane" gate; VP-Eng reviews lane adherence + boundary-test coverage at accept.
-- **Skills (interfaces):** `/arch-map` (render/refresh the RACI + C4 map), `/codegram` (cross-repo symbol/dependency query *over the engine interface* — engine pluggable), `/lane-check` (run the boundary lint).
+- **Skills (interfaces):** `/arch-map` (render/refresh the RACI + C4 map), `/code-graph` (cross-repo symbol/dependency query *over the engine interface* — engine pluggable), `/lane-check` (run the boundary lint).
 - **Scripts — the generic *consumers* of the engine interface (built once, work against any repo/engine):** the `lane-boundary-lint` harness (reads RACI-derived rules; fails CI on violation) — every violation must emit an **actionable error** naming the forbidden import, the offending repo's lane, the target lane, and the **RACI rule it breaks** (a bare "forbidden import" fails developer adoption — VP-Eng, hard requirement); the **RACI-validator** (diffs the RACI against the engine's import edges); and the **derived-UML renderer** (a graph → Mermaid/PlantUML *transform*). Plus the `reindex` hook *contract*.
 - **Templates:** a RACI / C4 component-map template (`docs/architecture/_templates/`), like the QA baseline template.
 
 **Project-specific (each project's repos) — ONLY the engine's interface impl + the content:**
-- The NAVIGATION engine's **implementation of the query interface** — for a project already running a code-graph engine (e.g. codegram), a **minimal retrieval extension**: index **fleet-wide** + answer **cross-repo symbol/import-edge** queries. Nothing more.
+- The NAVIGATION engine's **implementation of the query interface** — for a project already running a code-graph engine (e.g. a code-graph MCP server), a **minimal retrieval extension**: index **fleet-wide** + answer **cross-repo symbol/import-edge** queries. Nothing more.
 - The **RACI content** + the per-repo **forbidden-import rules**.
 - **Generic concerns — RACI-validation, UML-rendering, the lane-lint — do NOT live inside the engine.** Baking them into a project product is exactly the lane-violation this ADR exists to prevent; they are the template's generic consumers above. The engine exposes data; the template's generic layer interprets it.
 
 ## The NAVIGATION-engine contract (what any engine must expose)
 
-So the RACI-validator and `/codegram` skill are engine-agnostic, a conforming engine MUST expose, fleet-wide:
+So the RACI-validator and `/code-graph` skill are engine-agnostic, a conforming engine MUST expose, fleet-wide:
 1. **Symbol lookup** — given a symbol/method, where it's defined + every cross-repo consumer.
 2. **Import/dependency edges** — per module, its imports, **including cross-repo edges** (the input the RACI-validator diffs against intent).
 3. **Always-current via ASYNCHRONOUS, NON-BLOCKING re-index** (vp-devops CRITICAL) — CI/commit fires a `reindex-needed` event and does **not** wait; an indexing failure must **never** block a merge. **Incremental** (changed modules only), never a full re-index per commit. Instrumented (index freshness/staleness, query latency, error rate) — an engine outage is a developer-productivity incident, not a silent degradation.
@@ -84,6 +84,6 @@ vp-eng correctly flagged the original order: you **cannot lint a boundary you ha
 
 ## Division of labor
 
-- **Template CTO** builds the **engine-agnostic logic** (the RACI-validator, the `lane-boundary-lint`, the UML-renderer, the `/arch-map` + `/codegram` + `/lane-check` interfaces, the RACI/C4 template) + this design. This *is* the reusable "how to build the artifacts" — it works against any repo, current or future, via the engine interface. **It is the bulk of the work, and it is the template's.**
-- **Project CTO + dev team** own only: (a) the engine's **interface implementation** — for a project on a code-graph engine (e.g. codegram), a *minimal* fleet-wide + cross-repo retrieval extension; and (b) the **RACI content** + per-repo rules. The project CTO authors a project FLEET-ADR adopting this and fires the retrieval extension as a small dev-team sprint scoped to the interface above.
+- **Template CTO** builds the **engine-agnostic logic** (the RACI-validator, the `lane-boundary-lint`, the UML-renderer, the `/arch-map` + `/code-graph` + `/lane-check` interfaces, the RACI/C4 template) + this design. This *is* the reusable "how to build the artifacts" — it works against any repo, current or future, via the engine interface. **It is the bulk of the work, and it is the template's.**
+- **Project CTO + dev team** own only: (a) the engine's **interface implementation** — for a project on a code-graph engine (e.g. a code-graph MCP server), a *minimal* fleet-wide + cross-repo retrieval extension; and (b) the **RACI content** + per-repo rules. The project CTO authors a project FLEET-ADR adopting this and fires the retrieval extension as a small dev-team sprint scoped to the interface above.
 - **Self-referential guardrail:** generic concerns (validation / UML / lint) never live inside the engine — a project product owning generic logic is the duplication this ADR prevents. The engine exposes data; the template interprets it.

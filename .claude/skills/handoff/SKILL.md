@@ -246,7 +246,7 @@ if os.path.exists(p):
     except Exception: s = {}
 allow = s.setdefault("permissions", {}).setdefault("allow", ["Bash(*)","Edit","Write","Read","Glob","Grep","WebFetch","WebSearch"])
 # Pre-trust the repo's MCP servers so per-tool prompts don't stall the auto-kickoff.
-# Each MCP tool otherwise prompts separately (e.g. codegram, domshell) — `mcp__<server>`
+# Each MCP tool otherwise prompts separately (e.g. a code-graph MCP server, domshell) — `mcp__<server>`
 # allows all of that server's tools, and enableAllProjectMcpServers skips the trust prompt.
 servers = []
 mj = os.path.join(repo, ".mcp.json")

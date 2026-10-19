@@ -31,7 +31,7 @@ Antigravity is a different product from Claude Code, not just a different UI on 
   instead: `REVIEW_ENGINE=gemini` or `REVIEW_ENGINE=kimi` (`scripts/agentic/vp-review.sh` reads
   `.review-engine`, or set the env var per-call — you don't need to know which is configured,
   just run the script).
-- **MCP servers** (codegram, domshell) work if registered in Antigravity's own `mcp_config.json`
+- **MCP servers** (a code-graph engine, domshell) work if registered in Antigravity's own `mcp_config.json`
   — that's a separate registration from Claude Code's `.mcp.json`.
 
 ## VP Persona Switching (works well from Antigravity)

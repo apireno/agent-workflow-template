@@ -4,7 +4,7 @@
 # Detect two copies of the same compiled C/C++ library inside one Python
 # environment — the condition that produces interpreter-teardown crashes.
 #
-# WHY THIS EXISTS (kgspin-core BUG-308, 2026-08-14). A machine accumulated 41
+# WHY THIS EXISTS (acme-core BUG-308, 2026-08-14). A machine accumulated 41
 # Python crash dumps; 38 were one signature:
 #
 #     absl::Flag<bool>::~Flag()  <-  __cxa_finalize_ranges  <-  exit

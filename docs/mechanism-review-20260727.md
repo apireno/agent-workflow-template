@@ -1,7 +1,7 @@
-# Mechanism governance review — kgspin-cto session arc 2026-07-18 → 2026-07-27
+# Mechanism governance review — acme-cto session arc 2026-07-18 → 2026-07-27
 
 **Reviewer:** template team (agent-workflow-template) · **Date:** 2026-07-27
-**Input:** `kgspin-cto/docs/template-sync/session-mechanism-accounting-20260727.md` and
+**Input:** `acme-cto/docs/template-sync/session-mechanism-accounting-20260727.md` and
 `upstream-review-20260725.md` · **Frame:** KEEP / REWRITE / CULL-to-downstream / CULL
 
 The accounting was complete, honest, and correctly volunteered — that is the behaviour we
@@ -76,7 +76,7 @@ worker decline path, worker crash-loop bound).
 
 ---
 
-## B. Scripts held in `kgspin-cto/scripts/cto/`
+## B. Scripts held in `acme-cto/scripts/cto/`
 
 | Script | Ruling | Rationale |
 |---|---|---|
@@ -93,17 +93,17 @@ worker decline path, worker crash-loop bound).
 
 `restart-worker.sh` and `archive-when-fast.sh` die with the scratchpad. Listing them was
 the right instinct. If `restart-worker.sh` is load-bearing for a running supervision loop,
-promote it into `kgspin-cto` as project-specific tooling under the §B `queue-query.sh` rule
+promote it into `acme-cto` as project-specific tooling under the §B `queue-query.sh` rule
 rather than letting it vanish mid-run.
 
 ---
 
-## D. Settings modifications in `kgspin-cto/.claude/settings.json`
+## D. Settings modifications in `acme-cto/.claude/settings.json`
 
 | Item | Ruling | Rationale |
 |---|---|---|
 | `additionalDirectories` = fleet repo paths | **KEEP (downstream, not mechanism)** | Local machine configuration, correctly local. Never upstream absolute paths. |
-| MCP allows (claude-in-chrome / domshell / codegram) | **KEEP (downstream)** | Same. But see P1 — a CTO home holding a browser MCP is exactly the availability that hijacked a QA drive. |
+| MCP allows (claude-in-chrome / domshell / code-graph engine) | **KEEP (downstream)** | Same. But see P1 — a CTO home holding a browser MCP is exactly the availability that hijacked a QA drive. |
 | Per-script allowlist entries (`1399a4b` + earlier) | **REWRITE** | If that file grants `Bash(*)`, delete them as dead weight. If not, rewrite to `$CLAUDE_PROJECT_DIR` — as written with `$CTO_HOME` they have never matched anything (F3). |
 
 ---
@@ -171,23 +171,23 @@ to close.
 7. **P1 fixed** in `qa-drive-claude.sh`.
 8. Adopted a genericized Success Gating section into `docs/personas/cto.md`.
 
-### For the kgspin-cto session to execute verbatim on receipt
+### For the acme-cto session to execute verbatim on receipt
 
 1. **Do not push to this template again.** Route mechanism through
    `docs/template-sync/` as `upstream-review-20260725.md` did. That document is the model.
-2. `git pull` this template, then run `scripts/cto/sync-cto-home.sh /path/to/kgspin-cto --apply`
+2. `git pull` this template, then run `scripts/cto/sync-cto-home.sh /path/to/acme-cto --apply`
    to take the rewritten scripts, the P0/P1 fixes, and the Success Gating persona section.
 3. **Delete** the local forks of `watch-file-or-prompt.sh`, `supervise-worker.sh`,
-   `window-peek.sh`, `close-window-id.sh` from `kgspin-cto/scripts/cto/` — the sync supplies
+   `window-peek.sh`, `close-window-id.sh` from `acme-cto/scripts/cto/` — the sync supplies
    them. Do not maintain parallel copies.
 4. **Keep** `queue-query.sh` and `demo-stack.sh` as project-specific downstream tooling.
    Do not attempt to upstream either.
-5. **Fix the allowlist entries** in `kgspin-cto/.claude/settings.json`: delete them if that
+5. **Fix the allowlist entries** in `acme-cto/.claude/settings.json`: delete them if that
    file grants `Bash(*)`; otherwise rewrite `$CTO_HOME` → `$CLAUDE_PROJECT_DIR`. They have
    never matched anything.
 6. **Note the behaviour change:** `close-window-id.sh` is now dry-run by default. Add `--yes`.
 7. Confirm `archive-when-fast.sh` is defunct; if `restart-worker.sh` is still load-bearing,
-   commit it into `kgspin-cto` as project-specific tooling rather than leaving it in a
+   commit it into `acme-cto` as project-specific tooling rather than leaving it in a
    scratchpad.
 
 ---
@@ -202,15 +202,15 @@ to close.
 | Success Gating in `cto.md` | CTO homes | `sync-cto-home.sh`. |
 
 Not propagated by this session: two dev-team sprints are live in Terminal windows right now
-(`kgspin-admin`, `kgspin-demo-app`). Per the instruction, nothing was pushed downstream —
-the kgspin-cto session propagates on receipt, when its own fleet is quiet.
+(`acme-admin`, `acme-demo-app`). Per the instruction, nothing was pushed downstream —
+the acme-cto session propagates on receipt, when its own fleet is quiet.
 
 ---
 
 ## History exposure — **CEO ruling 2026-07-27: leave it alone. CLOSED.**
 
 The revert does not remove the leak from public history: `e3851e7` remains fetchable by SHA
-and contains `kgspin-demo-app.*server`, `bringup-demo-stack`, and `surreal`. Assessed **low
+and contains `acme-demo-app.*server`, `bringup-demo-stack`, and `surreal`. Assessed **low
 severity** — repo names and a database choice, not strategy, PRDs, or corpora.
 
 **The CEO has ruled: no history rewrite.** The exposure is accepted as-is. No further action;

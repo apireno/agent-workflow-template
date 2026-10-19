@@ -449,7 +449,7 @@ was installed this way before). In that mode the script:
   so the upstream `CLAUDE.md`/`AGENTS.md` still governs build/test/PR mechanics;
 - excludes all scaffolding via **`.git/info/exclude`**, never the tracked `.gitignore`, in an
   idempotent sentinel-delimited block that preserves the operator's own lines;
-- **skips any path the upstream project tracks** (lancedb ships its own `/.agents/`) — excluding
+- **skips any path the upstream project tracks** (some upstream projects ship their own `/.agents/`) — excluding
   it would hide new upstream files from `git status`;
 - asserts `git status` is clean afterwards and warns loudly if it isn't.
 

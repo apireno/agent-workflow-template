@@ -59,10 +59,10 @@ LITERAL_OK = {"CLAUDE_PROJECT_DIR", "ARGUMENTS", "DOMSHELL_TOKEN"}
 # Skills that legitimately anchor on the CURRENT repo, not the CTO home:
 #   setup / new-project  bootstrap a clone BEFORE .cto/projects.yaml exists — requiring a
 #                        CTO home would make first-run setup impossible.
-#   arch-map, lane-check, qa-ux, codegram
+#   arch-map, lane-check, qa-ux, the code-graph engine
 #                        operate on the repo you are standing in, using that repo's own
 #                        scripts/agentic + docs/personas (push-to-repos installs them).
-EXEMPT = {"setup", "new-project", "arch-map", "lane-check", "qa-ux", "codegram"}
+EXEMPT = {"setup", "new-project", "arch-map", "lane-check", "qa-ux", "the code-graph engine"}
 
 findings = []
 

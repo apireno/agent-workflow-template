@@ -102,7 +102,7 @@ fi
 # Two copies of one C++ runtime in a single interpreter share process-global
 # state, and the usual symptom is a crash at EXIT — after the work is done and
 # the artifacts are written, so every individual instance looks like ignorable
-# noise. One machine reached 41 crash dumps before anyone read one (kgspin-core
+# noise. One machine reached 41 crash dumps before anyone read one (acme-core
 # BUG-308). Never blocking: it is an environment smell, not a broken session.
 #
 # The scan costs ~10s, so it is CACHED and keyed on the environment fingerprint.

@@ -1,8 +1,8 @@
 # Remediation: the seven defects from `template-gap-report-20260814`
 
-**From:** the template team · **To:** kgspin-cto (CEO relaying) · **Template HEAD:** see git log
-**Source report:** `kgspin-cto/docs/template-reports/template-gap-report-20260814.md`
-**Method:** kgspin repos treated as READ-ONLY evidence. Nothing was written into any of them.
+**From:** the template team · **To:** acme-cto (CEO relaying) · **Template HEAD:** see git log
+**Source report:** `acme-cto/docs/template-reports/template-gap-report-20260814.md`
+**Method:** acme repos treated as READ-ONLY evidence. Nothing was written into any of them.
 
 ## Verdict table
 
@@ -17,7 +17,7 @@
 | 7 | `/handoff` single window slot | **FIXED** — append-only registry, refuses to guess | tested against live window ids |
 | 8 | `sync-cto-home.sh` cwd-resolved TEMPLATE (filed during adoption) | **FIXED** — resolves from `BASH_SOURCE`; sweep found 1 real site of 15 | `lint-skills.sh` CHECK D |
 
-All eight fixed. **Four are now field-confirmed** by kgspin-cto on 2026-08-14 — see
+All eight fixed. **Four are now field-confirmed** by acme-cto on 2026-08-14 — see
 "Field confirmation" at the end, which retires both caveats this memo originally carried.
 
 ---
@@ -41,7 +41,7 @@ Three sites in the audit are deliberate literals and are allowlisted by name in 
 the skill harness before the shell runs — the quoted heredoc is what makes it injection-safe),
 and `${DOMSHELL_TOKEN}` written into an MCP config.
 
-**Verified live:** `/sprint-status`'s blocks now run from `kgspin-cto` and print all 12 repos
+**Verified live:** `/sprint-status`'s blocks now run from `acme-cto` and print all 12 repos
 with real session states.
 
 ## 2. `/vp-review` — the timeout, and the empty files it left
@@ -80,8 +80,8 @@ tested.
 ## 3. CTO-home anchoring
 
 **Reproduced exactly**, and the root cause is worse than reported. From a shell sitting in
-`kgspin-tuner` with `$CLAUDE_PROJECT_DIR` empty, `/sprint-status` did not merely fail — it
-**succeeded against the wrong fleet**: `kgspin-tuner/.cto-path` points at the *public template*,
+`acme-tuner` with `$CLAUDE_PROJECT_DIR` empty, `/sprint-status` did not merely fail — it
+**succeeded against the wrong fleet**: `acme-tuner/.cto-path` points at the *public template*,
 whose `.cto/projects.yaml` is a placeholder listing `my-project` and `my-frontend` at
 `/Users/yourname/…`. A confident answer naming repos that do not exist.
 
@@ -97,18 +97,18 @@ Live output from the reported failure position, now:
 ```
 ERROR: no CTO home found — no directory containing .cto/projects.yaml.
   $CTO_HOME=''  $CTO_REPO=''  $CLAUDE_PROJECT_DIR=''
-  walked up from: /Users/apireno/repos/kgspin-tuner
+  walked up from: /Users/you/repos/acme-tuner
   rejected candidates:
-    /Users/apireno/repos/agent-workflow-template (placeholder registry — the unconfigured template)
+    /Users/you/repos/agent-workflow-template (placeholder registry — the unconfigured template)
   This is an ANCHORING failure, not a missing registry. Run the skill from the CTO
   home, or fix it permanently:  echo /path/to/<project>-cto > ~/.cto/home
 ```
 
-**Two things for your side.** (a) `kgspin-admin`, `kgspin-core`, `kgspin-loom` and
-`kgspin-tuner` still have `.cto-path` pointing at the template — which also means
+**Two things for your side.** (a) `acme-admin`, `acme-core`, `acme-loom` and
+`acme-tuner` still have `.cto-path` pointing at the template — which also means
 `escalate-to-cto.sh` has been routing their escalations to the wrong home. `push-to-repos.sh`
 now rewrites `.cto-path` on every sync, so the next sync heals them; I did not touch them.
-(b) Run `mkdir -p ~/.cto && echo /Users/apireno/repos/kgspin-cto > ~/.cto/home` once — it is
+(b) Run `mkdir -p ~/.cto && echo /Users/you/repos/acme-cto > ~/.cto/home` once — it is
 the last-resort anchor and makes cwd drift a non-event. `/setup` now writes it for new homes.
 
 **Guards:** `lint-skills.sh` CHECK B (anchor drift from the canonical copy) and CHECK C (a `!`
@@ -157,7 +157,7 @@ and now applies to nudges too, which route through the same primitive.
 
 **Caveat RETIRED 2026-08-14.** When written, only the *abort* path had been verified live —
 the guard fired, refused to type, and named Chrome as the thief. The happy path was untested
-because exercising it meant stealing focus from the operator mid-session. kgspin-cto has since
+because exercising it meant stealing focus from the operator mid-session. acme-cto has since
 run it for real: an 864-character ruling injected by paste into a live session, clipboard saved
 and restored, no leakage and no fragments. Clean on first use.
 
@@ -213,8 +213,8 @@ the only site where a cwd-resolved path meant *the tree we copy from*.
 
 ```
 ERROR: target and source are the same directory — nothing to sync.
-  TARGET   : /Users/apireno/repos/kgspin-cto   (from argument 1)
-  TEMPLATE : /Users/apireno/repos/agent-workflow-template (from this script's own path: …)
+  TARGET   : /Users/you/repos/acme-cto   (from argument 1)
+  TEMPLATE : /Users/you/repos/agent-workflow-template (from this script's own path: …)
 ```
 
 **Guarded — `lint-skills.sh` CHECK D.** The rule encodes the distinction rather than banning
@@ -232,13 +232,13 @@ terminal.
 
 ## Sync
 
-Everything above is in the template. `scripts/cto/sync-cto-home.sh <kgspin-cto> --apply` copies
+Everything above is in the template. `scripts/cto/sync-cto-home.sh <acme-cto> --apply` copies
 `.claude/skills`, `.claude/hooks` and `scripts/` wholesale, so all of it lands in one pass;
 `push-to-repos.sh` carries the dev-repo half (`CLAUDE.devteam.md`, `.cto-path`, hooks,
-`scripts/agentic`). **Run both from `kgspin-cto`, not from the template** — `--fleet-default`
+`scripts/agentic`). **Run both from `acme-cto`, not from the template** — `--fleet-default`
 resolves from the repo the script lives in, and the template is deliberately engine-neutral.
 
-Two things to do by hand after syncing: `echo /Users/apireno/repos/kgspin-cto > ~/.cto/home`,
+Two things to do by hand after syncing: `echo /Users/you/repos/acme-cto > ~/.cto/home`,
 and restart any long-lived sessions so they pick up the corrected mechanism.
 
 **Keep filing these.** Four of the seven were things no amount of reading the template would
@@ -249,7 +249,7 @@ have surfaced — they only appear when a real session runs into them.
 
 ---
 
-# Field confirmation — 2026-08-14 (kgspin-cto)
+# Field confirmation — 2026-08-14 (acme-cto)
 
 Four of these fixes have now been exercised by a real session rather than by my tests:
 

@@ -1,0 +1,9 @@
+{
+  "_comment": "Project-specific permission grants, merged into every dev repo's .claude/settings.json by scripts/cto/push-to-repos.sh (permissions.allow/deny/ask: union). Copy to .cto/settings-overlay.json in your CTO home. The public template names no project's MCP servers; yours go here, e.g. a code-graph engine or a browser driver.",
+  "permissions": {
+    "allow": [
+      "mcp__your-code-graph-server",
+      "mcp__your-code-graph-server__query"
+    ]
+  }
+}

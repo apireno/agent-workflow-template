@@ -1,6 +1,6 @@
 ---
 name: arch-map
-description: Render/refresh the project RACI + C4 component map (ADR-001 INTENT) — the canonical who-owns-what + boundary-contracts map. Seeds docs/architecture/raci-component-map.md from the template if missing; regenerates the Mermaid component diagram from the curated RACI. Detailed class/sequence UML is derived from the code-graph engine (Phase 2, via /codegram). Use at decomposition to consult ownership + prevent duplicated logic before firing teams.
+description: Render/refresh the project RACI + C4 component map (ADR-001 INTENT) — the canonical who-owns-what + boundary-contracts map. Seeds docs/architecture/raci-component-map.md from the template if missing; regenerates the Mermaid component diagram from the curated RACI. Detailed class/sequence UML is derived from the code-graph engine (Phase 2, via /code-graph). Use at decomposition to consult ownership + prevent duplicated logic before firing teams.
 allowed-tools: Bash(*) Read Write
 argument-hint: [--seed]
 ---
@@ -39,6 +39,6 @@ fi
 1. If the map was just seeded, **curate it** — one row per repo: its lane, what it owns, the contracts it exposes/consumes, and its **forbidden cross-lane imports** (this column seeds each repo's `lane-rules.txt`).
 2. **(Re)render the component diagram** in the map's Mermaid block from the current RACI rows.
 3. **Consult it at decomposition** to prevent dupes/lane-drift before firing teams.
-4. For **detailed per-repo UML**, delegate to **VP-Eng** (it generates a repo's UML from the AST on initiation) — do not hand-draw. The fleet-wide derived UML + cross-repo navigation come from the code-graph engine via `/codegram` (Phase 2).
+4. For **detailed per-repo UML**, delegate to **VP-Eng** (it generates a repo's UML from the AST on initiation) — do not hand-draw. The fleet-wide derived UML + cross-repo navigation come from the code-graph engine via `/code-graph` (Phase 2).
 
 Sign `— CTO`.

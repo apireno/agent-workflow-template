@@ -62,13 +62,13 @@ fire on a busy one, then fired 1m after that same session stopped on a permissio
 
 ## Sync status
 
-Landed and pushed: **kgspin-cto** (`0112e94`) and 5 dev repos — kgspin-admin, kgspin-blueprint,
-kgspin-domain-morphology, kgspin-codegram, kgspin-loom. Committed but unpushed (no upstream on
-their branches, deliberately not created): distributed_object_store_RAG,
-kgspin-object-store-rag.
+Landed and pushed: **acme-cto** (`0112e94`) and 5 dev repos — acme-admin, acme-blueprint,
+acme-domain-morphology, acme-graph, acme-loom. Committed but unpushed (no upstream on
+their branches, deliberately not created): acme-object-store,
+acme-object-store-rag.
 
-**Deferred — 5 repos with live sprint sessions:** kgspin-core, kgspin-interface, kgspin-tuner,
-kgspin-demo-app, kgspin-surreal-adapter. Writing mechanism into a repo mid-sprint puts ~10
+**Deferred — 5 repos with live sprint sessions:** acme-core, acme-interface, acme-tuner,
+acme-demo-app, acme-surreal-adapter. Writing mechanism into a repo mid-sprint puts ~10
 modified files into a dev team's `git status` where a stray `git add -A` sweeps them. Their
 running sessions could not see the new rule anyway. **Ask for these the moment those sprints
 close.**
@@ -79,10 +79,10 @@ personas, doc templates and agentic scripts — not just this change.
 ## Three things for you
 
 1. **Restart sessions** in the synced repos to pick up the corrected mechanism.
-2. **`.review-engine` is `gemini` in distributed_object_store_RAG and kgspin-object-store-rag.**
+2. **`.review-engine` is `gemini` in acme-object-store and acme-object-store-rag.**
    Every other repo is on `kimi`. Not changed — engine choice has a cost implication and is the
    CEO's call, not ours to make silently.
-3. **`kgspin-object-store-rag` carried the CTO-home `CLAUDE.md`** and so never had dev-team
+3. **`acme-object-store-rag` carried the CTO-home `CLAUDE.md`** and so never had dev-team
    governance at all. The sync corrected it. That repo still has no git remote.
 
 ---
@@ -105,7 +105,7 @@ is indistinguishable downstream from a clean one. This was not "reviews fail"; i
 from. It also pointed at `.claude/.review-engine`, a path **nothing reads**; the resolver
 reads `<repo-root>/.review-engine`. `/new-project` wrote the same wrong path.
 
-**It was 10 repos, not the two filed** — plus `lancedb` on the legacy `dual` alias, and six
+**It was 10 repos, not the two filed** — plus one upstream clone on the legacy `dual` alias, and six
 repos carrying a stray `.claude/` copy, one of which disagreed with the real file.
 `PROTOCOL.md` meanwhile told operators to choose from `gemini | claude | dual`: no correct
 answer on the menu.
@@ -132,6 +132,6 @@ answer on the menu.
 
 **Run fleet syncs from the CTO home, not the template.** `--fleet-default` resolves from the
 repo the script lives in. My first pass ran from the template — which is deliberately
-engine-neutral — so two repos were healed to `subagent` instead of kgspin's `kimi`. Corrected.
+engine-neutral — so two repos were healed to `subagent` instead of the fleet's `kimi`. Corrected.
 
 — CTO

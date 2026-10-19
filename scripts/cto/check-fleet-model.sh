@@ -77,6 +77,7 @@ audit() {
                  "$ROOT/scripts" "$ROOT/.claude" 2>/dev/null \
              | grep -v '/check-fleet-model\.sh:' \
              | grep -v '/resolve-devteam-model\.sh:' \
+             | grep -vE '/test-[^/]*\.sh:' \
              | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#')
 
     # A "model" key in a settings file we ship: silent, per-repo, and invisible at
@@ -125,7 +126,7 @@ observed() {
     printf "  %-28s %-10s %-22s %-22s\n" "----" "---" "---------------" "--------------"
     local drift
     drift="$(python3 - "$DAYS" "$EXPECTED" <<'PY'
-import os, glob, json, sys, time
+import re, os, glob, json, sys, time
 days, expected = float(sys.argv[1]), sys.argv[2]
 cutoff = time.time() - days * 86400
 rows, drift = [], 0
@@ -151,7 +152,8 @@ for d in sorted(glob.glob(os.path.expanduser("~/.claude/projects/*"))):
             last = m
     if not first:
         continue
-    repo = os.path.basename(d).replace("-Users-apireno-repos-", "").lstrip("-")
+    # Project dirs are the repo path with "/" -> "-"; strip the home prefix of ANY user, not one name.
+    repo = re.sub(r"^-Users-[^-]+-(repos-)?", "", os.path.basename(d)).lstrip("-")
     age = int((time.time() - os.stat(f).st_mtime) / 3600)
     age = f"{age}h" if age < 48 else f"{age // 24}d"
     flag = "" if expected in (last or "") else "  <-- DRIFT"

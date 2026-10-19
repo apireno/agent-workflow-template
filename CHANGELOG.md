@@ -351,7 +351,7 @@ The durable rule: **a watcher may report what it observed, never who caused it.*
 second is needed and cannot be measured, remove the ambiguity at the source or ask a human.
 RCA: `docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.md`.
 
-## 2026-08-14 — duplicate-native-library detection (kgspin-core BUG-308)
+## 2026-08-14 — duplicate-native-library detection (acme-core BUG-308)
 
 `scripts/agentic/check-native-dupes.sh`, wired into `preflight.sh`. Detects two copies of one
 C++ runtime inside a single Python environment — the condition behind an interpreter-teardown
@@ -373,9 +373,9 @@ four interlinked libraries — one copy, not four), and only runtimes holding pr
 state are reported. Cached and keyed on an environment fingerprint: ~10s cold, 0.8s warm,
 refreshed in the background so a session start never waits for it.
 
-## 2026-08-14 — seven field defects from the kgspin fleet
+## 2026-08-14 — seven field defects from the acme fleet
 
-From `template-gap-report-20260814` (kgspin-cto), filed after a real orchestration session.
+From `template-gap-report-20260814` (acme-cto), filed after a real orchestration session.
 Every item was worked around session-locally and left unpatched upstream, so all seven were
 still live here. Full mapping in `docs/memos/2026-08-14-remediation-seven-defects.md`.
 
@@ -420,7 +420,7 @@ and is never read, a resolver that confidently returns the wrong fleet.
   `/close-window` resolve through it, check liveness against Terminal, and **refuse to guess**
   when a repo has two live windows.
 
-### Field-confirmed 2026-08-14 (kgspin-cto)
+### Field-confirmed 2026-08-14 (acme-cto)
 
 Clipboard send path (864-char paste into a live session, clipboard restored, no leakage),
 tri-state send verification against a live transcript, detached `/vp-review` including a correct
@@ -439,7 +439,7 @@ lands outside the terminal.
 
 ### Item 8 — `sync-cto-home.sh` resolved its SOURCE tree from the caller's cwd
 
-Reported by kgspin-cto while adopting the above. `TEMPLATE="$(git rev-parse --show-toplevel)"`
+Reported by acme-cto while adopting the above. `TEMPLATE="$(git rev-parse --show-toplevel)"`
 answers "which repo is the shell standing in" — but TEMPLATE is the tree we copy *from*. Run
 from the CTO home (which the fleet-sync instructions require), TEMPLATE resolved to TARGET and
 the script refused with "target is the template itself": an error naming the wrong cause. Now
@@ -455,7 +455,7 @@ is not. Verified precise — clean on the fixed tree, one finding when the bug i
 
 - `/peek` carried the same fatal heredoc bug as `/sprint-status`.
 - `/sprint-accept` had a second `!` block using `$ROOT` from a previous block — always empty.
-- Four kgspin dev repos still point `.cto-path` at the public template, so escalations route
+- Four acme dev repos still point `.cto-path` at the public template, so escalations route
   to the wrong home. `push-to-repos.sh` now rewrites `.cto-path` on every sync.
 - `settings.devteam.json.template` wired five hooks; `push-to-repos.sh` installed three.
 

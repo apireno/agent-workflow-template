@@ -113,7 +113,7 @@ write_git_exclude() {
 
   # Never exclude a path the upstream project TRACKS. Our path list is generic
   # ('/.agents/', '/docs/roadmap/' …) and an upstream repo may legitimately own one
-  # of those names — lancedb ships its own tracked /.agents/. Excluding it would not
+  # of those names — some upstream projects ship their own tracked /.agents/. Excluding it would not
   # touch the tracked files, but it WOULD hide any new untracked file upstream adds
   # there, so `git status` would quietly stop telling the truth about their tree.
   local -a safe=() bare
@@ -262,6 +262,20 @@ with open("$TEMPLATE/.claude/settings.devteam.json.template") as f:
 # Strip _comment* lines before JSON parsing
 clean = '\n'.join(l for l in text.split('\n') if '"_comment' not in l)
 data = json.loads(clean)
+# PROJECT OVERLAY (2026-10-19). The template is tool-agnostic and names no project's MCP servers or
+# tools; a project's own permission grants live in <cto-home>/.cto/settings-overlay.json and are
+# merged here (permissions.allow / deny / ask: union, order kept). Without this, removing a
+# project's grants from the public template would make every lane prompt on every call.
+import os
+ov_path = "$TEMPLATE/.cto/settings-overlay.json"
+if os.path.isfile(ov_path):
+    ov = json.load(open(ov_path))
+    for k in ("allow", "deny", "ask"):
+        extra = (ov.get("permissions") or {}).get(k) or []
+        if extra:
+            cur = data.setdefault("permissions", {}).setdefault(k, [])
+            cur.extend(x for x in extra if x not in cur)
+    sys.stderr.write("      merged project overlay %s\n" % ov_path)
 print(json.dumps(data, indent=2))
 PYEOF
   echo "      wrote $DEST/.claude/settings.json"
@@ -347,7 +361,7 @@ PYEOF
 
   # 3c. Point the repo back at THIS CTO home. escalate-to-cto.sh routes by this file, and
   # the skills' CTO-home anchor uses it to recover when a shell has cd'd into a dev repo.
-  # It was written once at bootstrap and never refreshed, so four kgspin repos still pointed
+  # It was written once at bootstrap and never refreshed, so four acme repos still pointed
   # at the public template — escalations went to the wrong home and /sprint-status resolved
   # a placeholder registry. Rewrite it on every sync; it is one line and cheap to be right.
   if [ "$(cat "$DEST/.cto-path" 2>/dev/null)" != "$TEMPLATE" ]; then

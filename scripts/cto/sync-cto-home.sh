@@ -30,7 +30,7 @@ APPLY=0; [ "${2:-}" = "--apply" ] && APPLY=1
 # the caller's cwd. `git rev-parse --show-toplevel` resolved the cwd repo, and the documented
 # way to run a fleet sync is with cwd IN the CTO home; TEMPLATE then equalled TARGET and the
 # script refused with "target is the template itself", an error naming the wrong cause
-# (kgspin-cto, 2026-08-14, twice). Same anchoring class as the skills' CTO-home resolution:
+# (acme-cto, 2026-08-14, twice). Same anchoring class as the skills' CTO-home resolution:
 # a path that means "where the mechanism lives" cannot be inferred from where the operator
 # happens to stand. Guarded by scripts/cto/lint-skills.sh CHECK D.
 TEMPLATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -86,7 +86,7 @@ for tdir in "$TEMPLATE"/docs/*/_templates; do
 done
 
 echo "== settings templates + CLAUDE.devteam.md =="
-for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template .claude/derived-artifacts.yaml.example .cto/projects.yaml.example .cto/devteam-model.example .cto/model-budget.yaml.example CLAUDE.devteam.md; do
+for f in .claude/settings.permissive.json .claude/settings.devteam.json.template .claude/settings.cto.json.template .claude/derived-artifacts.yaml.example .cto/projects.yaml.example .cto/devteam-model.example .cto/model-budget.yaml.example .cto/settings-overlay.json.example CLAUDE.devteam.md; do
   [ -f "$TEMPLATE/$f" ] || continue
   sync_one "$TEMPLATE/$f" "$TARGET/$f"
 done

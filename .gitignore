@@ -171,3 +171,4 @@ docs/architecture/decisions/cto-*.md
 **/.qa-lanes
 .cto/join-ledger.md
 .cto/model-budget.yaml
+.cto/settings-overlay.json
