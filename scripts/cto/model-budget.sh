@@ -185,7 +185,8 @@ for F in fams:
 for key,(ts,pct) in cfg["cal"].items():
     if not RESET or not cal_t.get(key) or pct<=0: continue
     if cal_t[key] < RESET:
-        warns.append(f"CALIBRATION  '{key}' was recorded {ts}, before the last reset — re-run /usage and update .cto/model-budget.yaml"); continue
+        # /usage is an interactive Claude Code command; no script can read it, so say exactly how.
+        warns.append(f"CALIBRATION  '{key}' was recorded {ts}, before the last reset ({RESET.strftime('%a %m-%d %H:%M')}). Refresh: type /usage in any Claude Code window, read the weekly percent for '{key}', then set the line under calibration: in .cto/model-budget.yaml to   {key}: {now.strftime('%Y-%m-%dT%H:%M')} <percent>"); continue
     allowance=cal_w[key]/(pct/100.0)
     if allowance<=0:
         warns.append(f"CALIBRATION  '{key}': no {key} tokens seen between the reset and {ts}, so the allowance cannot be derived — recalibrate after some use"); continue

@@ -6,6 +6,19 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — a skill's parse error stops it; it never widens it
+
+`/sprint-fanout … --repos a,b --sprint 07` printed "Unknown flag", dropped the repo list, and drafted
+plans for all 14 registered repos. Every skill documented `--repos a,b` but parsed only `--repos=a,b`,
+and every one warned and carried on. `/handoff` had the same shape — there, 14 Terminal tabs.
+
+- `handoff`, `sprint-fanout`, `vp-review`, `new-project`: value flags take `--x v` or `--x=v`.
+- All six flag-taking skills (plus `close-window`, `qa-ux`): an unknown flag, a stray extra word, or
+  a flag missing its value exits 2 with the reason. Nothing is guessed.
+- `scripts/cto/test-skill-flags.sh`: runs each skill's own parse block in bash and zsh, 24 assertions.
+- `model-budget.sh`: a stale calibration now says exactly how to refresh it (`/usage` is interactive;
+  no script can read it).
+
 ## 2026-10-19 — `agy` picks its model at call time (the pinned one was retired)
 
 `agy` auto-updated to 1.4.2 and Google retired `gemini-3.1-pro-high` (Gemini 4 Argon replaced it).

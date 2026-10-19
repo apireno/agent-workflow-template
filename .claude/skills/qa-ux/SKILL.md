@@ -46,7 +46,7 @@ for tok in $ARGS; do
     --url)        EXPECT=url ;;
     --engine)     EXPECT=engine ;;
     --handover)   EXPECT=handover ;;
-    --*)          echo "Unknown flag: $tok" >&2 ;;
+    --*)          echo "ERROR: unknown flag '$tok' — refusing rather than guessing. Usage: see argument-hint." >&2; exit 2 ;;
     *)            [ -z "$SPRINT_DIR" ] && SPRINT_DIR="$tok" ;;
   esac
 done

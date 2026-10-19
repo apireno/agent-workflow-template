@@ -136,15 +136,26 @@ REPOS_FILTER=""
 SPRINT=""
 DRY_RUN=0
 
+EXPECT=""
 for tok in $ARGS; do
+  # FLAG RULE (2026-10-19): value flags take `--x v` OR `--x=v`; an unknown flag or a stray
+  # extra word REFUSES. `--repos a,b` used to print "Unknown flag", drop the list, and fan out
+  # to every registered repo — a parse error must stop the skill, never widen it.
+  if [ -n "$EXPECT" ]; then
+    case "$EXPECT" in repos) REPOS_FILTER="$tok" ;; sprint) SPRINT="$tok" ;; esac
+    EXPECT=""; continue
+  fi
   case "$tok" in
     --repos=*)   REPOS_FILTER="${tok#--repos=}" ;;
+    --repos)     EXPECT=repos ;;
     --sprint=*)  SPRINT="${tok#--sprint=}" ;;
+    --sprint)    EXPECT=sprint ;;
     --dry-run)   DRY_RUN=1 ;;
-    --*)         echo "Unknown flag: $tok" >&2 ;;
-    *)           [ -z "$PRD_PATH" ] && PRD_PATH="$tok" ;;
+    --*)         echo "ERROR: unknown flag '$tok' — refusing rather than guessing. Usage: see argument-hint." >&2; exit 2 ;;
+    *)           if [ -z "$PRD_PATH" ]; then PRD_PATH="$tok"; else echo "ERROR: unexpected extra argument '$tok' (path already '$PRD_PATH') — refusing." >&2; exit 2; fi ;;
   esac
 done
+[ -n "$EXPECT" ] && { echo "ERROR: --$EXPECT needs a value — refusing." >&2; exit 2; }
 
 if [ -z "$PRD_PATH" ] || [ ! -f "$PRD_PATH" ]; then
   echo "ERROR: provide a path to a PRD or goal file as the first argument"

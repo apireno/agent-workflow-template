@@ -135,16 +135,30 @@ REPOS_FILTER=""
 DRY_RUN=0
 CLI_MODEL=0
 
+EXPECT=""
 for tok in $ARGS; do
+  # FLAG RULE (2026-10-19): value flags take `--x v` OR `--x=v`; an unknown flag or a stray
+  # extra word REFUSES. `--repos a,b` used to print "Unknown flag", drop the list, and fan out
+  # to every registered repo — a parse error must stop the skill, never widen it.
+  if [ -n "$EXPECT" ]; then
+    case "$EXPECT" in
+      repos) REPOS_FILTER="$tok" ;;
+      model) DEVTEAM_MODEL="$tok"; export DEVTEAM_MODEL; CLI_MODEL=1 ;;
+    esac
+    EXPECT=""; continue
+  fi
   case "$tok" in
     --repos=*)   REPOS_FILTER="${tok#--repos=}" ;;
+    --repos)     EXPECT=repos ;;
     --model=*)   DEVTEAM_MODEL="${tok#--model=}"; export DEVTEAM_MODEL; CLI_MODEL=1 ;;
+    --model)     EXPECT=model ;;
     --dry-run)   DRY_RUN=1 ;;
-    --*)         echo "Unknown flag: $tok" >&2 ;;
-    *)           [ -z "$SPRINT" ] && SPRINT="$tok" ;;
+    --*)         echo "ERROR: unknown flag '$tok' — refusing rather than guessing. Usage: see argument-hint." >&2; exit 2 ;;
+    *)           if [ -z "$SPRINT" ]; then SPRINT="$tok"; else echo "ERROR: unexpected extra argument '$tok' (sprint already '$SPRINT') — refusing." >&2; exit 2; fi ;;
   esac
 done
 
+[ -n "$EXPECT" ] && { echo "ERROR: --$EXPECT needs a value — refusing." >&2; exit 2; }
 if [ -z "$SPRINT" ]; then
   echo "Usage: /handoff <sprint-XX> [--repos r1,r2] [--model=<alias|full|inherit>] [--dry-run]"
   exit 1

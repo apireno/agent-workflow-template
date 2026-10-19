@@ -20,15 +20,24 @@ set -uo pipefail
 
 ARGS="$ARGUMENTS"
 PROJECT=""; REPOS=""; ADOPT=0; ORG="<your-gh-org-or-user>"
+# FLAG RULE (2026-10-19): `--x v` or `--x=v`; unknown flag or stray word refuses (see /handoff).
+EXPECT=""
 for tok in $ARGS; do
+  if [ -n "$EXPECT" ]; then
+    case "$EXPECT" in repos) REPOS="$tok" ;; org) ORG="$tok" ;; esac
+    EXPECT=""; continue
+  fi
   case "$tok" in
     --repos=*) REPOS="${tok#--repos=}" ;;
+    --repos)   EXPECT=repos ;;
     --org=*)   ORG="${tok#--org=}" ;;
+    --org)     EXPECT=org ;;
     --adopt)   ADOPT=1 ;;
-    --*)       echo "Unknown flag: $tok" >&2 ;;
-    *)         [ -z "$PROJECT" ] && PROJECT="$tok" ;;
+    --*)       echo "ERROR: unknown flag '$tok' — refusing rather than guessing. Usage: see argument-hint." >&2; exit 2 ;;
+    *)         if [ -z "$PROJECT" ]; then PROJECT="$tok"; else echo "ERROR: unexpected extra argument '$tok' (project already '$PROJECT') — refusing." >&2; exit 2; fi ;;
   esac
 done
+[ -n "$EXPECT" ] && { echo "ERROR: --$EXPECT needs a value — refusing." >&2; exit 2; }
 
 if [ -z "$PROJECT" ]; then
   echo "ERROR: usage  /new-project <project> [--repos=a,b] [--adopt] [--org=<gh-org>]"

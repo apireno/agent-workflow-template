@@ -122,14 +122,23 @@ ART=""
 VPS="vp-prod,vp-eng"  # default — vp-prod + vp-eng always relevant; specialty VPs opt-in via --vps
 ENGINE_FLAG=""
 
+# FLAG RULE (2026-10-19): `--x v` or `--x=v`; unknown flag or stray word refuses (see /handoff).
+EXPECT=""
 for tok in $ARGS; do
+  if [ -n "$EXPECT" ]; then
+    case "$EXPECT" in vps) VPS="$tok" ;; engine) ENGINE_FLAG="$tok" ;; esac
+    EXPECT=""; continue
+  fi
   case "$tok" in
     --vps=*)    VPS="${tok#--vps=}" ;;
+    --vps)      EXPECT=vps ;;
     --engine=*) ENGINE_FLAG="${tok#--engine=}" ;;
-    --*)        echo "Unknown flag: $tok" >&2 ;;
-    *)          [ -z "$ART" ] && ART="$tok" ;;
+    --engine)   EXPECT=engine ;;
+    --*)        echo "ERROR: unknown flag '$tok' — refusing rather than guessing. Usage: see argument-hint." >&2; exit 2 ;;
+    *)          if [ -z "$ART" ]; then ART="$tok"; else echo "ERROR: unexpected extra argument '$tok' (artifact already '$ART') — refusing." >&2; exit 2; fi ;;
   esac
 done
+[ -n "$EXPECT" ] && { echo "ERROR: --$EXPECT needs a value — refusing." >&2; exit 2; }
 
 if [ -z "$ART" ] || [ ! -f "$ART" ]; then
   echo "ERROR: artifact not found at $ART"

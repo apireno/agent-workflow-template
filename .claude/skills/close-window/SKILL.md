@@ -122,8 +122,8 @@ FORCE=0
 for tok in $ARGS; do
   case "$tok" in
     --force) FORCE=1 ;;
-    --*)     echo "Unknown flag: $tok" >&2 ;;
-    *)       [ -z "$REPO_NAME" ] && REPO_NAME="$tok" ;;
+    --*)     echo "ERROR: unknown flag '$tok' — refusing rather than guessing. Usage: see argument-hint." >&2; exit 2 ;;
+    *)       if [ -z "$REPO_NAME" ]; then REPO_NAME="$tok"; else echo "ERROR: unexpected extra argument '$tok' (repo already '$REPO_NAME') — refusing." >&2; exit 2; fi ;;
   esac
 done
 
