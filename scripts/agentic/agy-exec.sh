@@ -44,17 +44,54 @@
 #     refused unless AGY_ALLOW_NON_GEMINI=1.
 #   - EMPTY ANSWER = FAILURE (exit 3). An empty verdict must never read as a review that ran.
 #
-# ENV: AGY_MODEL (default gemini-3.1-pro-high; `agy models` lists them) · AGY_TIMEOUT seconds
+# MODEL — resolved at CALL TIME from `agy models`, never hard-coded (2026-10-19). agy auto-updates
+# and Google retires model ids under it: the first default here, gemini-3.1-pro-high, vanished
+# within a week and every lane review failed until someone edited this file. Now:
+#   AGY_MODEL unset  -> the best Gemini offered right now: non-Flash before Flash, then -high >
+#                       -medium > -low, then the highest version number. Printed on stderr.
+#   AGY_MODEL=a,b,c  -> the first of these that is offered; none offered -> exit 2 listing what IS.
+#   The list is cached for an hour ($TMPDIR/agy-models.cache) so a review fan-out costs one lookup.
+#
+# ENV: AGY_MODEL (unset = auto; or a comma preference list) · AGY_TIMEOUT seconds
 #      (default 600) · AGY_BIN (default agy) · AGY_ALLOW_NON_GEMINI=1
 # Exit: 0 ok · 2 usage/config · 3 empty or failed completion · agy's own code otherwise
 set -uo pipefail
 
 AGY_BIN="${AGY_BIN:-agy}"
-MODEL="${AGY_MODEL:-gemini-3.1-pro-high}"
+MODEL_PREF="${AGY_MODEL:-}"
 TIMEOUT_S="${AGY_TIMEOUT:-600}"
 PROMPT_MAX_BYTES=900000
 
 command -v "$AGY_BIN" >/dev/null 2>&1 || { echo "agy-exec: '$AGY_BIN' not on PATH (install Antigravity's CLI, or set AGY_BIN)." >&2; exit 2; }
+
+# ── resolve the model from what agy offers NOW ──────────────────────────────────────────────
+CACHE="${TMPDIR:-/tmp}/agy-models.cache"
+if [ ! -s "$CACHE" ] || [ -n "$(find "$CACHE" -mmin +60 2>/dev/null)" ] || [ "${AGY_MODELS_NOCACHE:-0}" = "1" ]; then
+    "$AGY_BIN" models 2>/dev/null | awk '/^[a-z0-9][a-z0-9.-]*[ \t]/{print $1}' > "$CACHE.tmp" && [ -s "$CACHE.tmp" ] && mv "$CACHE.tmp" "$CACHE"
+    rm -f "$CACHE.tmp"
+fi
+[ -s "$CACHE" ] || { echo "agy-exec: could not list models (\`$AGY_BIN models\` returned nothing — signed in?)." >&2; exit 2; }
+MODEL="$(python3 - "$CACHE" "$MODEL_PREF" <<'PYM'
+import re, sys
+offered=[l.strip() for l in open(sys.argv[1]) if l.strip()]
+pref=[m.strip() for m in sys.argv[2].split(",") if m.strip()]
+if pref:
+    hit=next((m for m in pref if m in offered), "")
+    print(hit); sys.exit(0)
+def key(m):
+    eff={"high":3,"medium":2,"low":1}.get(m.rsplit("-",1)[-1],0)
+    ver=tuple(int(x) for x in re.findall(r"\d+", m.split("-")[1] if len(m.split("-"))>1 else "0")) or (0,)
+    return ("flash" not in m, eff, ver)
+gem=sorted((m for m in offered if m.startswith("gemini-")), key=key, reverse=True)
+print(gem[0] if gem else "")
+PYM
+)"
+if [ -z "$MODEL" ]; then
+    echo "agy-exec: no usable model. Asked for: ${MODEL_PREF:-auto (best Gemini)}. agy offers now:" >&2
+    grep '^gemini-' "$CACHE" | sed 's/^/  /' >&2
+    exit 2
+fi
+[ -z "$MODEL_PREF" ] && echo "agy-exec: auto-selected $MODEL from \`agy models\`" >&2
 case "$MODEL" in
     gemini-*) : ;;
     *) [ "${AGY_ALLOW_NON_GEMINI:-0}" = "1" ] || { echo "agy-exec: model '$MODEL' is not a Gemini model. This engine is the Gemini cross-family reviewer; set AGY_ALLOW_NON_GEMINI=1 to override on purpose." >&2; exit 2; } ;;

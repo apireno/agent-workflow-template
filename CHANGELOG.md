@@ -6,6 +6,15 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-19 — `agy` picks its model at call time (the pinned one was retired)
+
+`agy` auto-updated to 1.4.2 and Google retired `gemini-3.1-pro-high` (Gemini 4 Argon replaced it).
+`agy-exec.sh` had that id hard-coded, so every lane review failed until someone edited the file.
+Now the model is resolved from `agy models` on each call (cached an hour): unset `AGY_MODEL` picks
+the best Gemini offered (non-Flash, `-high`, newest); `AGY_MODEL=a,b,c` takes the first offered;
+nothing offered → exit 2 listing what is. `test-agy-exec.sh`: 20 assertions. Live: auto-selected
+`gemini-4-argon-high` on agy 1.4.2.
+
 ## 2026-10-12 — `agy` empty completions: root cause and fix (RCA `docs/rca/2026-10-12-agy-empty-completions.md`)
 
 ~28% of `agy` reviews since 10-08 came back empty ("jetski: no output produced — a tool required the

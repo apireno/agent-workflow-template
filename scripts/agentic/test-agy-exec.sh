@@ -18,6 +18,11 @@ has(){ printf '%s' "$3" | grep -qE -- "$2" && ok "$1" || fail "$1 (missing /$2/)
 W="$(mktemp -d "${TMPDIR:-/tmp}/agy-test.XXXXXX")"; trap 'rm -rf "$W"' EXIT
 cat > "$W/agy" <<STUB
 #!/usr/bin/env bash
+if [ "\$1" = "models" ]; then
+  echo "Fetching available models..."
+  printf '%s\t%s\n' gemini-4-argon-medium x gemini-4-argon-high x gemini-4-argon-low x gemini-3.8-flash-high x claude-opus-5-5-high x gpt-oss-120b-medium x
+  exit 0
+fi
 printf '%s\n' "\$@" > "$W/args"; pwd > "$W/cwd"; ls -A > "$W/cwd-listing"
 for a in "\$@"; do case "\$a" in -p=*) printf '%s' "\${a#-p=}" > "$W/prompt";; esac; done
 case "\${STUB_MODE:-ok}" in
@@ -28,6 +33,7 @@ esac
 exit 0
 STUB
 chmod +x "$W/agy"
+export TMPDIR="$W" AGY_MODELS_NOCACHE=1
 run(){ AGY_BIN="$W/agy" STUB_MODE="$1" bash "$X" 2>"$W/stderr" <<<"Read docs/personas/vp-engineering.md and review /abs/path/dev-report.md"; }
 
 echo "== 1-2. prompt + flags =="
@@ -51,6 +57,14 @@ echo "== 5. normal answer =="
 OUT=$(run ok); RC=$?
 [ $RC -eq 0 ] && ok "exit 0" || fail "exit $RC"
 has "verdict passed through" 'MAJOR: something' "$OUT"
+echo "== 7. model resolved from agy's live list, never hard-coded =="
+OUT=$(run ok); grep -A1 -x -- '--model' "$W/args" | tail -1 | grep -qx 'gemini-4-argon-high' && ok "auto picks best Gemini: non-Flash, -high, newest (gemini-4-argon-high)" || fail "auto pick was $(grep -A1 -x -- '--model' "$W/args" | tail -1)"
+has "auto pick announced on stderr" 'auto-selected gemini-4-argon-high' "$(cat "$W/stderr")"
+OUT=$(AGY_MODEL="gemini-3.1-pro-high,gemini-3.8-flash-high" run ok); grep -A1 -x -- '--model' "$W/args" | tail -1 | grep -qx 'gemini-3.8-flash-high' && ok "preference list: first OFFERED model wins (retired id skipped)" || fail "preference list ignored"
+rm -f "$W/args"; OUT=$(AGY_MODEL="gemini-3.1-pro-high" run ok); RC=$?
+[ $RC -eq 2 ] && [ ! -f "$W/args" ] && ok "retired pin refused before any call (exit 2)" || fail "retired pin: exit $RC"
+has "refusal lists what IS offered" 'gemini-4-argon-high' "$(cat "$W/stderr")"
+
 echo "== 6. refusals before any call =="
 rm -f "$W/args"; AGY_BIN="$W/agy" AGY_MODEL=claude-opus-5-5-high bash "$X" <<<"x" 2>/dev/null; RC=$?
 [ $RC -eq 2 ] && [ ! -f "$W/args" ] && ok "non-Gemini model refused, agy not called" || fail "non-Gemini model: exit $RC"
