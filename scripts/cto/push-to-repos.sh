@@ -336,7 +336,14 @@ PYEOF
         echo "      removing unread $DEST/.claude/.review-engine (=$(tr -d '[:space:]' < "$DEST/.claude/.review-engine"))"
         rm -f "$DEST/.claude/.review-engine"; } ;;
   esac
-  echo "      wrote $DEST/scripts/agentic + docs/personas + docs/sprints/_templates ; .review-engine=$(cat "$DEST/.review-engine" 2>/dev/null)"
+  # Review-engine FALLBACK: seeded like the engine, from the CTO home's own choice, so a repo that
+  # joins the fleet later is not silently the only one without it. A repo's own value is kept;
+  # a project with no fallback configured seeds nothing (the template default is none).
+  if [ -f "$TEMPLATE/.review-engine-fallback" ] && [ ! -f "$DEST/.review-engine-fallback" ]; then
+    cp "$TEMPLATE/.review-engine-fallback" "$DEST/.review-engine-fallback"
+    echo "      .review-engine-fallback unset -> seeded project fallback '$(tr -d '[:space:]' < "$DEST/.review-engine-fallback")'"
+  fi
+  echo "      wrote $DEST/scripts/agentic + docs/personas + docs/sprints/_templates ; .review-engine=$(cat "$DEST/.review-engine" 2>/dev/null)$( [ -f "$DEST/.review-engine-fallback" ] && echo " fallback=$(tr -d '[:space:]' < "$DEST/.review-engine-fallback")")"
 
   # 3c. Point the repo back at THIS CTO home. escalate-to-cto.sh routes by this file, and
   # the skills' CTO-home anchor uses it to recover when a shell has cd'd into a dev repo.

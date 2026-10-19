@@ -150,6 +150,8 @@ if [ "$ADOPT" -eq 0 ] && [ -n "$REPOS" ]; then
     # home + every dev repo. Written through that script so the value is validated and
     # lands at the repo ROOT (resolve-review-engine.sh never reads a .claude/ copy).
     bash "$TPL/scripts/agentic/set-review-engine.sh" "$RD" "$(bash "$TPL/scripts/agentic/set-review-engine.sh" --fleet-default)" >/dev/null 2>&1
+    # The project's review-engine FALLBACK, if its CTO home has one (none by default).
+    [ -f "$TPL/.review-engine-fallback" ] && cp "$TPL/.review-engine-fallback" "$RD/.review-engine-fallback"
     echo "  scaffolded $RD"
     DEV_SCAFFOLD="$DEV_SCAFFOLD $r"
   done
