@@ -11,8 +11,8 @@
 #
 # VERIFIED 2026-10-07 against agy 1.3.1:
 #   - `-p` takes the prompt as its VALUE (`-p='…'`); it does NOT read stdin, and a bare `-p`
-#     is an error. So the prompt is passed as an argument (macOS ARG_MAX is 1 MiB; refused
-#     above PROMPT_MAX_BYTES with a clear message rather than an opaque exec failure).
+#     is an error. So the prompt is passed as an argument (macOS ARG_MAX is 1 MiB, but see the
+#     TRUNCATION guard below: agy itself keeps far less than that).
 #   - `--model gemini-3.1-pro-low -p='Reply with exactly OK'` -> "OK" in ~14s, nothing written
 #     to the working directory. (That smoke test could not have caught the RCA below: a prompt
 #     that invites no tool never calls one.)
@@ -43,6 +43,13 @@
 #     on Claude is the shared-method bias this engine exists to avoid, so a non-gemini model is
 #     refused unless AGY_ALLOW_NON_GEMINI=1.
 #   - EMPTY ANSWER = FAILURE (exit 3). An empty verdict must never read as a review that ran.
+#   - TRUNCATION (kgspin-tuner BUG-717, 2026-10-20). agy delivers only the first 191,392 bytes of
+#     a prompt to the model and drops the rest SILENTLY (rc 0, status SUCCESS), whether the prompt
+#     goes in as `-p=` or on stdin. A review over that size is a verdict on a truncated artifact
+#     that reads as a full one. So the whole prompt agy would receive (preamble + stdin) is
+#     measured BEFORE agy is touched, and anything over AGY_PROMPT_MAX_BYTES (95 % of the probed
+#     ceiling) is refused, exit 2, nothing on stdout. Remedies: shorten the artifact, review it
+#     on kimi (REVIEW_ENGINE=kimi / --engine kimi), or split it.
 #
 # MODEL — resolved at CALL TIME from `agy models`, never hard-coded (2026-10-19). agy auto-updates
 # and Google retires model ids under it: the first default here, gemini-3.1-pro-high, vanished
@@ -60,9 +67,36 @@ set -uo pipefail
 AGY_BIN="${AGY_BIN:-agy}"
 MODEL_PREF="${AGY_MODEL:-}"
 TIMEOUT_S="${AGY_TIMEOUT:-600}"
-PROMPT_MAX_BYTES=900000
+# agy's measured silent-truncation ceiling (kgspin-tuner BUG-717 probe, 2026-10-20: the model saw
+# exactly the first 191,392 bytes of every larger prompt, via -p= and via stdin alike). The refusal
+# limit is 95 % of it, so the guard never sits on the edge of a ceiling that may move with agy.
+AGY_TRUNCATION_CEILING_BYTES=191392
+AGY_PROMPT_MAX_BYTES=181822
 
 command -v "$AGY_BIN" >/dev/null 2>&1 || { echo "agy-exec: '$AGY_BIN' not on PATH (install Antigravity's CLI, or set AGY_BIN)." >&2; exit 2; }
+
+# ── read the prompt and refuse oversize BEFORE agy is touched (BUG-717) ──────────────────────
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/agy-exec.XXXXXX")" || exit 2
+trap 'rm -rf "$WORK"' EXIT
+cat > "$WORK/.prompt"
+BYTES=$(wc -c < "$WORK/.prompt" | tr -d ' ')
+[ "$BYTES" -gt 0 ] || { echo "agy-exec: empty prompt on stdin." >&2; exit 2; }
+NO_TOOLS='IMPORTANT: Everything you need is in this message. Do not call any tools, do not run commands, do not read files. Reply with the review as plain markdown text only.
+
+'
+SENT_BYTES=$(( BYTES + $(printf '%s' "$NO_TOOLS" | wc -c | tr -d ' ') ))
+if [ "$SENT_BYTES" -gt "$AGY_PROMPT_MAX_BYTES" ]; then
+    {
+        echo "agy-exec: PROMPT-TOO-LARGE — refused, agy not called, no review written."
+        echo "  prompt bytes: $SENT_BYTES (stdin $BYTES + no-tools preamble); limit: $AGY_PROMPT_MAX_BYTES (95 % of $AGY_TRUNCATION_CEILING_BYTES)."
+        echo "  agy truncates silently above 191,392 bytes (kgspin-tuner BUG-717, 2026-10-20): the model would"
+        echo "  judge only the first part of the artifact and the verdict would read as a full review."
+        echo "  Remedies: shorten the artifact; route the review to kimi (--engine kimi, or REVIEW_ENGINE=kimi);"
+        echo "  or split the artifact and review the parts."
+    } >&2
+    exit 2
+fi
+PROMPT="${NO_TOOLS}$(cat "$WORK/.prompt")"; rm -f "$WORK/.prompt"
 
 # ── resolve the model from what agy offers NOW ──────────────────────────────────────────────
 CACHE="${TMPDIR:-/tmp}/agy-models.cache"
@@ -97,16 +131,6 @@ case "$MODEL" in
     *) [ "${AGY_ALLOW_NON_GEMINI:-0}" = "1" ] || { echo "agy-exec: model '$MODEL' is not a Gemini model. This engine is the Gemini cross-family reviewer; set AGY_ALLOW_NON_GEMINI=1 to override on purpose." >&2; exit 2; } ;;
 esac
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/agy-exec.XXXXXX")" || exit 2
-trap 'rm -rf "$WORK"' EXIT
-cat > "$WORK/.prompt"
-BYTES=$(wc -c < "$WORK/.prompt" | tr -d ' ')
-[ "$BYTES" -gt 0 ] || { echo "agy-exec: empty prompt on stdin." >&2; exit 2; }
-[ "$BYTES" -le "$PROMPT_MAX_BYTES" ] || { echo "agy-exec: prompt is $BYTES bytes; agy takes it as an argument and the limit here is $PROMPT_MAX_BYTES. Trim the artifact." >&2; exit 2; }
-NO_TOOLS='IMPORTANT: Everything you need is in this message. Do not call any tools, do not run commands, do not read files. Reply with the review as plain markdown text only.
-
-'
-PROMPT="${NO_TOOLS}$(cat "$WORK/.prompt")"; rm -f "$WORK/.prompt"
 mkdir -p "$WORK/cwd"
 
 START=$(date +%s)

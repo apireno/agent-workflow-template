@@ -9,6 +9,9 @@
 #   4 an empty answer without that text still exits 3 (empty completion)
 #   5 a normal answer passes through, exit 0
 #   6 a non-Gemini model and an oversize prompt are refused before any call
+#   8 BUG-717 (2026-10-20): agy silently truncates prompts above 191,392 bytes, so a 200 KB prompt is
+#     refused (exit 2, PROMPT-TOO-LARGE, bytes + limit + remedies on stderr, nothing on stdout) with
+#     agy never invoked — not even `agy models`; a prompt just under the limit still goes through
 # Exit: 0 all pass · 1 a guard regressed
 set -uo pipefail
 T="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"; X="$T/scripts/agentic/agy-exec.sh"
@@ -18,6 +21,7 @@ has(){ printf '%s' "$3" | grep -qE -- "$2" && ok "$1" || fail "$1 (missing /$2/)
 W="$(mktemp -d "${TMPDIR:-/tmp}/agy-test.XXXXXX")"; trap 'rm -rf "$W"' EXIT
 cat > "$W/agy" <<STUB
 #!/usr/bin/env bash
+echo "\${1:-}" >> "$W/calls"
 if [ "\$1" = "models" ]; then
   echo "Fetching available models..."
   printf '%s\t%s\n' gemini-4-argon-medium x gemini-4-argon-high x gemini-4-argon-low x gemini-3.8-flash-high x claude-opus-5-5-high x gpt-oss-120b-medium x
@@ -70,4 +74,17 @@ rm -f "$W/args"; AGY_BIN="$W/agy" AGY_MODEL=claude-opus-5-5-high bash "$X" <<<"x
 [ $RC -eq 2 ] && [ ! -f "$W/args" ] && ok "non-Gemini model refused, agy not called" || fail "non-Gemini model: exit $RC"
 head -c 950000 /dev/zero | tr '\0' 'a' | AGY_BIN="$W/agy" bash "$X" 2>/dev/null; RC=$?
 [ $RC -eq 2 ] && [ ! -f "$W/args" ] && ok "oversize prompt refused, agy not called" || fail "oversize: exit $RC"
+
+echo "== 8. BUG-717 silent-truncation guard =="
+rm -f "$W/args" "$W/calls"; OUT=$(head -c 200000 /dev/zero | tr '\0' 'a' | AGY_BIN="$W/agy" bash "$X" 2>"$W/stderr"); RC=$?
+[ $RC -eq 2 ] && ok "200 KB prompt refused (exit 2)" || fail "200 KB: exit $RC"
+[ ! -f "$W/calls" ] && ok "agy never invoked (not even \`agy models\`)" || fail "agy was called: $(cat "$W/calls")"
+[ -z "$OUT" ] && ok "nothing on stdout (no verdict-shaped output)" || fail "stdout not empty"
+E="$(cat "$W/stderr")"
+has "names PROMPT-TOO-LARGE" 'PROMPT-TOO-LARGE' "$E"
+has "prints measured bytes and the limit" 'prompt bytes: 200[0-9]{3} .*limit: 181822' "$E"
+has "cites the ceiling and BUG-717" 'agy truncates silently above 191,392 bytes \(kgspin-tuner BUG-717, 2026-10-20\)' "$E"
+has "names the remedies" 'shorten the artifact.*kimi' "$(printf '%s' "$E" | tr '\n' ' ')"
+rm -f "$W/args"; OUT=$(head -c 181000 /dev/zero | tr '\0' 'a' | AGY_BIN="$W/agy" STUB_MODE=ok bash "$X" 2>/dev/null); RC=$?
+[ $RC -eq 0 ] && [ -f "$W/args" ] && ok "181,000-byte prompt (under the limit) still reaches agy" || fail "under-limit prompt: exit $RC"
 echo ""; echo "agy-exec tests: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

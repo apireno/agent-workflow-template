@@ -553,7 +553,7 @@ if [ ! -s "$OUT_TMP" ]; then
     FALLBACK="$( { [ -x "$RESOLVER" ] && "$RESOLVER" --fallback 2>/dev/null; } || true )"
     if [ -n "$FALLBACK" ] && [ "$FALLBACK" != "$ENGINE" ]; then
         _ERRLOG="${OUTPUT_FILE}.${ENGINE%%-*}-stderr.log"
-        REASON="$( { grep -hE 'TOOL-DENIED|no usable model|not on PATH|empty completion|requires|ERROR|Error' "$_ERRLOG" 2>/dev/null | tail -1 | cut -c1-160; } || true )"
+        REASON="$( { grep -hE 'TOOL-DENIED|PROMPT-TOO-LARGE|no usable model|not on PATH|empty completion|requires|ERROR|Error' "$_ERRLOG" 2>/dev/null | tail -1 | cut -c1-160; } || true )"
         if [ -z "$REASON" ] && ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1 && [ "$ENGINE" = agy ]; then REASON="agy CLI not installed"; fi
         REASON="${REASON:-no review after $VP_REVIEW_MAX_ATTEMPTS attempts}"
         echo "[vp-review] WARNING: engine '$ENGINE' produced no review ($REASON)." >&2
