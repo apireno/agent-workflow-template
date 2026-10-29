@@ -63,7 +63,10 @@ for vp in $VPS; do
     rm -f "$OUT"
     # `trap "" TERM HUP INT` then exec: SIG_IGN survives exec, so the whole review subtree is
     # immune to the group kill that ends the caller's shell.
-    nohup bash -c '
+    # AGY_PIDFILE: agy-exec.sh records agy's process-group id here, so vp-review-wait.sh can reap a
+    # stale review. The subtree below ignores TERM/HUP/INT (it must outlive the skill shell), so
+    # without a recorded target a hung engine is unkillable short of `kill -9` by hand.
+    AGY_PIDFILE="$OUTDIR/${vp}.agy.pid" nohup bash -c '
         trap "" TERM HUP INT
         _vp="$1"; _art="$2"; _out="$3"; _log="$4"; _st="$5"; _sh="$6"; _eng="$7"
         if REVIEW_ENGINE="$_eng" "$_sh" "$_vp" "$_art" "$_out" > "$_log" 2>&1; then

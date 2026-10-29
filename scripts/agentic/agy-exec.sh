@@ -59,9 +59,12 @@
 #   AGY_MODEL=a,b,c  -> the first of these that is offered; none offered -> exit 2 listing what IS.
 #   The list is cached for an hour ($TMPDIR/agy-models.cache) so a review fan-out costs one lookup.
 #
-# ENV: AGY_MODEL (unset = auto; or a comma preference list) · AGY_TIMEOUT seconds
+# ENV: AGY_MODEL (unset = auto; or a comma preference list) · AGY_TIMEOUT seconds (agy's own print
+#      timeout) · AGY_HARD_GRACE seconds added on top for the hard wall clock (default 60) ·
+#      AGY_PIDFILE where to record agy's process-group id (vp-review-detach.sh sets it)
 #      (default 600) · AGY_BIN (default agy) · AGY_ALLOW_NON_GEMINI=1
-# Exit: 0 ok · 2 usage/config · 3 empty or failed completion · agy's own code otherwise
+# Exit: 0 ok · 2 usage/config · 3 empty or failed completion · 124 hard timeout (agy killed) ·
+#       agy's own code otherwise
 set -uo pipefail
 
 AGY_BIN="${AGY_BIN:-agy}"
@@ -134,9 +137,44 @@ esac
 mkdir -p "$WORK/cwd"
 
 START=$(date +%s)
-( cd "$WORK/cwd" && "$AGY_BIN" --model "$MODEL" --disable-slash-commands \
-      --print-timeout "${TIMEOUT_S}s" -p="$PROMPT" ) > "$WORK/out" 2> "$WORK/err"
+# HARD WALL CLOCK + KILLABLE CHILD (fleet RCA 2026-10-28: agy processes lived for DAYS and ignored
+# `kill`). Three causes compounded: agy's --print-timeout bounds only its print phase, so a run stalled
+# on the network / a quota back-off / an aborted tool turn never exits; nothing outside it had a clock;
+# and vp-review-detach.sh runs the review subtree with TERM/HUP/INT IGNORED (on purpose — it must
+# survive the skill shell's ~2-minute budget), an ignored disposition is inherited across fork+exec,
+# and a non-interactive bash cannot undo it. So a hung agy could not be TERMed and outlived everything.
+# The perl supervisor below (perl, not timeout/gtimeout: macOS ships neither):
+#   - restores DEFAULT TERM/HUP/INT for agy, and runs it in its OWN process group;
+#   - kills the whole group (TERM, then KILL after 5 s) when the hard clock fires
+#     (TIMEOUT_S + AGY_HARD_GRACE, default 60) -> exit 124;
+#   - does the same if the supervisor itself is TERMed/HUPed/INTed, so killing it never orphans agy;
+#   - writes the agy process-group id to $AGY_PIDFILE (set by vp-review-detach.sh) so the review
+#     wait can reap a stale row, and removes it when agy is gone.
+HARD_S=$(( TIMEOUT_S + ${AGY_HARD_GRACE:-60} ))
+( cd "$WORK/cwd" && exec perl -e '
+    my ($hard, $pidfile) = (shift, shift);
+    our $pid = 0;
+    my $reap = sub { my $code = shift;
+        if ($pid) { kill "TERM", -$pid; for (1..10) { last unless kill(0, -$pid); select(undef,undef,undef,0.5) } kill "KILL", -$pid; waitpid($pid, 0) }
+        unlink $pidfile if $pidfile; exit $code };
+    $SIG{TERM} = sub { $reap->(143) }; $SIG{HUP} = sub { $reap->(129) }; $SIG{INT} = sub { $reap->(130) };
+    $SIG{ALRM} = sub { $reap->(124) };
+    $pid = fork; die "fork: $!" unless defined $pid;
+    if (!$pid) { $SIG{$_} = "DEFAULT" for qw(TERM HUP INT ALRM); setpgrp(0, 0); exec @ARGV or die "exec: $!"; }
+    # eval: a pidfile problem must never kill the supervisor — that would orphan agy in its own group.
+    eval { if ($pidfile && open(my $fh, ">", $pidfile)) { print $fh "$pid\n"; close $fh; } };
+    alarm $hard; waitpid($pid, 0); my $st = $?; alarm 0;
+    kill "KILL", -$pid;            # anything agy left in its group
+    unlink $pidfile if $pidfile;
+    exit(($st & 127) ? 128 + ($st & 127) : ($st >> 8));
+  ' "$HARD_S" "${AGY_PIDFILE:-}" \
+  "$AGY_BIN" --model "$MODEL" --disable-slash-commands --print-timeout "${TIMEOUT_S}s" -p="$PROMPT"
+) > "$WORK/out" 2> "$WORK/err"
 RC=$?
+if [ "$RC" -eq 124 ]; then
+    echo "agy-exec: HARD-TIMEOUT after ${HARD_S}s (agy --print-timeout ${TIMEOUT_S}s did not end it) — killed the agy process group. No review." >&2
+    exit 124
+fi
 SECS=$(( $(date +%s) - START ))
 OUTB=$(wc -c < "$WORK/out" | tr -d ' ')
 echo "agy-exec: model=$MODEL seconds=$SECS bytes_in=$BYTES bytes_out=$OUTB rc=$RC" >&2

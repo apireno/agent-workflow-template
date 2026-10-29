@@ -302,6 +302,22 @@ PYREG
         ;;
 esac
 
+# ─── 10. Orphaned review engines (host-wide) — fleet RCA 2026-10-28 ──────────
+# A review subtree runs with TERM/HUP/INT ignored (it must outlive the skill shell), so a hung `agy`
+# used to live for days, ignore `kill`, and quietly hold memory. agy-exec.sh now bounds it; this
+# catches any that predate the fix or slipped past it: `agy … -p` older than 2 h.
+AGY_OLD="$(ps -axo pid=,ppid=,etime=,command= 2>/dev/null | awk '
+    { cmd=""; for (i=4;i<=NF;i++) cmd=cmd" "$i }
+    $4 ~ /(^|\/)agy$/ && cmd ~ / -p=/ {
+        n=split($3,t,/[-:]/); s=0
+        if ($3 ~ /-/) s=t[1]*86400+t[2]*3600+t[3]*60+t[4]; else if (n==3) s=t[1]*3600+t[2]*60+t[3]; else s=t[1]*60+t[2]
+        if (s>=7200) printf "%s %s %s\n", $1, $2, $3 }')"
+if [ -n "$AGY_OLD" ]; then
+    emit_warning "orphaned review engine(s): agy -p running for over 2 h (they ignore a plain kill):"
+    printf '%s\n' "$AGY_OLD" | awk '{printf "    pid %s  parent %s%s  age %s\n", $1, $2, ($2==1?" (launchd: orphaned)":""), $3}'
+    echo "    Remove:  kill -9 $(printf '%s\n' "$AGY_OLD" | awk '{printf "%s ", $1}')"
+fi
+
 # ─── Summary line (always emitted) ───────────────────────────────────────────
 echo ""
 if [ "$CRITICAL_FAILURES" -gt 0 ]; then

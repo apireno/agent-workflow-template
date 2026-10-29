@@ -6,6 +6,26 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-28 — review engines can no longer become unkillable orphans (fleet RCA)
+
+`agy` review processes lived for days, ignored `kill`, and were re-parented to launchd. Three causes
+compounded: `--print-timeout` bounds only agy's print phase; nothing outside it had a clock; and
+`vp-review-detach.sh` runs the review subtree with TERM/HUP/INT ignored (required — it must outlive the
+skill shell), which agy inherited and a non-interactive bash cannot undo.
+
+- **`agy-exec.sh`** runs agy under a perl supervisor (macOS has no `timeout`): default TERM/HUP/INT
+  restored for agy, its OWN process group, a hard wall clock (`AGY_TIMEOUT` + `AGY_HARD_GRACE`,
+  default +60 s) that kills the whole group (TERM, then KILL after 5 s) → exit 124 "HARD-TIMEOUT".
+  The supervisor also takes the group down if it is itself TERMed, so killing it never orphans agy.
+  Records the group in `$AGY_PIDFILE`.
+- **`vp-review-detach.sh`** keeps the signal immunity and sets `AGY_PIDFILE=<out>/<vp>.agy.pid`.
+- **`vp-review-wait.sh`** reaps on give-up (default; `--no-reap`): a row still running past
+  `VP_REVIEW_REAP_AFTER` (default timeout + grace + 120 = 780 s), or a failed row whose engine is still
+  alive, gets its group and wrapper SIGKILLed and reads `failed: hard-timeout (reaped)`.
+- **Preflight §10**: host-wide warning for any `agy … -p` older than 2 h, with the `kill -9` line.
+- `test-agy-hard-timeout.sh`: 13 assertions with a TERM-ignoring fake engine (hard clock under
+  inherited SIG_IGN; supervisor killed mid-run; through the detach with its launcher gone; reap).
+
 ## 2026-10-19 — landing pushes; CI warns until a repo's first green landing (CEO ruling)
 
 The fleet asked whether to keep landing locally with rare pushes. CEO: push on landing — the audit's
