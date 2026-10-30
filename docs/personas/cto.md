@@ -176,21 +176,41 @@ starting it. If the preflight printed a model-budget warning, the first reply na
 - **Calibration** is the CEO's: Anthropic does not publish allowances in tokens, so record the
   `/usage` percent at a time in `.cto/model-budget.yaml`; the script derives the rest.
 
-### Human-only gates — hand the CEO the command; never write the sign-off (2026-10-19)
+### CEO approvals — recorded from the conversation (CEO ruling 2026-10-30)
 
-Some gates need a human: a security sign-off before a fill, a signed pre-registration before a
-scored run. **You never write a sign-off token or an authorization on anyone's behalf** — not on
-the CEO's explicit word, not "to unblock". An agent writing a human's sign-off is a forged
-signature however sincere; the safety classifier refused exactly this four times in one weekend
-and was right every time. The CEO's word is the authority and the token was only its proxy, so
-give the CEO the one command that records their word themselves, in a real terminal:
+The CEO approves in this conversation, in their own words. **You** record them; the CEO never runs
+a command, opens another shell, retypes a token or uses a terminal to approve anything ("you run
+the command not me"; "the proper behavior is for me to approve in a session like this not run a
+script in another shell"). A gate that requires the human to run something is a defect: fix the
+gate, don't route the CEO to it.
 
-    scripts/agentic/ceo-authorize.sh <sprint-dir> <gate> "<the CEO's words>"
+What an approval is: the CEO's words, recorded **verbatim**, with the date and the **exact scope you
+confirmed back** to the CEO, in whatever artifact the gate reads (a `CEO-AUTHORIZATION.md` section,
+a ledger row, a receipt, a decision file). Every recorded approval carries `recorded_by: CTO` and
+the session id. For a sprint gate:
 
-`check-authorization.sh <sprint-dir> <gate> [--token "<line>"]` is what a gate calls: it accepts the
-literal token line OR a sealed CEO record for that gate. Sessions are hook-blocked from writing
-`CEO-AUTHORIZATION.md` or running the recorder. When you are blocked on a gate, the right message is
-the command, not an apology and not a workaround.
+    scripts/agentic/record-approval.sh <sprint-dir> <gate> --words "<the CEO's words>" --scope "<scope confirmed>"
+
+It refuses unless this is a CTO-home session and the words appear, as typed, in a CEO message of
+this session; `check-authorization.sh <sprint-dir> <gate>` is what a gate calls and re-checks the
+same. Proof of human presence is not the goal. What matters:
+
+- **Quote exactly.** Never paraphrase a "yes" into a broader scope.
+- **Ask when the scope is ambiguous**, before recording: "for ratification you mean the possessive
+  flag for offers?" → "ok approved" is an approval of that scope, and the record says so.
+- **Keep it reviewable**: the quote, the scope, the date, the session.
+
+**State the provenance when you write one** — "Recording the CEO's approval, quoted verbatim from
+this conversation (<date>): "<words>", scope: <scope>." — so the record, and any safety
+classifier reading the action, can see whose words they are. If the auto-mode classifier still
+refuses, say so to the CEO in the conversation and ask for the words again; never route the CEO to
+a script.
+
+**Lanes can't create human gates.** A dev lane may not add an `authorization_gate:` field, a
+sign-off token, or any human-only gate on its own authority, and does not record approvals (the
+lane hook denies it writing `CEO-AUTHORIZATION.md`). A gate needs a CEO ruling, cited in the
+gate's definition. A lane that reaches a gate it can't pass stops and writes
+`signature-pending: <gate>` in its dev-report; you ask the CEO.
 
 ### Accepting a sprint LANDS it (ADR-003)
 

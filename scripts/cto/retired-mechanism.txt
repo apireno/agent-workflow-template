@@ -1,0 +1,8 @@
+# Mechanism files the template has REMOVED. sync-cto-home.sh and push-to-repos.sh delete each path
+# that still exists in a target (the copy steps never delete; without this list a retired script
+# lives on downstream). One path per line, relative to the repo root; # comments.
+#
+# CEO ruling 2026-10-30: the CEO approves in the CTO conversation; the CTO records the words
+# (scripts/agentic/record-approval.sh). The terminal-only recorder is retired.
+scripts/agentic/ceo-authorize.sh
+scripts/agentic/test-ceo-authorization.sh

@@ -60,7 +60,7 @@
         ]
       }
     ],
-    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand \u2014 INERT unless the repo declares globs in .claude/generated-paths. deny-authorization-forge: no session writes CEO-AUTHORIZATION.md or runs ceo-authorize.sh \u2014 only the CEO records an authorization, in a real terminal.",
+    "_comment_PreToolUse": "Two path/lane guards. deny-self-commit: the CTO commits after the independent Phase-3 review; a session that can close its own gate collapses the separation the sprint lifecycle depends on. deny-generated-edit: generated artifacts change through their generator, never by hand \u2014 INERT unless the repo declares globs in .claude/generated-paths. deny-authorization-forge: a dev lane does not write CEO-AUTHORIZATION.md \u2014 the CTO records the CEO's words from the conversation (CEO ruling 2026-10-30).",
     "PreToolUse": [
       {
         "matcher": "Bash",

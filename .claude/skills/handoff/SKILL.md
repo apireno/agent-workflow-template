@@ -297,7 +297,7 @@ ensure("PreToolUse", ".claude/hooks/deny-self-commit.sh", matcher="Bash")
 # Generated artifacts change through their generator, never by hand. INERT unless the
 # repo declares globs in .claude/generated-paths — see CLAUDE.md "Generated artifacts".
 ensure("PreToolUse", ".claude/hooks/deny-generated-edit.sh", matcher="Edit|Write|NotebookEdit")
-# Only the CEO records a CEO authorization (scripts/agentic/ceo-authorize.sh, in a real terminal).
+# Dev lanes do not write CEO approvals; the CTO records the CEO's words (scripts/agentic/record-approval.sh).
 ensure("PreToolUse", ".claude/hooks/deny-authorization-forge.sh", matcher="Bash")
 ensure("PreToolUse", ".claude/hooks/deny-authorization-forge.sh", matcher="Edit|Write|NotebookEdit")
 open(p,"w").write(json.dumps(s, indent=2) + "\n")   # trailing newline: json.dump omits it

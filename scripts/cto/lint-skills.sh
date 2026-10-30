@@ -20,6 +20,9 @@
 #            an empty value. /sprint-status' second block did exactly this.
 #
 #   CHECK F  a bare MCP server in a settings allow-list (covers no tools since Claude Code 2.1.299)
+#   CHECK G  text telling a human to run a command as a sign-off (CEO ruling 2026-10-30: the CEO
+#            approves in the CTO conversation and the CTO records the words; no gate makes the CEO
+#            run a command, open a shell or retype a token). Mark a deliberate exception `lint-ok`.
 #   CHECK E  a positional parameter inside a `!` block
 #            The skill runtime rewrites every dollar-followed-by-digits token in the FILE with
 #            the invocation's arguments before the shell runs — document-wide, no code-fence
@@ -313,6 +316,37 @@ for sf in (".claude/settings.permissive.json", ".claude/settings.devteam.json.te
         if isinstance(rule, str) and rule.startswith("mcp__") and rule.count("__") == 1:
             findings.append(f"F  {sf}  `{rule}` — a bare MCP server rule covers none of its tools "
                             f"(Claude Code >= 2.1.299). List each tool: {rule}__<tool>.")
+
+# ── CHECK G: a human told to run a command as a sign-off (CEO ruling 2026-10-30) ───────────
+# The CEO approves in the CTO conversation; the CTO records the words (record-approval.sh). Any
+# skill, script, persona or contract sentence that names the CEO/a human, a terminal/shell/command,
+# a run/type/hand verb and an approval word, with no negation, is a gate that routes the human to
+# a script. Sentence-level, across line breaks. Tests and this file are exempt; `lint-ok` opts out.
+ACTOR = re.compile(r"\b(CEO|human|operator)s?\b", re.I)
+PLACE = re.compile(r"\bin (a |another |their own |your own |the )?(real )?(Terminal|terminal|shell)\b|another shell|/dev/tty|"
+                   r"\b(this|that|the|one|exact) command\b|\bretype", re.I)
+DO = re.compile(r"\b(run|runs|running|type|types|typing|retype|paste|execute|records? their|give|hand)\b", re.I)
+APPROVAL = re.compile(r"authori[sz]|authority|sign[- ]?off|approv|ratif|\bseal|GRANTED", re.I)
+NEG = re.compile(r"\b(never|not|no|nothing|don't|doesn't|without|instead of)\b|\bnor\b", re.I)
+files_g = []
+for base_g, exts in ((".claude/skills", (".md",)), ("scripts", (".sh", ".py")), ("docs/personas", (".md",)), (".claude/hooks", (".sh",))):
+    for dp, _, fs in os.walk(os.path.join(root, base_g)):
+        files_g += [os.path.join(dp, f) for f in fs if f.endswith(exts)]
+files_g += [os.path.join(root, f) for f in ("CLAUDE.md", "CLAUDE.devteam.md") if os.path.isfile(os.path.join(root, f))]
+for pg in sorted(files_g):
+    bg = os.path.basename(pg)
+    if bg == "lint-skills.sh" or bg.startswith("test-"):
+        continue
+    text = open(pg, errors="replace").read()
+    # sentences, across line breaks; strip comment/echo/quote decoration so script text reads as prose
+    pos = 0
+    for sent in re.split(r"(?<=[.;!?])\s+|\n\s*\n", text):
+        start = text.find(sent, pos); pos = max(pos, start)
+        sg = re.sub(r"\s+", " ", re.sub(r"^\s*(#|echo|printf|>)\s*", "", sent, flags=re.M))
+        if "lint-ok" in sent or not (ACTOR.search(sg) and PLACE.search(sg) and DO.search(sg) and APPROVAL.search(sg)) or NEG.search(sg):
+            continue
+        findings.append(f"G  {os.path.relpath(pg, root)}:{text.count(chr(10), 0, start) + 1}  tells a human to run a command as a sign-off: "
+                        f"\"{sg.strip()[:100]}\". The CTO records the CEO's words instead (record-approval.sh).")
 
 if findings:
     print(f"lint-skills: {len(findings)} finding(s)\n")

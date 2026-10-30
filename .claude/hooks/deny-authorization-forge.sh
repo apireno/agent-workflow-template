@@ -1,29 +1,36 @@
 #!/bin/bash
-# deny-authorization-forge.sh — PreToolUse guard (Edit|Write|NotebookEdit and Bash), in dev repos
-# AND the CTO home. A session must never write a CEO authorization, for itself or for anyone.
+# deny-authorization-forge.sh — PreToolUse guard (Edit|Write|NotebookEdit and Bash). Dev lanes do not
+# write CEO approvals; the CTO does.
 #
-# CEO-AUTHORIZATION.md records the CEO's own words for a human-only gate; only the CEO writes it,
-# with scripts/agentic/ceo-authorize.sh in a real terminal. This hook closes the agent paths to it:
-# a direct Edit/Write; a shell redirect / tee / sed -i / cp / mv / rm into it; Python in a heredoc that
-# opens it for writing; and RUNNING the recorder (which an agent could drive through a faked pty).
+# CEO ruling 2026-10-30: the CEO approves in the CTO conversation, and the CTO records the CEO's words
+# verbatim in <sprint-dir>/CEO-AUTHORIZATION.md (scripts/agentic/record-approval.sh). So a session
+# rooted in a CTO home (named agent-workflow-template or *-cto, or carrying .cto/projects.yaml) may
+# write the file. Any other session is a dev lane, and the write is blocked: a direct Edit/Write; a
+# shell redirect / tee / sed -i / cp / mv / rm into it; Python in a heredoc that opens it for writing.
+# (The file name is historical; settings across the fleet already wire it, so it keeps the name.)
 #
-# It matches what a command DOES, not what its text MENTIONS (fleet report 2026-10-19: the first
-# version blocked any command naming the recorder, including prose inside a heredoc — a memo that
-# tells the CEO which command to run). Each command line is tokenized with shlex; the recorder is
-# an invocation only at a COMMAND POSITION (line start, after ; && || | & ( , or behind a wrapper:
-# bash/sh/zsh/env/exec/nohup/time/xargs/script). A heredoc body is commands only when it is fed to a
-# shell; otherwise it is data. Reading the file and running check-authorization.sh stay free.
+# It matches what a command DOES, not what its text MENTIONS: each command line is tokenized with
+# shlex, and a heredoc body is commands only when it is fed to a shell; otherwise it is data.
+# Reading the file and running check-authorization.sh stay free everywhere.
 set -uo pipefail
 INPUT="$(cat)"
 python3 - "$INPUT" <<'PY'
 import json, os, re, shlex, sys
 d = json.loads(sys.argv[1] or "{}"); ti = d.get("tool_input") or {}
-REC = "ceo-authorize.sh"; FILE = "CEO-AUTHORIZATION.md"
+FILE = "CEO-AUTHORIZATION.md"
+def project_root():
+    p = os.path.abspath(os.environ.get("CLAUDE_PROJECT_DIR") or d.get("cwd") or os.getcwd())
+    while p != "/" and not os.path.exists(os.path.join(p, ".git")):
+        p = os.path.dirname(p)
+    return p
+root = project_root(); name = os.path.basename(root)
+if name == "agent-workflow-template" or name.endswith("-cto") or os.path.isfile(os.path.join(root, ".cto", "projects.yaml")):
+    sys.exit(0)   # a CTO home: the CTO records the CEO's words here
 def block(why):
-    sys.stderr.write("BLOCKED (CEO authorization): " + why + "\n"
-        "Only the CEO records an authorization, in their own words, by running in Terminal:\n"
-        "  scripts/agentic/ceo-authorize.sh <sprint-dir> <gate> \"<the CEO's words>\"\n"
-        "Hand the CEO that command. Never write the record or a sign-off token on anyone's behalf.\n")
+    sys.stderr.write("BLOCKED (CEO approval): " + why + "\n"
+        "Dev lanes do not record CEO approvals; the CTO records the CEO's words from the CTO\n"
+        "conversation (scripts/agentic/record-approval.sh). Stop at the gate, write\n"
+        "`signature-pending: <gate>` in dev-report.md, and let the CTO ask the CEO.\n")
     sys.exit(2)
 target = ti.get("file_path") or ti.get("notebook_path") or ""
 if os.path.basename(target) == FILE:
@@ -62,9 +69,9 @@ def commands(line):
     return out
 for line in cmdlines:
     cmds = commands(line)
-    if cmds is None:   # unparseable line: fall back to a conservative textual check of THIS line
-        if re.search(r"(^|[;&|(]\s*|\b(bash|sh|zsh|exec|env|script)\s+(\S+\s+)*)\S*" + re.escape(REC), line):
-            block("this runs ceo-authorize.sh; it is the CEO's own command.")
+    if cmds is None:   # unparseable line: conservative textual check of THIS line
+        if re.search(r"(>>?|\b(tee|cp|mv|rm)\b[^;&|]*)\s*\S*" + re.escape(FILE), line):
+            block("that writes " + FILE + ".")
         continue
     for c in cmds:
         # strip leading VAR=val and wrappers (and `script -q /dev/null` style wrappers)
@@ -79,8 +86,6 @@ for line in cmdlines:
                 k += 1  # the typescript file
                 continue
             break
-        if k < len(c) and os.path.basename(c[k]) == REC:
-            block("that runs ceo-authorize.sh; it is the CEO's own command.")
         args = c[k:]
         for j, t in enumerate(args):
             if t in (">", ">>") and j + 1 < len(args) and os.path.basename(args[j + 1]) == FILE:

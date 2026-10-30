@@ -67,6 +67,6 @@
         ]
       }
     ],
-    "_comment_PreToolUse": "deny-authorization-forge: the CTO session never writes CEO-AUTHORIZATION.md or runs ceo-authorize.sh. It hands the CEO the command instead (2026-10-19)."
+    "_comment_PreToolUse": "deny-authorization-forge: allows a CTO-home session (it records the CEO's words, record-approval.sh); denies dev lanes writing CEO-AUTHORIZATION.md (CEO ruling 2026-10-30)."
   }
 }

@@ -332,6 +332,11 @@ PYEOF
   mkdir -p "$DEST/scripts/agentic" "$DEST/docs/personas" "$DEST/docs/sprints/_templates"
   cp -r "$TEMPLATE/scripts/agentic/." "$DEST/scripts/agentic/"
   chmod +x "$DEST/scripts/agentic/"*.sh 2>/dev/null || true
+  # Retired mechanism: the copy above never deletes, so remove what the template removed.
+  while IFS= read -r rel; do
+    case "$rel" in ''|'#'*) continue ;; esac
+    [ -e "$DEST/$rel" ] && rm -f "$DEST/$rel" && echo "      removed retired $rel"
+  done < "$TEMPLATE/scripts/cto/retired-mechanism.txt"
   cp -r "$TEMPLATE/docs/personas/." "$DEST/docs/personas/"
   [ -d "$TEMPLATE/docs/sprints/_templates" ] && cp -r "$TEMPLATE/docs/sprints/_templates/." "$DEST/docs/sprints/_templates/"
   # Review engine: seed unset repos with the PROJECT's choice and heal dead values to it.

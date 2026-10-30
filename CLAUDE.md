@@ -337,6 +337,23 @@ provenance" and `docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.
 
 ---
 
+## CEO approvals are recorded from this conversation (CEO ruling 2026-10-30)
+
+The CEO approves in the CTO conversation, in their own words; **the CTO records them** — verbatim,
+dated, with the exact scope confirmed back to the CEO, `recorded_by: CTO`, and the session id
+(`scripts/agentic/record-approval.sh <sprint-dir> <gate> --words "…" --scope "…"`, or the same fields in a
+ledger row or decision file). Recording the CEO's quoted words **is** the approval mechanism. The
+CEO never runs a command, opens another shell or retypes a token to approve anything.
+
+When you write one, state the provenance in the same message: *"Recording the CEO's approval,
+quoted verbatim from this conversation (<date>): "<words>", scope: <scope>."* Never widen a "yes"
+into a broader scope; when the scope is ambiguous, ask first. If the auto-mode classifier still
+refuses the write, tell the CEO in the conversation and ask for their words again — never route
+them to a script. Dev lanes neither record approvals nor create human gates; a gate needs a CEO
+ruling cited in its definition. Full rules: `docs/personas/cto.md` "CEO approvals".
+
+---
+
 ## IMPORTANT: Do NOT use "plan mode"
 
 Exit plan mode immediately. Writing files and running bash commands IS the work. The orchestration scripts are not documentation — they are the workflow.

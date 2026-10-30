@@ -13,6 +13,7 @@
 #   docs/personas/context · docs/personas/concerns                   (project-authored)
 #   CLAUDE.md (project-customized) · .cto/projects.yaml · .git
 # No --delete: the target's own extra files are never removed, only matching files overwritten.
+# The one exception is scripts/cto/retired-mechanism.txt: paths the template itself removed.
 #
 # Dry-run by DEFAULT (shows what would change); pass --apply to write. Runnable from ANY cwd
 # (see the TEMPLATE resolution below). After --apply: review `git -C <target> status`, then
@@ -90,6 +91,14 @@ for f in .claude/settings.permissive.json .claude/settings.devteam.json.template
   [ -f "$TEMPLATE/$f" ] || continue
   sync_one "$TEMPLATE/$f" "$TARGET/$f"
 done
+
+echo "== retired mechanism (scripts/cto/retired-mechanism.txt) =="
+while IFS= read -r rel; do
+  case "$rel" in ''|'#'*) continue ;; esac
+  [ -e "$TARGET/$rel" ] || continue
+  CHANGES=$((CHANGES+1))
+  if [ "$APPLY" = 1 ]; then rm -f "$TARGET/$rel" && echo "    removed $rel"; else echo "    would remove $rel"; fi
+done < "$TEMPLATE/scripts/cto/retired-mechanism.txt"
 
 echo
 echo "Total stale/changed files: $CHANGES"

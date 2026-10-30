@@ -6,6 +6,39 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-30 — the CEO approves in the conversation; the CTO records the words (CEO ruling)
+
+**Ruling (CEO, 2026-10-30):** the CEO approves in a conversation with the CTO and never runs a
+script in another shell to approve anything ("you run the command not me"; "the proper behavior is
+for me to approve in a session like this not run a script in another shell").
+
+**RCA.** The 2026-10-19 "CEO-only gate path" (`ceo-authorize.sh`: a terminal, a retyped gate name,
+a sha256 seal) was built by this template from an agent's memo after a safety classifier refused a
+CTO session's write. It was never checked against a CEO ruling, the CEO never adopted or ran it,
+and the only real precedent was already the CEO's chat words recorded by the CTO. Synced
+fleet-wide, it led a lane to invent an `authorization_gate:` and a CTO to send the CEO to a
+Terminal three times. The "forged signature" framing was wrong for CTO-recorded approvals.
+
+- **Removed** `scripts/agentic/ceo-authorize.sh` and its test. New
+  `scripts/cto/retired-mechanism.txt`: `sync-cto-home.sh` and `push-to-repos.sh` now delete the paths
+  the template removed (their copies never deleted, so retired scripts lived on downstream).
+- **New** `scripts/agentic/record-approval.sh <sprint-dir> <gate> --words "…" --scope "…"`: the CTO
+  records the CEO's words verbatim with scope, date (of the CEO's message), `recorded_by: CTO`, the
+  session id and message uuid. It refuses outside a CTO-home session and refuses words that are not
+  in a message the CEO typed in this session (a paraphrase, the assistant's own text, a tool result).
+- **Reworked** `check-authorization.sh <sprint-dir> <gate>` (same CLI and exit codes, so callers keep
+  working; `--token` removed): validates the fields, refuses `recorded_by` other than CTO, and when
+  the session transcript is on this machine refuses a non-CTO-home session or unsaid words; an entry
+  whose transcript is elsewhere is judged on its fields and says so. Never prints a command for the
+  CEO. Shared logic: `scripts/agentic/_approval_transcript.py`.
+- **Docs:** `docs/personas/cto.md` "CEO approvals — recorded from the conversation"; `CLAUDE.md`
+  section on stating provenance and on a classifier refusal (tell the CEO, ask again, never route to a
+  script); `CLAUDE.devteam.md`: lanes neither record approvals nor create human gates — a gate needs a
+  CEO ruling cited in its definition.
+- **Lint CHECK G** (`lint-skills.sh`): fails any skill, script, persona or contract sentence that
+  tells a human to run a command as a sign-off.
+- Tests: `test-approval-record.sh` (15).
+
 ## 2026-10-28 — review engines can no longer become unkillable orphans (fleet RCA)
 
 `agy` review processes lived for days, ignored `kill`, and were re-parented to launchd. Three causes

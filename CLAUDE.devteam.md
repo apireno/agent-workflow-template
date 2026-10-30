@@ -160,12 +160,17 @@ Then WAIT for CEO verdict.
 
 ### Human-only gates (BINDING)
 
-If a step needs a human sign-off (a security sign-off token, a signed pre-registration, any
-`…: GRANTED` line), you never write it — not for the CTO, not on anyone's word relayed to you.
-Author the artifact, stop, and record `signature-pending: <gate>` in `dev-report.md`. The CEO
-records their own authorization with `scripts/agentic/ceo-authorize.sh` in a terminal; gates check
-it with `scripts/agentic/check-authorization.sh`. Sessions are hook-blocked from writing
-`CEO-AUTHORIZATION.md`.
+If a step needs a CEO approval or a human sign-off (a security sign-off token, a signed
+pre-registration, any `…: GRANTED` line), you never write it — not for the CTO, not on anyone's
+word relayed to you. Author the artifact, stop, and record `signature-pending: <gate>` in
+`dev-report.md`. The CEO approves in the CTO's conversation and the CTO records the CEO's words
+(`scripts/agentic/record-approval.sh`); gates check it with `scripts/agentic/check-authorization.sh`.
+Never tell a human to run a command, open a shell or retype a token to approve anything.
+
+You do not create human gates either: no `authorization_gate:` field, sign-off token or similar
+human-only gate on your own authority. A gate needs a CEO ruling, cited in its definition; if you
+think one is needed, say so in the dev-report and let the CTO raise it. Lane sessions are
+hook-blocked from writing `CEO-AUTHORIZATION.md`.
 
 When the CTO asks for an acknowledgement, reply with `ACK <TAG>` **alone on its own line**, only
 when the thing is actually done — the CTO's watcher waits for exactly that line.
