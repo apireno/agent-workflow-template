@@ -6,6 +6,15 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-10-30 — record-approval.sh records the most recent matching CEO message (fleet report)
+
+In a long CTO session "ok approved" matched a 2026-09-29 message before the CEO's 2026-10-30 one,
+so the record carried the wrong date and message id. The recorder now takes the MOST RECENT CEO
+message containing the words, says when more than one matched, and `--message <uuid>` pins a
+specific one (refused if that message lacks the words). `check-authorization.sh` verifies the
+recorded `message:` itself, not any message with the same words. Tests: approval-record 21 (+6, two
+matching messages on different days).
+
 ## 2026-10-30 — the CEO approves in the conversation; the CTO records the words (CEO ruling)
 
 **Ruling (CEO, 2026-10-30):** the CEO approves in a conversation with the CTO and never runs a

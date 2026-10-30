@@ -193,7 +193,9 @@ the session id. For a sprint gate:
 
 It refuses unless this is a CTO-home session and the words appear, as typed, in a CEO message of
 this session; `check-authorization.sh <sprint-dir> <gate>` is what a gate calls and re-checks the
-same. Proof of human presence is not the goal. What matters:
+same. Short words like "ok approved" recur in a long session: the recorder takes the **most recent**
+CEO message containing them and says when more than one matched — check its date, and pin the right
+one with `--message <uuid>` if it isn't the approval you mean. Proof of human presence is not the goal. What matters:
 
 - **Quote exactly.** Never paraphrase a "yes" into a broader scope.
 - **Ask when the scope is ambiguous**, before recording: "for ratification you mean the possessive

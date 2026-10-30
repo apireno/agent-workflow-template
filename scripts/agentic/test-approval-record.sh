@@ -92,4 +92,25 @@ cat >> "$D/CEO-AUTHORIZATION.md" <<'EOF'
 - session: rotated-away
 EOF
 OUT=$(bash "$C" "$D" g7 2>&1); [ $? -eq 0 ] && echo "$OUT" | grep -q 'fields only' && ok "transcript not on this machine -> judged on fields, and says so" || fail "fields-only: $OUT"
+
+echo "== repeated words across days (fleet report 2026-10-30) =="
+python3 - "$CLAUDE_PROJECTS_DIR/cto/sess-long.jsonl" "$W/acme-cto" <<'PY2'
+import json, sys
+with open(sys.argv[1], "w") as o:
+    for u, ts, m in (("old", "2026-09-29T16:00:00Z", "ok approved"), ("mid", "2026-10-15T16:00:00Z", "something else"),
+                     ("new", "2026-10-30T16:00:00Z", "ok approved")):
+        o.write(json.dumps({"type": "user", "cwd": sys.argv[2], "uuid": u, "timestamp": ts, "message": {"role": "user", "content": m}}) + "\n")
+PY2
+D2="$W/acme-service/docs/sprints/s2"; mkdir -p "$D2"
+OUT=$(CLAUDE_CODE_SESSION_ID=sess-long bash "$R" "$D2" g1 --words "ok approved" --scope "x" 2>&1); r=$?
+[ $r -eq 0 ] && grep -q '^- date: 2026-10-30$' "$D2/CEO-AUTHORIZATION.md" && grep -q '^- message: new$' "$D2/CEO-AUTHORIZATION.md" \
+  && ok "two matching CEO messages on different days -> the most recent is recorded (date + message id)" || fail "latest match: $(cat "$D2/CEO-AUTHORIZATION.md" 2>/dev/null)"
+echo "$OUT" | grep -q '2 CEO messages' && echo "$OUT" | grep -q -- '--message' && ok "the CTO is told the words matched twice, and how to pin one" || fail "multi-match note: $OUT"
+CLAUDE_CODE_SESSION_ID=sess-long bash "$R" "$D2" g2 --words "ok approved" --scope "x" --message old >/dev/null 2>&1
+grep -A6 '^## g2' "$D2/CEO-AUTHORIZATION.md" | grep -q '^- date: 2026-09-29$' && grep -A6 '^## g2' "$D2/CEO-AUTHORIZATION.md" | grep -q '^- message: old$' \
+  && ok "--message pins an earlier message" || fail "--message pin"
+CLAUDE_CODE_SESSION_ID=sess-long bash "$R" "$D2" g3 --words "ok approved" --scope "x" --message mid >/dev/null 2>&1; [ $? -eq 4 ] && ok "--message naming a message without the words -> refused" || fail "bad --message"
+bash "$C" "$D2" g1 >/dev/null 2>&1 && bash "$C" "$D2" g2 >/dev/null 2>&1 && ok "both recorded entries pass the check" || fail "check of pinned entries"
+sed -i.bak 's/^- message: new$/- message: mid/' "$D2/CEO-AUTHORIZATION.md"
+OUT=$(bash "$C" "$D2" g1 2>&1); [ $? -eq 1 ] && echo "$OUT" | grep -q 'CEO message mid' && ok "check verifies the recorded message itself, not any message" || fail "message check: $OUT"
 echo ""; echo "approval-record tests: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

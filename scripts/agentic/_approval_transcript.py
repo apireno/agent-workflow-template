@@ -2,14 +2,16 @@
 tell whether that session ran in a CTO home, and find the CEO's words in its human messages.
 
     python3 -I _approval_transcript.py locate <session-id>           -> transcript path, or exit 1
-    python3 -I _approval_transcript.py verify <session-id> <words>   -> JSON {transcript, cwd,
-                                                                       cto_home, found, uuid, date}
+    python3 -I _approval_transcript.py verify <session-id> <words> [<message-uuid>]
+        -> JSON {transcript, cwd, cto_home, found, uuid, date, matches}
 
 A CTO home is a repo whose name is agent-workflow-template or ends in -cto, or that carries
 .cto/projects.yaml. Human messages are the user turns a person typed: not tool results, not
 skill or meta injections, not sidechains, not compaction summaries. Matching is exact after
 whitespace is collapsed and curly quotes are straightened, so a quote has to be the CEO's own
-words; a paraphrase does not match.
+words; a paraphrase does not match. Short approvals ("ok approved") recur across a long session, so
+the MOST RECENT matching message is the one reported (matches = how many matched); pass a message
+uuid to test that one message only.
 """
 import datetime, glob, json, os, re, sys
 
@@ -63,8 +65,8 @@ def human_texts(entry):
     return [re.sub(r"<system-reminder>.*?</system-reminder>", " ", t, flags=re.S) for t in texts]
 
 
-def verify(sid, words):
-    out = {"transcript": locate(sid), "cwd": None, "cto_home": False, "found": False, "uuid": None, "date": None}
+def verify(sid, words, uuid=None):
+    out = {"transcript": locate(sid), "cwd": None, "cto_home": False, "found": False, "uuid": None, "date": None, "matches": 0}
     if not out["transcript"]:
         return out
     want = norm(words)
@@ -76,8 +78,11 @@ def verify(sid, words):
         if out["cwd"] is None and e.get("cwd"):
             out["cwd"] = e["cwd"]
             out["cto_home"] = is_cto_home(e["cwd"])
-        if want and not out["found"] and any(want in norm(t) for t in human_texts(e)):
-            out["found"], out["uuid"] = True, e.get("uuid")
+        if not want or (uuid and e.get("uuid") != uuid):
+            continue
+        if any(want in norm(t) for t in human_texts(e)):   # keep the latest match
+            out["found"], out["uuid"], out["date"] = True, e.get("uuid"), None
+            out["matches"] += 1
             ts = e.get("timestamp")
             if ts:
                 try:
@@ -93,8 +98,8 @@ if __name__ == "__main__":
         t = locate(sys.argv[2])
         print(t or "")
         sys.exit(0 if t else 1)
-    if cmd == "verify" and len(sys.argv) == 4:
-        print(json.dumps(verify(sys.argv[2], sys.argv[3])))
+    if cmd == "verify" and len(sys.argv) in (4, 5):
+        print(json.dumps(verify(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else None)))
         sys.exit(0)
     sys.stderr.write(__doc__)
     sys.exit(2)

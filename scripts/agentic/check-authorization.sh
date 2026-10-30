@@ -28,16 +28,16 @@ for sec in re.split(r'\n(?=## )', open(f).read()):
     m = re.match(r'## (\S+)[ \t]*\n', sec)
     if not m or m.group(1) != gate: continue
     g = lambda k: (re.search(r'^- ' + k + r':[ \t]*(.*?)[ \t]*$', sec, re.M) or [None, None])[1]
-    words, scope, date, by, sid = g('ceo_words'), g('scope'), g('date'), g('recorded_by'), g('session')
+    words, scope, date, by, sid, msg = g('ceo_words'), g('scope'), g('date'), g('recorded_by'), g('session'), g('message')
     missing = [k for k, v in (("ceo_words", words), ("scope", scope), ("date", date), ("recorded_by", by), ("session", sid)) if not v]
     if missing: print("BAD missing " + ",".join(missing)); continue
     if by != "CTO": print("BAD recorded_by " + by + " (only the CTO records approvals)"); continue
     if not (words.startswith('"') and words.endswith('"')): print("BAD ceo_words is not a quotation"); continue
     w = re.sub(r'\\(.)', r'\1', words[1:-1])
-    v = at.verify(sid, w)
+    v = at.verify(sid, w, msg or None)   # a recorded message id is checked as that exact message
     if v["transcript"]:
         if not v["cto_home"]: print("BAD session " + sid + " ran in " + str(v["cwd"]) + ", not a CTO home"); continue
-        if not v["found"]: print("BAD the quoted words are not in any message the CEO typed in session " + sid); continue
+        if not v["found"]: print("BAD the quoted words are not in " + ("CEO message " + msg if msg else "any message the CEO typed") + " in session " + sid); continue
         print("OK " + date + " " + w + " [scope: " + scope + "]"); continue
     print("OK " + date + " " + w + " [scope: " + scope + "] (session transcript not on this machine; fields only)")
 PY
