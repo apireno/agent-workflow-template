@@ -45,8 +45,9 @@ n_before="$(memos | wc -l | tr -d ' ')"
 for i in 1 2 3; do bash "$X" --issue "burst $i" >/dev/null 2>&1 & done; wait
 [ "$(memos | wc -l | tr -d ' ')" -eq $((n_before + 3)) ] && ok "same-second escalations never overwrite each other" || fail "burst collision"
 
-( cd "$W" && bash "$X" --issue "sync" --sync --non-interactive >/dev/null 2>&1 ); [ $? -eq 1 ] && [ ! -e "$W/claude-called" ] && ok "--sync without a CTO repo -> exit 1, claude not called" || fail "--sync unconfigured"
-mkdir -p "$W/cto"; out="$(CTO_REPO="$W/cto" bash "$X" --issue "sync" --sprint 08 --sync 2>&1)"
+( cd "$W" && bash "$X" --issue "sync" --sync --non-interactive >/dev/null 2>&1 ); [ $? -eq 2 ] && [ ! -e "$W/claude-called" ] && ok "--sync without REVIEW_ALLOW_METERED=1 -> usage error (exit 2), claude not called" || fail "--sync unmetered"
+( cd "$W" && REVIEW_ALLOW_METERED=1 bash "$X" --issue "sync" --sync --non-interactive >/dev/null 2>&1 ); [ $? -eq 1 ] && [ ! -e "$W/claude-called" ] && ok "--sync without a CTO repo -> exit 1, claude not called" || fail "--sync unconfigured"
+mkdir -p "$W/cto"; out="$(CTO_REPO="$W/cto" REVIEW_ALLOW_METERED=1 bash "$X" --issue "sync" --sprint 08 --sync 2>&1)"
 [ -e "$W/claude-called" ] && grep -q stub-response <<<"$out" && ok "--sync is the only path that reaches claude (opt-in)" || fail "--sync: $out"
 
 echo ""; echo "escalate-to-cto tests: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

@@ -6,6 +6,16 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-11-01 — PR #1 landed (fleet CTO): escalate-to-cto file-drop default, Phase-3 = CTO gate, in-main rule
+
+Reviewed and squash-merged (658ae51). escalate-to-cto.sh drops an inbox memo by default (no model
+call), resolves any sprint slug, keeps `claude -p` only behind `--sync`; deny-self-commit hook
+message; CLAUDE.devteam.md Step 11/12 + PROTOCOL + templates: lanes no longer self-run Phase-3
+reviews (the CTO's independent gate, run at accept); dev-team runbook (uv private-sibling root
+cause); one sprint branch in the MAIN checkout, no worktrees (CEO 2026-10-28). Template-team
+follow-up in the same landing: `--sync` is now unreachable without `REVIEW_ALLOW_METERED=1`
+(usage error, exit 2), the same quarantine every other metered path has; 17/17 tests.
+
 ## 2026-11-01 — ask list: `git branch -D` retired; templates can retire ask rules (`_retired_ask`)
 
 First live landing under the posture prompted once — not for the merge, for the LOCAL `git branch -D`

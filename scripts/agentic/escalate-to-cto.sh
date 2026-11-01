@@ -242,6 +242,14 @@ if [ "$SYNC" -eq 0 ]; then
 fi
 
 # ─── LEGACY --sync: fire claude -p in the CTO repo ────────────────────────────
+# `claude -p` bills the metered Agent SDK pool (2026-06-15). The fleet rule is the same as for every
+# other metered path (ideo-sprint.sh, resolve-review-engine.sh): unreachable unless the caller sets
+# REVIEW_ALLOW_METERED=1 explicitly. Without it this is a usage error, not a model call.
+if [ "${REVIEW_ALLOW_METERED:-0}" != "1" ]; then
+    echo "Error: --sync calls 'claude -p' (metered programmatic path). Set REVIEW_ALLOW_METERED=1 to allow it," >&2
+    echo "       or drop the flag: the default file-drop escalation needs no model call." >&2
+    exit 2
+fi
 echo "Warning: --sync uses 'claude -p' (metered programmatic path). The default file-drop" >&2
 echo "         escalation needs no model call; prefer it." >&2
 
