@@ -19,7 +19,9 @@ CMD=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.st
 if printf '%s' "$CMD" | grep -qE '\bgit\b[^|;&]*\b(commit|push)\b'; then
     echo "BLOCKED (no-self-commit policy): the CTO commits after the independent Phase-3 review." >&2
     echo "Write artifacts to disk only (dev-report.md, demo-output.md, source, tests)." >&2
-    echo "Do NOT git commit/push, and do NOT self-run Phase-3 VP reviews — that is the CTO's independent gate." >&2
+    echo "Do NOT git commit/push, and do NOT self-run Phase-3 VP reviews." >&2
+    echo "CTO 2026-10-31: Phase-3 VP reviews are the CTO's independent gate; lanes do not self-run them." >&2
+    echo "Leave no review files (not even empty ones); end dev-report.md with: Phase-3 reviews pending: CTO" >&2
     exit 2
 fi
 
