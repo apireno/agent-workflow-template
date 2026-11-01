@@ -10,7 +10,7 @@ Read with the 2026-10-30 ruling ("the approvals are done within the chat window 
 
 - **The conversation is the gate.** The CEO approves an *intent* ("yes, merge all the open PRs across the project") once, in the conversation; the CTO records it (`record-approval.sh` when it is a gate) and executes the whole batch with no per-command harness prompt.
 - **The harness is lenient.** The blanket `Bash` allow stays; `defaultMode: acceptEdits`. Routine shepherding — peek, send, commit, push, merge, reap, reviews, reports — runs silently.
-- **The `ask` list is the never-uninvited set only:** what the CTO must not do without having asked first, where a harness prompt catches a *mistake* rather than re-asking a *decision* the CEO already made. Rewriting remote history (`git push --force*`), deleting remote branches, `git branch -D`, launchd persistence (`launchctl load/unload/bootstrap/bootout`), creating/deleting/re-scoping GitHub repos, and the CTO editing its own permission files. Lanes additionally ask on `gh pr merge` (lanes never merge; `land-lane` does, from the CTO home).
+- **The `ask` list is the never-uninvited set only:** what the CTO must not do without having asked first, where a harness prompt catches a *mistake* rather than re-asking a *decision* the CEO already made. Rewriting remote history (`git push --force*`), deleting remote branches, launchd persistence (`launchctl load/unload/bootstrap/bootout`), creating/deleting/re-scoping GitHub repos, and the CTO editing its own permission files. Lanes additionally ask on `gh pr merge` (lanes never merge; `land-lane` does, from the CTO home).
 - **Auto mode is for unattended runs**, not for a session the CEO is approving things in.
 
 ## 2. Corrections to the request (Claude Code 2.1.316, docs fetched 2026-11-01)
@@ -37,6 +37,10 @@ Also not documented: variable expansion (`$CLAUDE_PROJECT_DIR`) inside permissio
 4. **`lint-skills.sh` CHECK H** — every settings template carries the blanket Bash and the never-uninvited ask set, and no rule sits in both lists.
 5. **`docs/personas/cto.md` "Permissions posture"** + `CLAUDE.md` Steps 1–2 + `CLAUDE.devteam.md` — the table above; a classifier block is answered by asking the CEO to Shift+Tab to `acceptEdits` so the prompt appears, never by a paste-me command; Remote Control is how prompts reach a remote CEO.
 6. **`scripts/cto/test-settings-posture.sh`** — templates, check/apply/merge semantics, preflight's mode report.
+
+## 3b. First live result, same day
+
+The project CTO's first landing after apply (commit → push → PR → squash-merge → cleanup, one compound command) produced exactly one prompt, and not for the merge: for `git branch -D feat/…`, the *local* branch delete that every squash-merge landing needs (`-d` refuses after a squash). Local, reflog-recoverable, routine — misfiled in the never-uninvited set. Retired the same day via the template's `permissions._retired_ask`; `settings-posture.sh --check` names a retired rule still present and `--apply` removes it. Remote branch deletion (`git push --delete`) stays.
 
 ## 4. Acceptance
 

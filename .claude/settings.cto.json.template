@@ -21,6 +21,10 @@
       "PushNotification"
     ],
     "_comment_ask": "The never-uninvited set. Rewriting remote history, deleting remote branches, launchd persistence, creating/deleting/re-scoping GitHub repos, and the CTO editing its own permission files. Each prompts once per use, in every mode, including auto. Merges, pushes, commits, worktree reaps are NOT here: the CEO approves those in the conversation.",
+    "_comment_retired_ask": "Rules this template once shipped in ask and has since retired. sync never deletes on its own, so settings-posture.sh --check names any still present and --apply removes them. git branch -D (2026-11-01): a LOCAL delete, recoverable from the reflog, and what every land-lane does after a squash-merge — it prompted on routine landings.",
+    "_retired_ask": [
+      "Bash(git branch -D *)"
+    ],
     "ask": [
       "Bash(git push --force*)",
       "Bash(git push -f *)",
@@ -29,7 +33,6 @@
       "Bash(git push --delete *)",
       "Bash(git push * --delete *)",
       "Bash(git push * -d *)",
-      "Bash(git branch -D *)",
       "Bash(launchctl load *)",
       "Bash(launchctl unload *)",
       "Bash(launchctl bootstrap *)",

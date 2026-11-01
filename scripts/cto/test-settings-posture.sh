@@ -15,7 +15,7 @@ for f in .claude/settings.cto.json.template .claude/settings.devteam.json.templa
 import json,sys; p=json.load(open(sys.argv[1]))["permissions"]; a=p.get("allow",[]); k=p.get("ask",[])
 assert "Bash" in a, "no blanket Bash"
 assert "Bash(*)" not in a, "Bash(*) and Bash both present"
-for r in ("Bash(git push --force*)","Bash(git branch -D *)","Bash(launchctl load *)","Bash(gh repo delete *)","Edit(.claude/settings.json)"): assert r in k, "ask lacks "+r
+for r in ("Bash(git push --force*)","Bash(launchctl load *)","Bash(gh repo delete *)","Edit(.claude/settings.json)"): assert r in k, "ask lacks "+r
 assert not set(a)&set(k), "rule in both ask and allow"
 assert "Bash(gh pr merge *)" not in a' "$T/$f" && ok "$f: blanket Bash + never-uninvited ask list, nothing in both" || fail "$f posture"
 done
@@ -56,6 +56,12 @@ assert d["enabledMcpjsonServers"] == ["acme-graph"] and d["hooks"]["Stop"][0]["h
 assert sum(1 for r in p["allow"] if r in ("Bash", "Bash(*)")) == 1 and len(d["hooks"]["SessionStart"]) == 1
 assert "Bash(launchctl load *)" in p["ask"] and "Bash(git push --force*)" in p["ask"]
 PY
+
+python3 - "$H/.claude/settings.json" <<'PY2'
+import json, sys; p = sys.argv[1]; d = json.load(open(p)); d["permissions"]["ask"].append("Bash(git branch -D *)"); json.dump(d, open(p, "w"))
+PY2
+OUT="$(bash "$S" --check "$H" 2>&1)"; echo "$OUT" | grep -q 'template retired' && bash "$S" --apply "$H" >/dev/null 2>&1 \
+  && ! grep -q 'git branch -D' "$H/.claude/settings.json" && ok "a rule the template retired (_retired_ask) is reported by --check and removed by --apply" || fail "retired rule: $OUT"
 
 echo "== preflight reports the mode =="
 P="$T/scripts/agentic/preflight.sh"

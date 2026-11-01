@@ -574,7 +574,7 @@ happen in the chat window), the posture is:
 
 | | routine | never-uninvited | decisions |
 |---|---|---|---|
-| what | peek, send, commit, push, merge, worktree reap, VP reviews, reports, logs | force-push / remote branch delete, `git branch -D`, `launchctl` persistence, `gh repo create/delete/edit`, editing the permission files; lanes also `gh pr merge` | sprint go, accepts, promotions, "merge all open PRs" |
+| what | peek, send, commit, push, merge, worktree reap, VP reviews, reports, logs | force-push / remote branch delete, `launchctl` persistence, `gh repo create/delete/edit`, editing the permission files; lanes also `gh pr merge` | sprint go, accepts, promotions, "merge all open PRs" |
 | mechanism | `allow: Bash` (blanket) + `defaultMode: acceptEdits` → runs silently | `ask:` list → one real permission prompt per use, in every mode; forwarded by Remote Control, `/config → Push when actions required` pings the phone | the CEO's words in the conversation, recorded by the CTO (`record-approval.sh`) |
 
 **Rules.**

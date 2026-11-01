@@ -6,6 +6,14 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-11-01 — ask list: `git branch -D` retired; templates can retire ask rules (`_retired_ask`)
+
+First live landing under the posture prompted once — not for the merge, for the LOCAL `git branch -D`
+every squash-merge cleanup (and land-lane.sh) does. Local, reflog-recoverable, routine: removed from
+all three templates. New: `permissions._retired_ask` in `settings.cto.json.template`; `settings-
+posture.sh --check` names a retired rule still present in a home's ask list and `--apply` removes it
+(sync never deletes on its own). Remote branch deletion (`git push --delete`) stays on the list.
+
 ## 2026-11-01 — Permissions posture: the conversation is the gate, the harness is lenient (CEO ruling)
 
 A project CTO reported auto-mode classifier blocks with no prompt, a "no-op `Bash(*)`" and paste-me

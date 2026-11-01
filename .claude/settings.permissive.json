@@ -19,7 +19,6 @@
       "Bash(git push --delete *)",
       "Bash(git push * --delete *)",
       "Bash(git push * -d *)",
-      "Bash(git branch -D *)",
       "Bash(gh pr merge *)",
       "Bash(launchctl load *)",
       "Bash(launchctl unload *)",

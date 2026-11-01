@@ -353,7 +353,7 @@ for pg in sorted(files_g):
 # The conversation is the gate; the harness is lenient. Every settings template carries the blanket
 # Bash allow (routine work runs silently; the docs: Bash(*) is equivalent to Bash) and an ask list of
 # the never-uninvited set. deny > ask > allow in every scope, so a rule in both lists is a dead allow.
-NEVER_UNINVITED = ("Bash(git push --force*)", "Bash(git branch -D *)", "Bash(launchctl load *)",
+NEVER_UNINVITED = ("Bash(git push --force*)", "Bash(launchctl load *)",
                    "Bash(gh repo create *)", "Bash(gh repo delete *)", "Edit(.claude/settings.json)")
 for sf in (".claude/settings.permissive.json", ".claude/settings.devteam.json.template", ".claude/settings.cto.json.template"):
     sp = os.path.join(root, sf)

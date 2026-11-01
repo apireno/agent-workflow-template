@@ -42,6 +42,10 @@ def load(path, template):
 tpl = load(tpl_path, True)
 cur = load(set_path, False)
 tperm, cperm = tpl.get("permissions") or {}, cur.get("permissions") or {}
+# Rules the template once shipped in ask and has since retired (sync never deletes on its own, so
+# they are named explicitly): the raw template's permissions._retired_ask, read before stripping.
+retired = ((json.load(open(tpl_path)).get("permissions") or {}).get("_retired_ask") or [])
+stale = [r for r in cperm.get("ask") or [] if r in retired]
 BLANKET = ("Bash", "Bash(*)")           # the docs: Bash(*) is equivalent to Bash
 
 def has_preflight(d):
@@ -62,6 +66,8 @@ if missing_ask:
 dead = [r for r in cperm.get("ask") or [] if r in (cperm.get("allow") or [])]
 if dead:
     gaps.append("in both ask and allow (ask wins; the allow entry is dead): %s" % ", ".join(dead))
+if stale:
+    gaps.append("ask list carries %d rule(s) the template retired (prompts on routine work): %s" % (len(stale), ", ".join(stale)))
 if not has_preflight(cur):
     gaps.append("hooks.SessionStart has no preflight.sh")
 if "skillListingBudgetFraction" in tpl and "skillListingBudgetFraction" not in cur:
@@ -86,6 +92,7 @@ ask = perm.setdefault("ask", [])
 for r in tperm.get("ask") or []:
     if r not in ask:
         ask.append(r)
+ask[:] = [r for r in ask if r not in retired]
 if not has_preflight(cur):
     cur.setdefault("hooks", {}).setdefault("SessionStart", []).extend((tpl.get("hooks") or {}).get("SessionStart") or [])
 if "skillListingBudgetFraction" in tpl and "skillListingBudgetFraction" not in cur:
