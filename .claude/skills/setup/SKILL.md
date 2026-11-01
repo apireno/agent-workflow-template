@@ -167,11 +167,18 @@ exists, and a list of candidate sibling repos. Walk the CEO through onboarding:
    is dirty (uncommitted changes already present), still write the mechanism files (they're
    template-owned, not app code) but flag it so the CEO knows there's other WIP in that repo.
 
-6. **Mark setup complete and record the CTO home:**
+6. **Apply the permissions posture to this home, mark setup complete, record the CTO home:**
    ```
+   bash scripts/cto/settings-posture.sh --apply      # acceptEdits + blanket Bash + the never-uninvited ask list + preflight hook; a merge
    mkdir -p .claude && touch .claude/.setup-done
    mkdir -p ~/.cto && pwd > ~/.cto/home
    ```
+   The posture (CEO 2026-11-01): the conversation is the gate, the harness is lenient — the CEO
+   approves an intent once in chat and the batch runs with no per-command prompt; only the
+   never-uninvited set (force-push, remote branch delete, launchd, GitHub repo create/delete,
+   edits to the permission files) prompts. Preflight re-checks it every session. If this session
+   is in auto mode the write may be refused as self-modification: say so and ask the CEO to
+   Shift+Tab to acceptEdits, then re-run.
    `~/.cto/home` is the last-resort anchor for every skill. Skills resolve the CTO home from
    `$CTO_HOME` → `$CTO_REPO` → `$CLAUDE_PROJECT_DIR` → a walk up from the cwd → this file.
    `$CLAUDE_PROJECT_DIR` has been observed empty inside skill shells, and a shell that has
@@ -179,8 +186,9 @@ exists, and a list of candidate sibling repos. Walk the CEO through onboarding:
    (loudly, but they fail). One line here prevents it.
 
 7. **Summarize:** what's registered, what got deployed, and the next real step — author the first
-   PRD under `docs/roadmap/prds/` and pick a permissions posture (`default`/`acceptEdits`/
-   `bypassPermissions`, toggle any time with Shift+Tab) if that hasn't already been asked this
-   session.
+   PRD under `docs/roadmap/prds/`. State the permissions posture rather than asking for one:
+   `acceptEdits` is the posture (applied in step 6); Shift+Tab cycles `default → acceptEdits →
+   plan` (→ `auto` if enabled, for unattended runs only — its classifier blocks are not prompts);
+   `bypassPermissions` is not in the cycle unless the session was launched with it.
 
 Sign as: — CTO

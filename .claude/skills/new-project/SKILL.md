@@ -90,6 +90,11 @@ the orchestration mechanism (skills, hooks, personas, scripts, templates) and th
 holds the public template's job — it is the IP side of the public/private split.
 EOF
 
+# Permissions posture for the new home (CEO 2026-11-01: the conversation is the gate, the harness
+# is lenient): acceptEdits, blanket Bash, the never-uninvited ask list, the SessionStart preflight.
+# rsync excluded settings.json on purpose — this writes the home's own from the template.
+bash "$HOME_DIR/scripts/cto/settings-posture.sh" --apply "$HOME_DIR"
+
 # --- 2. Seed .cto/projects.yaml ---
 mkdir -p "$HOME_DIR/.cto"
 {
