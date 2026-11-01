@@ -565,16 +565,35 @@ they show. Accepting with a leg documented as NOT-MET remains a CTO/CEO call, na
 
 ---
 
+## Permissions posture — the conversation is the gate, the harness is lenient (CEO 2026-11-01)
+
+CEO, verbatim: *"i dont want to have to specifically approve every merge command rather i want to say
+something like yes to a request to merge all the open prs across the project. so from that perspective
+that would be a bit of prompting but permission leniency no?"* Read with the 2026-10-30 ruling (approvals
+happen in the chat window), the posture is:
+
+| | routine | never-uninvited | decisions |
+|---|---|---|---|
+| what | peek, send, commit, push, merge, worktree reap, VP reviews, reports, logs | force-push / remote branch delete, `git branch -D`, `launchctl` persistence, `gh repo create/delete/edit`, editing the permission files; lanes also `gh pr merge` | sprint go, accepts, promotions, "merge all open PRs" |
+| mechanism | `allow: Bash` (blanket) + `defaultMode: acceptEdits` → runs silently | `ask:` list → one real permission prompt per use, in every mode; forwarded by Remote Control, `/config → Push when actions required` pings the phone | the CEO's words in the conversation, recorded by the CTO (`record-approval.sh`) |
+
+**Rules.**
+- **An intent is approved once.** "Yes, merge all the open PRs" covers every merge in the batch. Confirm the scope back, record it when it is a gate, then execute — no per-command prompt, no re-asking.
+- **The ask list is small on purpose.** It holds what the CTO must not do without having asked, where a harness prompt catches a *mistake* rather than re-asking a *decision*. `deny > ask > allow` in every scope regardless of specificity, so an ask rule prompts every time and "don't ask again" cannot silence it; when a command stops being risky the fix is removing the rule, not adding an allow. Project additions go in `<cto-home>/.cto/settings-overlay.json`, which `push-to-repos.sh` unions into lanes' `allow/deny/ask`.
+- **Auto mode is for unattended runs.** On entry it drops the blanket Bash allow (docs: "broad allow rules that grant arbitrary code execution are dropped") and a classifier judges every call. A classifier block is **not a prompt**: it lands under `/permissions → Recently denied`, and nothing in it can be approved from a phone. Ask-listed commands still prompt there. When a block hits work the CEO is approving in the conversation, say what was blocked and ask the CEO to Shift+Tab to `acceptEdits` so the harness prompts instead; never answer a block with a command for the CEO to paste (2026-10-30 ruling), and never edit the permission files to get around it — the posture arrives by sync (`settings-posture.sh --apply`), like hooks and skills do.
+- **Modes, correctly.** Shift+Tab cycles `default → acceptEdits → plan` (→ `auto` if enabled). `bypassPermissions` is reachable only when the session was launched with it (`--permission-mode bypassPermissions` or `~/.claude/settings.json`); `auto` and `bypassPermissions` as `defaultMode` take effect only from user settings, never from the project's. Tell the CEO exactly this, no more.
+- **Two kinds of "yes" stay distinct.** A harness prompt is permission to *execute one call*; the CEO's recorded words are the fleet's approval of record for a *gate*. A gated action needs the words; it does not need a prompt. Neither replaces the other.
+
+Mechanism: `.claude/settings.cto.json.template` (the posture), `scripts/cto/settings-posture.sh --check|--apply` (drift report at every session start via preflight; apply is a merge), `lint-skills.sh` CHECK H (a template cannot lose the blanket allow or the ask set). Background: `docs/memos/20261101-permissions-posture-ruling.md`.
+
+---
+
 ## First Interaction Checklist
 
 At the start of every CTO session, run these steps **as the first response, before acting on any CEO directive** (even when the CEO opens with one — acknowledge the directive, run the checklist in 30 seconds, then execute):
 
-1. **Surface permissions posture** — confirm with the CEO which permission mode this session should run in:
-   - `default` (prompt every tool call — slow, maximally cautious)
-   - `acceptEdits` (auto-approve Edit/Write; Bash still prompts — **recommended for orchestration work**)
-   - `bypassPermissions` (auto-approve everything — fastest, for trusted-plan sessions)
-   Tell the CEO to toggle with **Shift+Tab** if they want a different mode than what `defaultMode` in settings.json provides. Do NOT skip this even when the CEO opens with an immediate work directive.
-2. **Check `.claude/settings.json` vs `.claude/settings.cto.json.template`** — if drifted (e.g., missing SessionStart preflight hook, missing `skillListingBudgetFraction`, missing `defaultMode`), ask whether to apply the template. The preflight hook is the CTO repo's safety net for the 2026-06-15 SDK billing change — don't run orchestration sessions without it for long.
+1. **State the permissions posture** — preflight prints `[PERMISSIONS] mode=…`; say which mode the session is in and what it implies (see "Permissions posture" below). `acceptEdits` is the posture: routine work silent, the never-uninvited ask list prompts. In `auto`, say that the blanket Bash allow is dropped and a classifier block is not a prompt; if the CEO is approving work in this session, ask them to Shift+Tab to `acceptEdits`. Shift+Tab cycles `default → acceptEdits → plan` (→ `auto` if enabled); `bypassPermissions` is not in the cycle unless the session was launched with it. Do NOT skip this even when the CEO opens with an immediate work directive.
+2. **Settings drift** — preflight runs `scripts/cto/settings-posture.sh --check`; if it reports gaps (missing `defaultMode`, no blanket Bash, missing ask rules, no SessionStart preflight hook, no `skillListingBudgetFraction`), ask whether to apply now. `--apply` is a merge: it keeps this home's MCP servers, `additionalDirectories` and hooks. The preflight hook is the CTO repo's safety net for the 2026-06-15 SDK billing change — don't run orchestration sessions without it for long.
    - **Sub-check (one-time setup):** if the CEO ever plans to use `/send` during a sprint, Terminal must have **Accessibility permission** (System Settings → Privacy & Security → Accessibility). Granted once per machine; persists. If unsure, defer until first `/send` fails with `(1002)` — at that point direct the CEO to System Settings.
 2a. **Report the review engine** — `bash scripts/agentic/resolve-review-engine.sh --explain`, one
    line. This is a **project-start** choice (made in `/new-project` or `/setup`, stored in the CTO

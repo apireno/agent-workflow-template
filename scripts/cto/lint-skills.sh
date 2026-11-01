@@ -20,6 +20,8 @@
 #            an empty value. /sprint-status' second block did exactly this.
 #
 #   CHECK F  a bare MCP server in a settings allow-list (covers no tools since Claude Code 2.1.299)
+#   CHECK H  a settings template without the blanket Bash allow or the never-uninvited ask list, or
+#            a rule in both lists (CEO 2026-11-01: the conversation is the gate, the harness is lenient)
 #   CHECK G  text telling a human to run a command as a sign-off (CEO ruling 2026-10-30: the CEO
 #            approves in the CTO conversation and the CTO records the words; no gate makes the CEO
 #            run a command, open a shell or retype a token). Mark a deliberate exception `lint-ok`.
@@ -308,8 +310,7 @@ for sf in (".claude/settings.permissive.json", ".claude/settings.devteam.json.te
     if not os.path.isfile(sp):
         continue
     try:
-        txt = "\n".join(l for l in open(sp).read().split("\n") if '"_comment' not in l)
-        allow = (_json.loads(txt).get("permissions") or {}).get("allow") or []
+        allow = (_json.load(open(sp)).get("permissions") or {}).get("allow") or []
     except Exception:
         continue
     for rule in allow:
@@ -347,6 +348,31 @@ for pg in sorted(files_g):
             continue
         findings.append(f"G  {os.path.relpath(pg, root)}:{text.count(chr(10), 0, start) + 1}  tells a human to run a command as a sign-off: "
                         f"\"{sg.strip()[:100]}\". The CTO records the CEO's words instead (record-approval.sh).")
+
+# ── CHECK H: permissions posture in the settings templates (CEO 2026-11-01) ─────────────────
+# The conversation is the gate; the harness is lenient. Every settings template carries the blanket
+# Bash allow (routine work runs silently; the docs: Bash(*) is equivalent to Bash) and an ask list of
+# the never-uninvited set. deny > ask > allow in every scope, so a rule in both lists is a dead allow.
+NEVER_UNINVITED = ("Bash(git push --force*)", "Bash(git branch -D *)", "Bash(launchctl load *)",
+                   "Bash(gh repo create *)", "Bash(gh repo delete *)", "Edit(.claude/settings.json)")
+for sf in (".claude/settings.permissive.json", ".claude/settings.devteam.json.template", ".claude/settings.cto.json.template"):
+    sp = os.path.join(root, sf)
+    if not os.path.isfile(sp):
+        continue
+    try:
+        perms = _json.load(open(sp)).get("permissions") or {}   # _comment keys are valid JSON; ignore them
+    except Exception as ex:
+        findings.append(f"H  {sf}  not valid JSON: {ex}")
+        continue
+    allow, ask = perms.get("allow") or [], perms.get("ask") or []
+    if not any(r in ("Bash", "Bash(*)") for r in allow):
+        findings.append(f"H  {sf}  no blanket Bash allow — routine work would prompt on every call")
+    for r in NEVER_UNINVITED:
+        if r not in ask:
+            findings.append(f"H  {sf}  ask list lacks `{r}` — the never-uninvited set is the harness's only guard")
+    for r in ask:
+        if r in allow:
+            findings.append(f"H  {sf}  `{r}` is in both ask and allow — ask wins, the allow entry is dead")
 
 if findings:
     print(f"lint-skills: {len(findings)} finding(s)\n")

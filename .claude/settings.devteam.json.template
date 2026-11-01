@@ -2,9 +2,10 @@
   "_comment": "Template for per-repo .claude/settings.json on Phase 2 dev-team targets. push-to-repos.sh installs this. Strip _comment fields when applying.",
   "_comment_promptSuggestionEnabled": "OFF in dev-team repos as a SAFETY control, not a preference. Claude Code renders its generated composer suggestion in the same input cells as typed text, distinguished only by colour \u2014 and the window-content API every watcher here reads (Terminal 'get contents') strips colour. A suggestion is therefore byte-identical to a human's typed-but-unsubmitted draft, so any automation that submits 'stranded input' can feed a session its own advice under the CEO's authority (observed 2026-08-27; two attempts). /handoff also exports CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=0 at launch, which takes precedence; this key covers sessions started by hand in the repo, which the launch env does not reach. See docs/memos/2026-08-27-rca-observed-text-is-not-attributed-text.md.",
   "promptSuggestionEnabled": false,
+  "_comment_permissions": "PERMISSIONS POSTURE (CEO 2026-11-01): lenient harness, the sprint brief is the gate. Blanket Bash so a lane never stalls on routine work; ask carries only the never-uninvited set — force-push, remote branch deletion, PR merge (lanes never merge; land-lane does, from the CTO home), launchd persistence, GitHub repo create/delete, edits to its own permission files. An ask rule beats any allow rule, so each prompts every time; an unattended lane that hits one stalls visibly (IDLE in /sprint-status) rather than acting. Project additions go in <cto-home>/.cto/settings-overlay.json (merged by push-to-repos.sh).",
   "permissions": {
     "allow": [
-      "Bash(*)",
+      "Bash",
       "Edit",
       "Write",
       "Read",
@@ -13,6 +14,28 @@
       "WebFetch",
       "WebSearch",
       "mcp__domshell__domshell_execute"
+    ],
+    "ask": [
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f *)",
+      "Bash(git push --delete *)",
+      "Bash(git push * --delete *)",
+      "Bash(git push * -d *)",
+      "Bash(git branch -D *)",
+      "Bash(gh pr merge *)",
+      "Bash(launchctl load *)",
+      "Bash(launchctl unload *)",
+      "Bash(launchctl bootstrap *)",
+      "Bash(launchctl bootout *)",
+      "Bash(gh repo create *)",
+      "Bash(gh repo delete *)",
+      "Bash(gh repo edit *)",
+      "Edit(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/settings.local.json)"
     ]
   },
   "hooks": {

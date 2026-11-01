@@ -6,6 +6,21 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-11-01 — Permissions posture: the conversation is the gate, the harness is lenient (CEO ruling)
+
+A project CTO reported auto-mode classifier blocks with no prompt, a "no-op `Bash(*)`" and paste-me
+fallbacks. Docs check (Claude Code 2.1.316): `Bash(*)` is equivalent to `Bash`; auto mode DROPS the
+blanket allow on entry and a classifier block is not a prompt; `ask` beats `allow` in every scope, so
+"don't ask again" can never silence an ask rule. CEO ruling: approve an intent once in the conversation
+("yes, merge all the open PRs"), no per-command prompts. Shipped: blanket `Bash` + a never-uninvited
+`ask` list (force-push, remote branch delete, launchd, GitHub repo create/delete, permission-file
+edits; lanes add `gh pr merge`) in all three settings templates; `scripts/cto/settings-posture.sh
+--check|--apply` (apply is a merge that keeps MCP servers, dirs, hooks); preflight reports the hook
+input's `permission_mode` and warns in auto; lint CHECK H; `cto.md` "Permissions posture"; CLAUDE.md
+Steps 1–2 corrected (bypass is not in the Shift+Tab cycle; `$CLAUDE_PROJECT_DIR` in permission rules
+is undocumented); `scripts/cto/test-settings-posture.sh`. Memos: `docs/memos/20261101-permissions-
+posture-ruling.md` answering `20261101-permissions-step-remote-approval.md`.
+
 ## 2026-10-30 — record-approval.sh records the most recent matching CEO message (fleet report)
 
 In a long CTO session "ok approved" matched a 2026-09-29 message before the CEO's 2026-10-30 one,

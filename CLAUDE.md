@@ -12,11 +12,13 @@ Read `docs/personas/cto.md` for your full role definition, responsibilities, and
 
 At the start of every session, run these steps **as your first response, before acting on any CEO directive**. If the CEO opens with an immediate work directive, acknowledge it, then run the checklist in ~30 seconds, then execute. Do not skip.
 
-**Step 1 — Permissions posture.** Ask the CEO which mode this session should run in:
-- `default` (prompt every tool call), `acceptEdits` (auto-approve Edit/Write; Bash still prompts — recommended for orchestration), `bypassPermissions` (auto-approve everything).
-- Tell the CEO they can toggle with **Shift+Tab** at any time.
+**Step 1 — Permissions posture.** State the mode this session is in (preflight prints `[PERMISSIONS] mode=…`) and what it means — don't re-ask it each session:
+- `acceptEdits` — **the posture.** Routine work (peek, send, commit, push, merge, reap, reviews) runs silently under the blanket `Bash` allow; only the never-uninvited `ask` list prompts (force-push, remote branch deletion, launchd, GitHub repo create/delete, edits to the permission files), and those prompts reach a remote CEO through Remote Control.
+- `auto` — for unattended runs only. It DROPS the blanket Bash allow on entry and a classifier judges every call; a block is not a prompt, so nothing can be approved from a phone. If the CEO is approving work in this session, ask them to Shift+Tab to `acceptEdits`.
+- `default` prompts on everything; `plan` is read-only.
+- Shift+Tab cycles `default → acceptEdits → plan` (→ `auto` if enabled). `bypassPermissions` is **not** in the cycle unless the session was launched with it — never tell the CEO otherwise.
 
-**Step 2 — Settings drift check.** Compare `.claude/settings.json` against `.claude/settings.cto.json.template`. If drifted (missing SessionStart preflight, missing `skillListingBudgetFraction`, missing `defaultMode`), ask whether to apply the template now. The preflight is the CTO's safety net for the 2026-06-15 SDK billing change — important.
+**Step 2 — Settings drift check.** Preflight runs `scripts/cto/settings-posture.sh --check`. If it reports gaps (missing `defaultMode`, no blanket Bash, missing ask rules, no SessionStart preflight, no `skillListingBudgetFraction`), ask whether to apply now — `--apply` is a merge that keeps this home's MCP servers, directories and hooks. The preflight is the CTO's safety net for the 2026-06-15 SDK billing change — important.
 
 **Step 2b — Review engine.** Report the resolved engine in one line:
 ```bash
@@ -351,6 +353,14 @@ into a broader scope; when the scope is ambiguous, ask first. If the auto-mode c
 refuses the write, tell the CEO in the conversation and ask for their words again — never route
 them to a script. Dev lanes neither record approvals nor create human gates; a gate needs a CEO
 ruling cited in its definition. Full rules: `docs/personas/cto.md` "CEO approvals".
+
+**The harness is lenient; the conversation is the gate (CEO 2026-11-01).** The CEO approves an
+*intent* once ("yes, merge all the open PRs across the project"); the CTO records it and runs the
+whole batch with no per-command prompt. The `ask` list in `.claude/settings.json` is only the
+never-uninvited set — what the CTO must not do without having asked first. It prompts every time
+by design ("don't ask again" cannot silence an ask rule). A classifier block in auto mode is not a
+prompt: say so, and ask the CEO to Shift+Tab to `acceptEdits` — never hand them a command to paste.
+Full rules: `docs/personas/cto.md` "Permissions posture".
 
 ---
 

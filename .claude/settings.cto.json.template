@@ -1,12 +1,13 @@
 {
-  "_comment": "Template for the CTO repo's .claude/settings.json. Copy or merge into .claude/settings.json after Sprint A. Do NOT include the _comment fields when applying.",
-  "_comment_defaultMode": "acceptEdits is the recommended posture for CTO orchestration work \u2014 auto-approve Edit/Write, Bash still prompts. CEO can override per-session with Shift+Tab.",
+  "_comment": "Template for the CTO home's .claude/settings.json. Apply with scripts/cto/settings-posture.sh --apply (a merge: keeps your MCP servers, additionalDirectories and hooks). Do NOT include the _comment fields when applying; preflight.sh runs --check at every session start.",
+  "_comment_posture": "PERMISSIONS POSTURE (CEO 2026-11-01): the conversation is the gate, the harness is lenient. The CEO approves a batch in the conversation ('yes, merge all the open PRs'), the CTO records it, and it runs with no per-command prompt. allow carries the blanket Bash so routine shepherding (peek, send, commit, push, reap, reviews) is silent. ask carries ONLY the never-uninvited set: what the CTO must not do without having asked first. deny > ask > allow in every scope regardless of specificity, so an ask rule prompts every time; 'don't ask again' cannot silence it (the allow it writes never wins) — remove the rule if a command stops being risky. Project-specific additions (object-store deletes, service installs) go in .cto/settings-overlay.json, not here.",
+  "_comment_defaultMode": "acceptEdits is the posture: Edit/Write auto-approved, Bash covered by the blanket allow below, ask-listed commands prompt (forwarded by Remote Control; /config 'Push when actions required' pings the phone). AUTO mode drops the blanket Bash allow on entry and judges every call with a classifier whose block is NOT a prompt — fine for unattended runs, wrong for a session the CEO is approving things in. Shift+Tab cycles default -> acceptEdits -> plan (-> auto if enabled); bypassPermissions is not in the cycle unless the session was launched with it.",
   "defaultMode": "acceptEdits",
-  "_comment_harnessTools": "Monitor / TaskStop / PushNotification are HARNESS-NATIVE tools, not Bash \u2014 Bash(*) does not cover them, so without these entries the orchestrator prompts on every watcher arm. Monitor is also the sanctioned way to run a watcher past the background-Bash cap; see scripts/cto/watch-file-or-prompt.sh --stream for what it should wrap.",
-  "_comment_opsScripts": "This posture grants blanket Bash(*), so scripts/cto/*.sh need no per-script allow entries. If you tighten Bash(*), add one entry per ops script in the SAME commit that adds the script: \"Bash(bash $CLAUDE_PROJECT_DIR/scripts/cto/<script>.sh:*)\". Use $CLAUDE_PROJECT_DIR \u2014 it is the variable Claude Code expands in Bash permission rules; an invented name expands to nothing and matches nothing. See scripts/cto/README.md.",
+  "_comment_harnessTools": "Monitor / TaskStop / PushNotification are HARNESS-NATIVE tools, not Bash — the Bash rule does not cover them, so without these entries the orchestrator prompts on every watcher arm. Monitor is also the sanctioned way to run a watcher past the background-Bash cap; see scripts/cto/watch-file-or-prompt.sh --stream for what it should wrap.",
+  "_comment_opsScripts": "The blanket Bash covers scripts/cto/*.sh, so ops scripts need no per-script allow entries. If you ever narrow it, write absolute-path prefix rules (\"Bash(bash /path/to/home/scripts/cto/<script>.sh *)\"); variable expansion inside permission rules is not documented and must not be relied on.",
   "permissions": {
     "allow": [
-      "Bash(*)",
+      "Bash",
       "Edit",
       "Write",
       "Read",
@@ -18,12 +19,36 @@
       "Monitor",
       "TaskStop",
       "PushNotification"
+    ],
+    "_comment_ask": "The never-uninvited set. Rewriting remote history, deleting remote branches, launchd persistence, creating/deleting/re-scoping GitHub repos, and the CTO editing its own permission files. Each prompts once per use, in every mode, including auto. Merges, pushes, commits, worktree reaps are NOT here: the CEO approves those in the conversation.",
+    "ask": [
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f *)",
+      "Bash(git push --delete *)",
+      "Bash(git push * --delete *)",
+      "Bash(git push * -d *)",
+      "Bash(git branch -D *)",
+      "Bash(launchctl load *)",
+      "Bash(launchctl unload *)",
+      "Bash(launchctl bootstrap *)",
+      "Bash(launchctl bootout *)",
+      "Bash(gh repo create *)",
+      "Bash(gh repo delete *)",
+      "Bash(gh repo edit *)",
+      "Edit(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/settings.local.json)",
+      "Edit(~/.claude/settings.json)",
+      "Write(~/.claude/settings.json)"
     ]
   },
   "_comment_skillBudget": "Default skill listing budget is 1% of context. With ~15 skills planned, raise to 2% to keep descriptions intact.",
   "skillListingBudgetFraction": 0.02,
   "hooks": {
-    "_comment_SessionStart": "Run preflight on every session start. Output appears in Claude's context as additionalContext \u2014 warnings/errors surface immediately.",
+    "_comment_SessionStart": "Run preflight on every session start. Output appears in Claude's context as additionalContext — warnings/errors surface immediately. It also reads the hook input's permission_mode and reports it.",
     "SessionStart": [
       {
         "matcher": "*",
@@ -35,7 +60,7 @@
         ]
       }
     ],
-    "_comment_Stop_inbox": "Drain ~/.cto/inbox/ at the end of every turn. Sprint B work \u2014 wire this in once /escalate-drain skill exists.",
+    "_comment_Stop_inbox": "Drain ~/.cto/inbox/ at the end of every turn. Sprint B work — wire this in once /escalate-drain skill exists.",
     "_Stop_placeholder": [
       {
         "matcher": "*",

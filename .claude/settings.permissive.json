@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(*)",
+      "Bash",
       "Edit",
       "Write",
       "Read",
@@ -10,6 +10,28 @@
       "WebFetch",
       "WebSearch",
       "mcp__domshell__domshell_execute"
+    ],
+    "ask": [
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f *)",
+      "Bash(git push --delete *)",
+      "Bash(git push * --delete *)",
+      "Bash(git push * -d *)",
+      "Bash(git branch -D *)",
+      "Bash(gh pr merge *)",
+      "Bash(launchctl load *)",
+      "Bash(launchctl unload *)",
+      "Bash(launchctl bootstrap *)",
+      "Bash(launchctl bootout *)",
+      "Bash(gh repo create *)",
+      "Bash(gh repo delete *)",
+      "Bash(gh repo edit *)",
+      "Edit(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/settings.local.json)"
     ]
   }
 }

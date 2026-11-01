@@ -21,6 +21,17 @@ REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 CRITICAL_FAILURES=0
 ADVISORY_WARNINGS=0
 
+# Hook input: JSON on stdin when Claude Code runs this as a SessionStart hook (carries
+# permission_mode); a tty when run by hand; an open pipe from a skill `!` block. Read with a
+# timeout so no caller can hang here.
+PERMISSION_MODE=""
+if [ ! -t 0 ]; then
+    HOOK_INPUT=""; IFS= read -r -d '' -t 2 HOOK_INPUT || true
+    PERMISSION_MODE="$(printf '%s' "$HOOK_INPUT" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("permission_mode") or "")
+except Exception: print("")' 2>/dev/null)"
+fi
+
 # ─── 0. First-run onboarding trigger ─────────────────────────────────────────
 # A fresh clone has no real .cto/projects.yaml (only the .example) and no
 # .claude/.setup-done marker. Surface a directive the CTO persona cannot miss —
@@ -298,6 +309,29 @@ PYREG
                 printf '%s\n' "$JOUT" | grep -E 'MISMATCH|MISSING' | head -12 | sed 's/^/    /'
                 echo "    Full ledger: .cto/join-ledger.md — rule which side moves; the verify of the repo that moved the boundary carries the row."
             fi
+        fi
+        ;;
+esac
+
+# ─── 11. Permissions posture (CTO homes only) — CEO 2026-11-01 ───────────────
+# The conversation is the gate; the harness is lenient (blanket Bash allow, a never-uninvited ask
+# list, acceptEdits). AUTO mode drops the blanket allow on entry and judges every call with a
+# classifier whose block is NOT a prompt — nothing in it can be approved from a phone. Report the
+# session's mode and any drift of settings.json from the template posture.
+case "$REPO_NAME" in
+    agent-workflow-template|*-cto)
+        if [ -x "$REPO_ROOT/scripts/cto/settings-posture.sh" ]; then
+            POSTURE_OUT="$("$REPO_ROOT/scripts/cto/settings-posture.sh" --check "$REPO_ROOT" 2>/dev/null)"
+            if [ $? -eq 1 ]; then
+                emit_warning "permissions posture — .claude/settings.json drifts from .claude/settings.cto.json.template:"
+                echo "$POSTURE_OUT" | sed 's/^/    /'
+                echo "    Apply with: bash scripts/cto/settings-posture.sh --apply   (a merge; keeps MCP servers, dirs, hooks)"
+            fi
+        fi
+        if [ "$PERMISSION_MODE" = "auto" ]; then
+            emit_warning "this session is in AUTO mode: the blanket Bash allow is dropped on entry and a classifier judges every call; a block is not a prompt, so nothing it refuses can be approved remotely. Ask-listed commands still prompt. For work the CEO is approving in this conversation, ask the CEO to Shift+Tab to acceptEdits."
+        elif [ -n "$PERMISSION_MODE" ]; then
+            echo "[PERMISSIONS] mode=$PERMISSION_MODE (acceptEdits: routine work silent, the never-uninvited ask list prompts, prompts reach Remote Control)"
         fi
         ;;
 esac

@@ -14,7 +14,7 @@ Read and follow `docs/personas/dev-team.md` for your role definition, output con
 
 **Before any other work, check whether `.claude/.permissions-asked` exists.** If it does, skip this section. If it does NOT exist, this is a fresh project — you MUST ask the CEO exactly once:
 
-> "This project ships with restrictive Claude Code permissions by default. Would you like to enable the more permissive preset (`Bash(*)`, Edit, Write, Read, Glob, Grep, WebFetch, WebSearch)? It reduces approval prompts but grants broad tool access. [y/N]"
+> "This project ships with restrictive Claude Code permissions by default. Would you like to enable the lenient preset (blanket `Bash`, Edit, Write, Read, Glob, Grep, WebFetch, WebSearch; force-push, remote branch deletion, PR merge, launchd and GitHub repo create/delete still prompt)? It removes routine approval prompts but grants broad tool access. [y/N]"
 
 Then WAIT for the answer.
 - If **yes**: run `cp .claude/settings.permissive.json .claude/settings.json && touch .claude/.permissions-asked`.
