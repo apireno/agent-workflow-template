@@ -80,7 +80,7 @@ All sprint artifacts live at `docs/sprints/sprint-XX/`:
 |----------|--------|-------|
 | `scope.md` | VP of Product | Before sprint |
 | `sprint-plan.md` | Dev Team | Phase 1 |
-| `product-review.md` | VP of Product (auto) | Phase 1 + 3 |
+| `product-review.md` | VP of Product (auto) | Phase 1 (lane-run) + 3 (CTO-run) |
 | `vp-eng-review.md` | VP of Engineering (auto) | Phase 1 |
 | `security-review.md` | VP of Security (auto) | Phase 1 (if needed) |
 | `infra-review.md` | VP of DevOps (auto) | Phase 1 (if needed) |
@@ -88,7 +88,7 @@ All sprint artifacts live at `docs/sprints/sprint-XX/`:
 | `test-results.md` | Dev Team | Phase 2 |
 | `dev-report.md` | Dev Team | Phase 2 |
 | `demo-output.md` | Dev Team | Phase 2 |
-| `test-eval.md` | VP of Engineering (auto) | Phase 3 |
+| `test-eval.md` | VP of Engineering (auto) | Phase 3 (CTO-run) |
 
 ---
 

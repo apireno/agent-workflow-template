@@ -91,11 +91,15 @@ Run:
 ./scripts/agentic/escalate-to-cto.sh \
   --persona "Dev Team" \
   --issue "DESCRIBE THE ISSUE" \
-  --sprint XX \
-  --context docs/sprints/sprint-XX/relevant-file.md
+  --sprint <number-or-slug> \
+  --context docs/sprints/<sprint-dir>/relevant-file.md
 ```
 
-Requires `.cto-path` in repo root (or `CTO_REPO` env var).
+This drops a memo in the CTO inbox (`~/.cto/inbox/<repo>-<timestamp>.md`); the CTO drains it with
+`/escalate-drain` and writes the response to the path the script prints. No model is called
+(`--sync`, the legacy `claude -p` path, is deprecated and not used by the fleet).
+
+Environment troubleshooting (e.g. `uv run` failing in a fresh worktree): see `docs/personas/dev-team-runbook.md`.
 
 ### 8. README (Sprint 1 Only)
 **Sprint 1 for every new repo MUST include a `README.md` task.** This is not optional.

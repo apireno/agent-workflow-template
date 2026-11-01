@@ -42,5 +42,5 @@
 - [ ] Governed derived artifacts regenerated if a covered file changed (`derived-artifact-gate.sh` exits 0 — ADR-002)
 - [ ] Test results saved to `test-results.md`
 - [ ] Dev report written to `dev-report.md`
-- [ ] VP evaluations requested via `vp-review.sh` (see Phase 3 in CLAUDE.md)
+- [ ] `dev-report.md` ends with `Phase-3 reviews pending: CTO` (the CTO runs Phase-3 VP reviews; see Phase 3 in CLAUDE.md)
 - [ ] CEO verdict received

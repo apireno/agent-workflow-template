@@ -38,7 +38,7 @@ Before doing anything, read the goal file you were given. Look for the `Type:` h
 
 - **PLAN MODE** (default for greenfield work) — goal file says `Type: Plan-first` or describes scope without referencing prior planning artifacts. Do all phases below in order: Phase 1 (planning + VP reviews) → CEO approval → Phase 2 (execution) → Phase 3 (evaluation). Emit `SPRINT_PLAN_READY` after Phase 1.
 
-- **EXECUTE MODE** — goal file explicitly says the plan is already approved (look for `Type: EXECUTE`, `plan APPROVED`, `no plan-first cycle`, or references to `prior` / `vp-eng-review.md` / `product-review.md` already on disk in the sprint folder). The CTO has already worked through planning + VP review in a prior session. **SKIP Phase 1 entirely.** Read the prior plan and VP reviews to understand scope, then go directly to Phase 2 (execution) → Phase 3 (evaluation). Emit `DEV_REPORT_READY` when implementation is committed, branch pushed, dev-report.md on disk, Phase 3 evaluations complete.
+- **EXECUTE MODE** — goal file explicitly says the plan is already approved (look for `Type: EXECUTE`, `plan APPROVED`, `no plan-first cycle`, or references to `prior` / `vp-eng-review.md` / `product-review.md` already on disk in the sprint folder). The CTO has already worked through planning + VP review in a prior session. **SKIP Phase 1 entirely.** Read the prior plan and VP reviews to understand scope, then go directly to Phase 2 (execution) → Phase 3 (evaluation). Emit `DEV_REPORT_READY` when implementation is committed, branch pushed, dev-report.md on disk with the line `Phase-3 reviews pending: CTO` (the lane does not run Phase-3 reviews — see Phase 3).
 
 If the goal file is ambiguous (no clear PLAN-vs-EXECUTE markers), default to PLAN MODE. If the goal file references a `--prior` response file, that's a strong signal you're in EXECUTE MODE (the prior contains the plan + reviews).
 
@@ -100,58 +100,39 @@ Then WAIT. Do not write any code until the CEO explicitly approves.
 
 **Step 10.** Run the [AUTO] demo steps yourself and save the output to `docs/sprints/sprint-XX/demo-output.md`. This proves the demo works and gives VP reviewers concrete evidence. If any demo step fails, fix it before proceeding.
 
-#### Phase 3: Evaluation (you orchestrate) — DO NOT SKIP THIS PHASE
+#### Phase 3: Evaluation (the CTO's independent gate) — the lane does NOT run it
 
-**Phase 3 is NOT optional.** After writing the dev report and demo output, you MUST proceed to Step 11. The sprint is not done until VP evaluations are on disk and the CEO has given a verdict.
-
-> **LANE — you run exactly TWO reviews here, with exactly these filenames.**
+> **CTO 2026-10-31: Phase-3 VP reviews are the CTO's independent gate; lanes do not self-run them.**
 >
 > | Artifact | Owner | Filename |
 > |---|---|---|
-> | Dev-lane product review | **you** | `docs/sprints/sprint-XX/product-review.md` |
-> | Dev-lane engineering/test review | **you** | `docs/sprints/sprint-XX/test-eval.md` |
-> | Accept-gate VP reviews | **CTO** | anything else — `phase3-review-*.md`, `cto-decision-*.md`, `conformance.md` |
+> | Phase-3 product review | **CTO** | `docs/sprints/sprint-XX/product-review.md` (Phase-3 pass) |
+> | Phase-3 engineering/test review | **CTO** | `docs/sprints/sprint-XX/test-eval.md` |
+> | Accept-gate reviews + decision | **CTO** | `phase3-review-*.md`, `cto-decision-*.md`, `conformance.md` |
 >
-> Do **not** invent additional review files. Dev sessions have repeatedly generated their own
-> `phase3-review-vp-*.md` — duplicating the CTO's independent accept-gate, and (when the engine
-> failed) leaving empty files behind that a later reviewer flagged as reviews missing content.
-> The CTO's Phase-3 review exists to be **independent of you**; a copy you commission yourself
-> cannot serve that purpose, so it is not yours to run. Two files. No others.
->
-> **If a review command fails, delete any empty output it left and say so in `dev-report.md`.**
-> Never leave a zero-byte review on disk: downstream it is indistinguishable from a review that
-> ran and found nothing to say. Reporting "the vp-prod review failed, engine error in the log"
-> is a complete and acceptable Phase-3 outcome. Producing an empty file is not.
->
-> **If the review ENGINE is down** — every attempt fails with the same engine-level error
-> (`agy-exec: TOOL-DENIED`, an auth or quota message, a CLI not found) — that is a mechanism gap,
-> not a sprint failure. Record it in `dev-report.md` under `Mechanism gaps` with the engine name and
-> the exact error line, **do not** switch engines yourself (no `REVIEW_ENGINE=`, no edit to
-> `.review-engine`), finish the rest of Phase 3, and close with `DEV_REPORT_READY` plus the line
-> `Phase-3 reviews pending: engine <name> down`. The CTO re-runs them on a working engine. A lane
-> never accepts its own work without its reviews, and never invents them.
+> The Phase-3 review exists to be **independent of you**; a review you commission on your own
+> work cannot serve that purpose, so it is not yours to run. Do not run `vp-review.sh` (or the
+> `/vp-review` skill) on `dev-report.md`, and do not create any of the files above — not even
+> empty placeholders. A zero-byte review on disk is indistinguishable downstream from a review
+> that ran and found nothing to say.
 
-**Step 11. MANDATORY — EXECUTE these bash commands:**
+**Step 11.** Close Phase 2 by writing this exact line at the end of `dev-report.md`:
 
-```bash
-./scripts/agentic/vp-review.sh vp-prod docs/sprints/sprint-XX/dev-report.md docs/sprints/sprint-XX/product-review.md
+```
+Phase-3 reviews pending: CTO
 ```
 
-```bash
-./scripts/agentic/vp-review.sh vp-eng docs/sprints/sprint-XX/dev-report.md docs/sprints/sprint-XX/test-eval.md
-```
-
-**Step 12. VERIFY** the evaluation files exist:
+**Step 12. VERIFY** you left no Phase-3 review files behind (this should print nothing):
 
 ```bash
-ls -la docs/sprints/sprint-XX/product-review.md docs/sprints/sprint-XX/test-eval.md
+ls docs/sprints/sprint-XX/test-eval.md docs/sprints/sprint-XX/phase3-review-*.md 2>/dev/null
 ```
 
 **Step 13. STOP.** Present the following to the CEO:
 1. **Summary** — what was built, test results (pass/fail counts), any deviations from plan.
 2. **Demo output** — key results from the automated [AUTO] demo steps you already ran.
 3. **HITL demo actions** — if any demo steps are tagged [HITL], list them and tell the CEO: "These steps require you to verify manually." If no HITL steps, say "All verification is automated."
-4. **VP evaluation summary** — verdict from each VP and their key findings.
+4. **Phase-3 status** — "Phase-3 reviews pending: CTO" (the CTO runs them independently at accept).
 5. **Ask for verdict** — "Ready for your verdict. Please also run the [HITL] demo steps if listed above."
 
 Then WAIT for CEO verdict.
@@ -228,17 +209,17 @@ When the CEO (or a VP persona during an inline review) says "escalate to CTO", "
 ./scripts/agentic/escalate-to-cto.sh \
   --persona "Dev Team" \
   --issue "DESCRIBE THE ISSUE HERE" \
-  [--sprint XX] \
-  [--context docs/sprints/sprint-XX/relevant-file.md]
+  [--sprint <number-or-slug>] \
+  [--context docs/sprints/<sprint-dir>/relevant-file.md]
 ```
 
 Add `--context` flags for any relevant files (sprint plan, VP review, ADR, etc.). Multiple `--context` flags are supported.
 
-**Step 3.** The CTO response is written to `docs/sprints/sprint-XX/cto-escalation-{timestamp}.md` and printed. Read it and present the CTO's guidance to the CEO.
+**Step 3.** The script drops a memo in the CTO inbox (`~/.cto/inbox/<repo>-<timestamp>.md`) and prints the path where the CTO's response will land (`docs/sprints/<sprint-dir>/cto-escalation-<timestamp>.md`, or a temp file without a sprint). No model is called. Tell the CEO the escalation is pending; once the CTO has drained it (`/escalate-drain`), read the response and present the CTO's guidance to the CEO.
 
 **Step 4. STOP.** Wait for the CEO to acknowledge the CTO's guidance before proceeding. Do not unilaterally apply the CTO's recommendation without CEO sign-off.
 
-**Requires:** `.cto-path` file in this repo root pointing to your `agent-workflow-template` repo, OR `CTO_REPO` env var. Copy `.cto-path.example` to `.cto-path` if not set up.
+**Requires:** a writable `~/.cto/inbox/` (created on first use; override with `CTO_INBOX`). The legacy `--sync` mode (synchronous `claude -p` into the CTO repo, needing `.cto-path` or `CTO_REPO`) is deprecated — it is the metered programmatic path; do not use it.
 
 ---
 
@@ -253,15 +234,16 @@ This workflow requires writing files and executing bash commands. If you are in 
 3. **Presenting the plan in conversation instead of as a file.** Write files, run commands, then tell the CEO the files are ready.
 4. **Starting code before CEO approval.** WAIT for explicit approval even if VP reviews look clean.
 5. **Using plan mode.** Exit it immediately.
-6. **Skipping Phase 3.** Phase 3 evaluations are mandatory. The sprint is not done after the dev report.
-7. **Running the CTO's accept-gate reviews yourself.** Your Phase 3 is exactly two files —
-   `product-review.md` and `test-eval.md`. `phase3-review-*.md`, `cto-decision-*.md` and
-   `conformance.md` belong to the CTO and must not appear in a sprint dir with your name on them.
-8. **Leaving a zero-byte review file.** If a review command fails, delete the empty output and
-   record the failure in `dev-report.md`. An empty file reads downstream as a review that ran
+6. **Omitting the Phase-3 hand-off line.** `dev-report.md` must end with `Phase-3 reviews pending: CTO`.
+7. **Running Phase-3 reviews yourself.** CTO 2026-10-31: Phase-3 VP reviews are the CTO's
+   independent gate; lanes do not self-run them. The Phase-3 `product-review.md`, `test-eval.md`,
+   `phase3-review-*.md`, `cto-decision-*.md` and `conformance.md` belong to the CTO and must not
+   appear in a sprint dir with your name on them.
+8. **Leaving a zero-byte review file.** If a Phase-1 review command fails, delete the empty output
+   and record the failure in `dev-report.md`. An empty file reads downstream as a review that ran
    and had nothing to say — a failure wearing the costume of a pass.
 
-**The rule: sprint plan on disk → execute vp-review.sh → verify review files exist → CEO approval → code → tests → execute vp-review.sh evaluations → verify evaluation files exist → CEO verdict. No exceptions.**
+**The rule: sprint plan on disk → execute vp-review.sh → verify review files exist → CEO approval → code → tests → dev-report.md ending `Phase-3 reviews pending: CTO` → CTO runs Phase-3 reviews → CEO verdict. No exceptions.**
 
 ### Boundaries
 - You write code, tests, sprint plans, dev reports, and README updates
@@ -349,9 +331,17 @@ integration repos are legitimately domain-bearing; this rule does not apply to t
 
 ### Branches, worktrees and pins (BINDING — ADR-003)
 
-- **One branch per sprint; never commit to the base branch** (the one `origin/HEAD` names). The CTO lands
-  your branch when the sprint is accepted: it must contain the latest base, so if the base moved, merge
-  it into your branch before you report done.
+- **One branch per sprint, in the MAIN checkout; never commit to the base branch** (the one `origin/HEAD`
+  names). Check your sprint branch out in the repo's main checkout (`~/repos/<repo>`) and work there.
+  **Do not create a worktree** (CEO ruling 2026-10-28, reaffirmed 2026-11-01 after six lanes opened
+  seven new worktrees at one kickoff: worktrees cost 0.4–5.6 GB each with their `.venv` and are what
+  fills the disk). If the main checkout is dirty with files that are not yours, tell the CTO in your
+  first message and wait; do not route around it with a worktree. The only checkouts besides the main
+  one are (a) pinned sibling engines from `.claude/pins.yaml` (next bullet) and (b) a detached
+  baseline the sprint plan names explicitly and the CTO approved — reuse an existing `-wt-<sha>` at
+  that sha before creating one; it is reaped at accept. The CTO lands your branch when the sprint is
+  accepted: it must contain the latest base, so if the base moved, merge it into your branch before
+  you report done.
 - **Never push to the base branch.** A pre-push hook refuses it; a direct push skips every landing check.
   If one ever happens, say so in `dev-report.md` — it is an incident, not a shortcut.
 - **Put run outputs under `outputs/` or `data/`** (or the project's `.claude/land.yaml` `archive:` list).
