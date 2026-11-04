@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  CTO heartbeat (CEO 2026-11-04): every 10 minutes, if lanes are live and the CTO session has been
+  quiet 60 min, wake it (scripts/cto/cto-heartbeat.sh). See docs/ops/_templates/README.md.
+  Replace __CTO_HOME__ with the absolute path of your CTO home and __HOME__ with your home directory.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.cto.heartbeat</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__CTO_HOME__/scripts/cto/cto-heartbeat.sh</string>
+    <string>check</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CTO_HOME</key><string>__CTO_HOME__</string>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key><integer>600</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>__HOME__/.cto/state/heartbeat.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/.cto/state/heartbeat.log</string>
+</dict>
+</plist>

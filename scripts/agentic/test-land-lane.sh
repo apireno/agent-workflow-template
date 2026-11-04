@@ -8,6 +8,9 @@ set -uo pipefail
 T="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"; L="$T/scripts/agentic/land-lane.sh"
 PASS=0; FAIL=0; ok(){ PASS=$((PASS+1)); echo "  ok   $1"; }; fail(){ FAIL=$((FAIL+1)); echo "  FAIL $1"; [ -n "${2:-}" ] && printf '%s\n' "$2" | tail -6 | sed 's/^/       | /'; return 0; }
 W0="$(mktemp -d "${TMPDIR:-/tmp}/land.XXXXXX")"; W0="$(cd "$W0" && pwd -P)"; trap 'rm -rf "$W0"' EXIT
+# A private HOME: land-lane falls back to ~/.cto/home for the CTO home, and a real one's project
+# landing checks must never run inside these fixtures.
+export HOME="$W0/home"; mkdir -p "$HOME"
 mkdir -p "$W0/bin"; cat > "$W0/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 # stub: `gh run list --commit SHA ...` -> JSON per $STUB_CI; optional side effect to move base
@@ -91,4 +94,28 @@ setup hook; ( cd "$M" && echo y > y && git add y && git commit -qm y ) >/dev/nul
 OUT=$(cd "$M" && git push origin HEAD:main 2>&1); [ $? -ne 0 ] && echo "$OUT" | grep -q "REFUSED" && ok "direct push to main refused" || fail "hook allowed a direct push" "$OUT"
 OUT=$(cd "$M" && ALLOW_BASE_PUSH="hotfix X" git push -q origin HEAD:main 2>&1); [ $? -eq 0 ] && grep -q "hotfix X" "$M/.claude/land-overrides.log" && ok "ALLOW_BASE_PUSH lets it through and logs the reason" || fail "allow" "$OUT"
 OUT=$(cd "$M" && git push -q origin HEAD:other-branch 2>&1); [ $? -eq 0 ] && ok "pushing a non-base branch is unaffected" || fail "other branch" "$OUT"
+echo "== 8. derived artifacts must be CURRENT on the sha that lands (2026-11-04) =="
+setup gate; printf 'artifacts:\n  - name: graph\n    path: docs/graph/\n    generator: scripts/graph/missing.py\n    mode: warn\n' > "$LN/.claude-manifest"
+mkdir -p "$LN/.claude"; mv "$LN/.claude-manifest" "$LN/.claude/derived-artifacts.yaml"
+OUT=$(bash "$L" "$S" 2>&1); RC=$?
+[ $RC -eq 3 ] && echo "$OUT" | grep -q "INCOMPLETE at current" && echo "$OUT" | grep -q "NO-GENERATOR" && ok "a governed artifact with no generator stops the landing at 'current' (warn mode too)" || fail "gate rc=$RC" "$OUT"
+git -C "$M" ls-remote --heads origin main | grep -q "$(git -C "$LN" rev-parse HEAD)" && fail "landed anyway" || ok "  nothing landed"
+echo "== 9. the project layer's landing checks run, and refuse =="
+setup proj; H="$W/acme-cto"; mkdir -p "$H/.git" "$H/.cto/project/checks/landing"
+printf '#!/bin/sh\necho "coverage: 0 graded cells"; exit 1\n' > "$H/.cto/project/checks/landing/coverage.sh"; chmod +x "$H/.cto/project/checks/landing/coverage.sh"
+OUT=$(CTO_HOME="$H" bash "$L" "$S" 2>&1); RC=$?
+[ $RC -eq 3 ] && echo "$OUT" | grep -q "project/coverage.sh\] REFUSED" && echo "$OUT" | grep -q "0 graded cells" && ok "a failing project landing check refuses, with its output" || fail "project check rc=$RC" "$OUT"
+printf '#!/bin/sh\necho "coverage: 12 graded cells"\n' > "$H/.cto/project/checks/landing/coverage.sh"
+OUT=$(CTO_HOME="$H" bash "$L" "$S" 2>&1); RC=$?
+[ $RC -eq 0 ] && echo "$OUT" | grep -q "coverage.sh\] ok — coverage: 12 graded cells" && ok "a passing check lands, with its summary line" || fail "project ok rc=$RC" "$OUT"
+echo "== 10. pre-push: creating a branch named like another base =="
+setup newbase
+OUT=$(cd "$M" && git push origin HEAD:master 2>&1); [ $? -ne 0 ] && echo "$OUT" | grep -q "creates 'master'" && ok "pushing a new 'master' to a 'main' repo is refused" || fail "new base allowed" "$OUT"
+OUT=$(cd "$M" && ALLOW_NEW_BASE="migrating default branch" git push -q origin HEAD:master 2>&1); [ $? -eq 0 ] && ok "ALLOW_NEW_BASE lets a deliberate one through" || fail "allow new base" "$OUT"
+echo "== 11. pre-commit: no commits on a landed branch =="
+setup landed; cp "$T/.claude/githooks/pre-commit" "$M/.claude/githooks/"
+( cd "$LN" && git -c core.hooksPath=/dev/null push -q -u origin lane-s1 && git -c core.hooksPath=/dev/null push -q origin --delete lane-s1 && git fetch -q --prune origin ) >/dev/null 2>&1
+echo more > "$LN/more.txt"; git -C "$LN" add more.txt
+OUT=$(git -C "$LN" commit -qm more 2>&1); [ $? -ne 0 ] && echo "$OUT" | grep -q "was landed" && ok "a commit on a branch whose remote is gone is refused, naming the fresh-branch command" || fail "landed commit allowed" "$OUT"
+OUT=$(LANDED_BRANCH_OK=1 git -C "$LN" commit -qm more 2>&1); [ $? -eq 0 ] && ok "LANDED_BRANCH_OK=1 lets a deliberate one through" || fail "landed ok" "$OUT"
 echo ""; echo "land-lane tests: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

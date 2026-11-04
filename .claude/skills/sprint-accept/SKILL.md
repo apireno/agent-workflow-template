@@ -169,6 +169,30 @@ if [ ! -f "$SPRINT_DIR/conformance.md" ]; then
   MISSING=$((MISSING + 1))
 fi
 
+# DECLARED SECTIONS · CURRENT ARTIFACTS · PROJECT ACCEPT LAYER (fleet report 2026-11-04)
+# The plan's Declares line makes Wiring / Statistical Risks / LLM-Stage Budget mandatory; governed
+# derived artifacts must be current in BYTES, not only stamps (--bytes rebuilds and restores); the
+# project's and repo's accept checks run and their checklist is printed for the decision to answer.
+LANE_TOP="$(git -C "$SPRINT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$SPRINT_DIR")"
+if [ -x "$ROOT/scripts/agentic/check-dev-report.sh" ] && [ -f "$SPRINT_DIR/dev-report.md" ]; then
+  CDR_OUT="$(bash "$ROOT/scripts/agentic/check-dev-report.sh" "$SPRINT_DIR" 2>&1)"; CDR_RC=$?
+  echo "$CDR_OUT" | sed 's/^/  /'
+  [ "$CDR_RC" -eq 1 ] && MISSING=$((MISSING + 1))
+fi
+if [ -f "$LANE_TOP/.claude/derived-artifacts.yaml" ]; then
+  DAG_OUT="$(bash "$ROOT/scripts/agentic/derived-artifact-gate.sh" --bytes --repo "$LANE_TOP" 2>&1)"; DAG_RC=$?
+  if [ "$DAG_RC" -ne 0 ]; then
+    echo "  [not current] governed derived artifacts (derived-artifact-gate.sh --bytes):"
+    echo "$DAG_OUT" | sed 's/^/    /'
+    MISSING=$((MISSING + 1))
+  fi
+fi
+if [ -x "$ROOT/scripts/agentic/project-layer.sh" ]; then
+  PL_OUT="$(bash "$ROOT/scripts/agentic/project-layer.sh" accept --repo "$LANE_TOP" --home "$ROOT" 2>&1)"; PL_RC=$?
+  [ -n "$PL_OUT" ] && echo "$PL_OUT" | sed 's/^/  /'
+  [ "$PL_RC" -ne 0 ] && MISSING=$((MISSING + 1))
+fi
+
 if [ "$MISSING" -gt 0 ]; then
   echo ""
   echo "CANNOT ACCEPT: missing $MISSING canonical artifact(s). Sprint is not ready to decide on yet."
@@ -314,6 +338,11 @@ Above are the sprint plan, dev report, and all VP reviews. Synthesize a final ac
    as a documented known-issue** (with rationale + follow-up owner) or **blocks acceptance**. Accept
    does NOT require conformance to PASS — shipping with known gaps is your call, but it must be
    *named here*, never silent. If `conformance.md` shows everything MET, say so in one line.
+2b. **PROJECT ACCEPT CHECKLIST + WIRING.** If the inventory step printed a `[CHECKLIST — … accept]`
+   (the project's or repo's `checklists/accept.md`), the decision file gets a `## Project checklist`
+   section answering EVERY item: `done` · `N/A: <why>` · `waived by CEO ("<their words>")`. An
+   unanswered item is an unmade decision. Any mechanism the dev-report lists as **UNWIRED** is named
+   here too, accepted as a known gap or blocking — never silent.
 
 3. **Did the dev report address ALL Phase 1 review blockers?** (compare dev-report to vp-*-review.md from Phase 1)
 4. **Did Phase 3 evals approve?** (check test-eval.md, vp-datascience-review.md for dev-report.md)

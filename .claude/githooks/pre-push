@@ -20,6 +20,19 @@ fi
 [ "${LAND_LANE:-0}" = "1" ] && exit 0
 BASE="$(git symbolic-ref --quiet --short "refs/remotes/$REMOTE/HEAD" 2>/dev/null)"; BASE="${BASE#"$REMOTE"/}"
 [ -n "$BASE" ] || exit 0          # remote HEAD unknown: nothing to protect yet (land-lane refuses until it is set)
+# A NEW remote branch named like a base branch (master in a main repo, or vice versa) is a push
+# from the wrong checkout or a chained `cd` — fleet report 2026-11-04: a stray `master` pushed to
+# a `main` repo. Refused unless deliberate: ALLOW_NEW_BASE="<why>".
+ZERO=0000000000000000000000000000000000000000
+while read -r _lref _lsha rref _rsha; do
+    case "$rref" in refs/heads/main|refs/heads/master|refs/heads/trunk|refs/heads/develop|refs/heads/development) ;; *) continue ;; esac
+    [ "$rref" = "refs/heads/$BASE" ] && continue
+    [ "$_rsha" = "$ZERO" ] || continue
+    if [ -n "${ALLOW_NEW_BASE:-}" ]; then echo "pre-push: creating '${rref#refs/heads/}' ALLOWED by ALLOW_NEW_BASE: $ALLOW_NEW_BASE" >&2; continue; fi
+    echo "pre-push: REFUSED — this creates '${rref#refs/heads/}' on $REMOTE, whose base is '$BASE'. That is almost always" >&2
+    echo "  a push from the wrong checkout. Check: git -C <abs-path> remote -v. Deliberate: ALLOW_NEW_BASE=\"<why>\" git push …" >&2
+    exit 1
+done <<< "$INPUT"
 while read -r _lref _lsha rref _rsha; do
     [ "$rref" = "refs/heads/$BASE" ] || continue
     if [ -n "${ALLOW_BASE_PUSH:-}" ]; then

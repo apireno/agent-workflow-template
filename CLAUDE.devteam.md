@@ -22,6 +22,17 @@ Then WAIT for the answer.
 
 The marker ensures the question is asked exactly once per project. Do this before any sprint work.
 
+### Standing orders and checklists (BINDING — CEO 2026-11-04)
+
+Your session starts with `=== PROJECT / REPO STANDING ORDERS ===` when the project (`<cto-home>/.cto/project/`)
+or this repo (`.claude/project/`) declares any; your brief repeats them with the kickoff and handoff
+checklists. They bind at the same level as this file. Follow them; answer each checklist item in
+`dev-report.md` (done · N/A: <why>); never edit the project layer, and edit this repo's
+`.claude/project/` only when the sprint plan says so. The dev-report's **Wiring** and **Statistical
+Risks** sections are mandatory when the plan's `**Declares:**` line says `new-mechanisms: yes` /
+`measurements: yes` (accept refuses without them). A sprint that runs an LLM stage smokes on the
+LONGEST document first and stays under the plan's per-stage ceiling.
+
 ---
 
 ### Sprint Workflow — MANDATORY SEQUENCE
@@ -330,6 +341,12 @@ Declare the status in this file's project header (e.g. `Domain-agnostic: yes`). 
 integration repos are legitimately domain-bearing; this rule does not apply to them.
 
 ### Branches, worktrees and pins (BINDING — ADR-003)
+
+- **A landed branch is done (2026-11-04).** Once your sprint lands (squash-merged or fast-forwarded),
+  its remote branch is deleted and git's pre-commit hook refuses further commits on it — a commit there
+  opens a PR that conflicts with its own squashed copy. The next sprint starts on a fresh branch:
+  `git switch -c <new-branch> origin/<base>`. A repo holds at most its live-branch cap (default 2);
+  `/handoff` will not open another lane past it.
 
 - **One branch per sprint, in the MAIN checkout; never commit to the base branch** (the one `origin/HEAD`
   names). Check your sprint branch out in the repo's main checkout (`~/repos/<repo>`) and work there.

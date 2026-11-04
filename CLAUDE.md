@@ -56,6 +56,14 @@ Repeat it at every change in the kind of work. Lanes, subagents and routine CTO 
 lane model; the stretch model is for evidence-judgment only, and only when the CEO approves and
 switches it. **Advice only — never switch the model yourself.** See `docs/personas/cto.md` "Model Policy".
 
+**Step 5c — STANDING ORDERS (binding).** Preflight prints this project's `[STANDING ORDERS]` and any
+`[CHECKLIST]`/`[CHECK]` lines from the project layer (`.cto/project/`) and reports a missing or empty
+layer. Acknowledge them in one line and follow them as you follow this file. At every **kickoff,
+handoff, landing and accept**, read and follow the project's and the target repo's checklists for
+that moment (`bash scripts/agentic/project-layer.sh <moment> --repo <repo>`; the skills print them
+for you). A rule you have had to repeat goes into `.cto/project/standing-orders.md` the same day —
+never only into memory or a memo. See `docs/personas/cto.md` "Project layer".
+
 **Step 6.** Ask the CEO: "What would you like to work on today?" Then WAIT.
 
 ---

@@ -83,6 +83,7 @@
 #              4 FOCUS GUARD abort (nothing sent) · 5 --verify-submit could not confirm
 #              6 submitted but NOT processed by the session (queued and dropped, or still busy)
 #              7 REFUSED — whitespace-only payload without a human authorship attestation
+#              8 NOT SENT — the operator never paused typing for SEND_IDLE_MS within SEND_MAX_WAIT
 
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -329,6 +330,25 @@ report_focus_abort() {
     echo "qa-send: nothing was sent. Re-run once Terminal can take focus, or re-resolve the window id:" >&2
     echo "  bash scripts/cto/window-peek.sh list" >&2
 }
+
+# --- wait for the operator to stop typing (fleet report 2026-11-04: "you stole focus") -------
+# Raising Terminal while the operator types moves their keystrokes into the target window and
+# ours into theirs. Wait until the machine's HID idle time (keyboard + mouse) is >= SEND_IDLE_MS
+# (default 4000), for at most SEND_MAX_WAIT seconds (default 180); otherwise send NOTHING, exit 8.
+# SEND_IDLE_MS=0 disables the wait (tests, or an operator who asked for an immediate send).
+IDLE_MS="${SEND_IDLE_MS:-4000}"; IDLE_MAX="${SEND_MAX_WAIT:-180}"
+if [ "$IDLE_MS" -gt 0 ] 2>/dev/null && command -v ioreg >/dev/null 2>&1; then
+    idle_end=$(( $(date +%s) + IDLE_MAX ))
+    while :; do
+        ns="$(ioreg -c IOHIDSystem 2>/dev/null | awk '/HIDIdleTime/ {print $NF; exit}')"
+        [ $(( ${ns:-0} / 1000000 )) -ge "$IDLE_MS" ] && break
+        if [ "$(date +%s)" -ge "$idle_end" ]; then
+            echo "qa-send: NOT SENT — the operator kept using the machine for ${IDLE_MAX}s (no ${IDLE_MS} ms idle gap). Re-run when idle." >&2
+            exit 8
+        fi
+        sleep 1
+    done
+fi
 
 # --- send ---------------------------------------------------------------------------------
 OUT=$(inject_guarded "$MSG" "$NORETURN" "$SEND_MODE"); RC=$?

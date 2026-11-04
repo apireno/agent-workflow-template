@@ -4,6 +4,10 @@
 **Goal:** {from scope.md}
 **Duration:** {estimated days}
 **Branch:** feature/{branch-name}
+**Declares:** new-mechanisms: {yes|no} · measurements: {yes|no} · llm-stages: {yes|no}
+<!-- The Declares line is read at accept (scripts/agentic/check-dev-report.sh): new-mechanisms: yes
+     makes the dev-report's Wiring section mandatory; measurements: yes makes Statistical risks
+     mandatory; llm-stages: yes requires the LLM-stage budget section below. Answer all three. -->
 
 ---
 
@@ -33,6 +37,14 @@
 1. **Run tests:** {test command} — all existing tests pass + new tests
 2. **Smoke/e2e test:** {describe the integration or smoke test}
 3. **Save results:** Write test output to `docs/sprints/sprint-XX/test-results.md`
+
+## LLM-Stage Budget (only when `llm-stages: yes`)
+<!-- Fleet report 2026-11-04: "< $5" from a short-article smoke became ~$89 on dense text — cost
+     scales with completion length, and short documents produce short replies. -->
+- **Smoke document:** {the LONGEST / densest document in the run set — never the shortest}
+- **Projected cost per stage:** {smoke tokens x documents x price}, ceiling {USD} per stage — checked BEFORE each launch
+- **Resumable:** {how a stopped run continues without redoing finished items}
+- **Readout header names:** model · endpoint · quantization
 
 ## Definition of Done
 - [ ] All acceptance criteria from scope.md pass

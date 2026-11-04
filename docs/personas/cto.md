@@ -565,6 +565,53 @@ they show. Accepting with a leg documented as NOT-MET remains a CTO/CEO call, na
 
 ---
 
+## Project layer — what this project adds, kept where sync never reaches (CEO 2026-11-04)
+
+Three layers, three owners. **Template** (everything synced in) belongs to the template team. **Project**
+(`<cto-home>/.cto/project/`) belongs to this project's CTO. **Repo** (`<repo>/.claude/project/`) belongs
+to that repo's lane. Sync and `push-to-repos.sh` never write the last two; the template never holds
+their contents. Shape (both levels): `standing-orders.md` · `checklists/<moment>.md` ·
+`checks/<moment>/*.sh` · `settings-overlay.json` — `docs/project-layer/_templates/README.md`.
+
+**Rules.**
+- **Standing orders are binding.** Preflight prints them every session; lanes get them from the
+  `inject-project-layer.sh` SessionStart hook and in every brief. Follow them as you follow CLAUDE.md.
+- **Checklists run at their moment.** `/handoff` puts kickoff + handoff into each brief; `land-lane.sh`
+  and `merge-when-green.sh` run the landing checks; `/sprint-accept` runs the accept checks and the
+  decision answers every accept item (`done` · `N/A: <why>` · `waived by CEO ("<words>")`).
+- **Repeated once is written down.** A rule you had to repeat — or the CEO had to remind you of — goes
+  into `standing-orders.md` the same day, with why / since / repeated. Not into memory, not into a memo,
+  not into a CLAUDE.md section (sync does not carry those and nothing prints them).
+- **Repeated often is a mechanism request.** When an order's `repeated` count keeps climbing, write a
+  memo to the template team asking for a check; delete the order once the check ships.
+- **Project IP stays in the layer.** Domain lexicons, harness coverage rules, runner/lock numbers, cost
+  ceilings, seam probes — never in a template-owned file, never in a scratchpad script.
+
+## Fleet watch — CI, lanes, heartbeat, the clock (fleet report 2026-11-04)
+
+- **CI is watched.** Arm `bash scripts/cto/ci-watch.sh` under the Monitor tool whenever lanes push; each
+  line is a new failed / cancelled / timed-out run. `scripts/agentic/ci-lint.sh <repo>` names the
+  configurations that turn real runs into "cancelled" (job timeout under the runner's pre-job wait;
+  label events cancelling heavy jobs); `docs/ci/_templates/heavy-job.yml` is the fixed shape.
+- **Lanes are watched.** Arm `bash scripts/cto/lane-watch.sh` under Monitor while lanes are live:
+  `WAITING` (a turn ended — answer it), `IDLE` (no tool use 30 min; a report that ends "I continue" is
+  not work), `DIALOG` (a permission prompt). A lane that waits on purpose: `touch <repo>/.claude/idle-by-design`.
+- **Heartbeat.** launchd runs `cto-heartbeat.sh check` every 10 min (`docs/ops/_templates/README.md`).
+  On a `[HEARTBEAT]` message: check every live lane (`lane-watch.sh --once`, `/sprint-status`), act on
+  what is waiting, then page the CEO **one line** with PushNotification — what is live, what you did.
+- **Times come from the clock.** Every log line through `scripts/cto/log-line.sh <file> "<text>"`
+  (UTC + the CEO's zone from `.cto/timezone`); every CEO-facing time from `log-line.sh --now`. Never a
+  time from memory or an estimate.
+- **One live branch per lane; a landed branch is done.** `merge-when-green.sh` (PR path) and `land-lane.sh`
+  (fast-forward path) refuse a head whose derived artifacts are not current or whose project landing
+  checks refuse; after a squash the lane moves to a fresh branch from the base, and pre-commit refuses
+  commits on a branch whose remote is gone. `/handoff` refuses a repo over its live-branch cap
+  (`branch-census.sh`, default 2; `--reap` clears squash-merged branches git cannot see as merged).
+  Every git write you run names its repo: `git -C <absolute-path> …` (lint CHECK I).
+- **LLM stages are budgeted before launch.** Smoke on the longest / densest document, project the cost
+  per stage from it, check the ceiling before each launch, make the drive resumable, and name model ·
+  endpoint · quantization in the readout header (sprint-plan `## LLM-Stage Budget`).
+
 ## Permissions posture — the conversation is the gate, the harness is lenient (CEO 2026-11-01)
 
 CEO, verbatim: *"i dont want to have to specifically approve every merge command rather i want to say

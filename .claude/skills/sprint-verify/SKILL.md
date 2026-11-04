@@ -202,6 +202,7 @@ You are doing **objective conformance verification**, not accepting the sprint. 
    - **MET** — concrete evidence shows it delivered as stated (cite it).
    - **NOT-MET** — evidence shows it was not delivered / behaves wrong (cite it).
    - **UNVERIFIED** — no evidence and no runnable signal (e.g. criterion had no empirical signal, or needs a surface no one drove). UNVERIFIED is never assumed MET.
+   - **Zero graded items is UNVERIFIED, never MET** (fleet report 2026-11-04: three sweeps "passed" with zero graded cells). An evaluation, sweep or conformance bed that RAN but GRADED nothing — every item skipped, no passage carrying an expectation, a density line counting items run rather than items graded — produced no evidence. Before marking a measured criterion MET, find the count of items actually graded and quote it; if it is 0, or the readout does not say, mark UNVERIFIED and name the missing coverage.
 
 3b. **Standing rows.** If the run printed STANDING ROWS (the repo governs derived artifacts per ADR-002), they were appended to `conformance.md` with MET/NOT-MET already set from the gate. Keep them; count them in the Summary. A NOT-MET standing row is a fact the accept decision must name.
 

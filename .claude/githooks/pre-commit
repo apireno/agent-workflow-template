@@ -21,6 +21,19 @@ if [ -x "$LEGACY" ] && [ "$(cd "$(dirname "$LEGACY")" && pwd -P)" != "$(cd "$(di
     "$LEGACY" "$@" || exit $?
 fi
 
+# A branch whose remote was deleted after landing (squash-merge + delete-branch, or land-lane step 7)
+# is DONE: a commit on it starts a PR that conflicts with its own squashed copy (fleet report
+# 2026-11-04). Start the next sprint on a fresh branch from the base. Deliberate: LANDED_BRANCH_OK=1.
+BR="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [ -n "$BR" ] && [ "${LANDED_BRANCH_OK:-0}" != "1" ] && \
+   [ "$(git for-each-ref --format='%(upstream:track)' "refs/heads/$BR" 2>/dev/null)" = "[gone]" ]; then
+    BASE="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"; BASE="${BASE#origin/}"
+    echo "pre-commit: REFUSED — '$BR' was landed (its remote branch is gone). Commits here make a PR that" >&2
+    echo "  conflicts with its own squashed copy. Start fresh: git switch -c <new-branch> origin/${BASE:-<base>}" >&2
+    echo "  (carry uncommitted work across: it stays in the tree). Deliberate: LANDED_BRANCH_OK=1 git commit …" >&2
+    exit 1
+fi
+
 if [ "${DERIVED_ARTIFACT_GATE:-}" = "skip" ]; then
     echo "pre-commit: derived-artifact gate SKIPPED by DERIVED_ARTIFACT_GATE=skip — say why in the commit message." >&2
     exit 0

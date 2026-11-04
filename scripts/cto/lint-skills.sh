@@ -22,6 +22,7 @@
 #   CHECK F  a bare MCP server in a settings allow-list (covers no tools since Claude Code 2.1.299)
 #   CHECK H  a settings template without the blanket Bash allow or the never-uninvited ask list, or
 #            a rule in both lists (CEO 2026-11-01: the conversation is the gate, the harness is lenient)
+#   CHECK I  a `cd … && git commit|push|update-ref` chain in a recipe — use git -C <abs> (2026-11-04)
 #   CHECK G  text telling a human to run a command as a sign-off (CEO ruling 2026-10-30: the CEO
 #            approves in the CTO conversation and the CTO records the words; no gate makes the CEO
 #            run a command, open a shell or retype a token). Mark a deliberate exception `lint-ok`.
@@ -373,6 +374,27 @@ for sf in (".claude/settings.permissive.json", ".claude/settings.devteam.json.te
     for r in ask:
         if r in allow:
             findings.append(f"H  {sf}  `{r}` is in both ask and allow — ask wins, the allow entry is dead")
+
+# ── CHECK I: a `cd …&&` chain that writes git state (fleet report 2026-11-04) ─────────────────
+# A chained `cd` that runs in the wrong checkout pushed a stray base branch to another repo. Every
+# git write in a recipe names its repository: `git -C <absolute-path> commit|push|update-ref …`.
+CDGIT = re.compile(r"\bcd\s+[^\n;|&]+&&[^\n]*?\bgit\s+(?!-C\b)(commit|push|update-ref|tag|branch\s+-[dD])\b")
+files_i = []
+for base_i, exts_i in ((".claude/skills", (".md",)), ("scripts/cto", (".sh",)), ("docs/personas", (".md",))):
+    for dp, _, fs in os.walk(os.path.join(root, base_i)):
+        files_i += [os.path.join(dp, f) for f in fs if f.endswith(exts_i)]
+files_i += [os.path.join(root, f) for f in ("CLAUDE.md", "CLAUDE.devteam.md") if os.path.isfile(os.path.join(root, f))]
+for pi in sorted(files_i):
+    bi = os.path.basename(pi)
+    if bi == "lint-skills.sh" or bi.startswith("test-"):
+        continue
+    for n, line in enumerate(open(pi, errors="replace"), 1):
+        if "lint-ok" in line:
+            continue
+        mi = CDGIT.search(line)
+        if mi:
+            findings.append(f"I  {os.path.relpath(pi, root)}:{n}  `cd … && git {mi.group(1)}` — a chained cd that lands in the wrong checkout "
+                            f"writes the wrong repo. Use `git -C <absolute-path> {mi.group(1)} …`.")
 
 if findings:
     print(f"lint-skills: {len(findings)} finding(s)\n")

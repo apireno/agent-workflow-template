@@ -174,6 +174,7 @@ required_files=(
   "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh"
   "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh"
   "$TEMPLATE/.claude/hooks/deny-authorization-forge.sh"
+  "$TEMPLATE/.claude/hooks/inject-project-layer.sh"
   "$TEMPLATE/.claude/githooks/pre-commit"
   "$TEMPLATE/.claude/githooks/pre-push"
 )
@@ -232,7 +233,7 @@ for repo in "${TARGETS[@]}"; do
     echo "      would write: $DEST/.claude/settings.json (from template, _comment_* stripped)"
     [ -f "$DEST/.claude/settings.json" ] && echo "        (overwrites existing)"
     echo "      would write: $DEST/.claude/githooks/{pre-commit,pre-push} + absolute core.hooksPath (ADR-002 backstop; ADR-003 no direct base push)"
-    echo "      would write: $DEST/.claude/hooks/ (7: inject-devteam-contract, auto-paste-brief, derived-artifact-reminder,"
+    echo "      would write: $DEST/.claude/hooks/ (9: inject-devteam-contract, inject-project-layer, auto-paste-brief, derived-artifact-reminder, deny-authorization-forge,"
     echo "                     session-end-record, check-complete, deny-self-commit, deny-generated-edit)"
     echo "      would write: $DEST/scripts/agentic/* + docs/personas/* + docs/sprints/_templates/*"
     # Name the engine the real run would actually seed. Hardcoding "subagent" here made the
@@ -268,8 +269,10 @@ data = json.loads(clean)
 # merged here (permissions.allow / deny / ask: union, order kept). Without this, removing a
 # project's grants from the public template would make every lane prompt on every call.
 import os
-ov_path = "$TEMPLATE/.cto/settings-overlay.json"
-if os.path.isfile(ov_path):
+# The overlay belongs to the PROJECT layer (<cto-home>/.cto/project/, CEO 2026-11-04); the old
+# location is still read so nothing breaks before a home migrates.
+ov_path = next((p for p in ("$TEMPLATE/.cto/project/settings-overlay.json", "$TEMPLATE/.cto/settings-overlay.json") if os.path.isfile(p)), "")
+if ov_path:
     ov = json.load(open(ov_path))
     for k in ("allow", "deny", "ask"):
         extra = (ov.get("permissions") or {}).get(k) or []
@@ -295,8 +298,9 @@ PYEOF
   cp "$TEMPLATE/.claude/hooks/inject-devteam-contract.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/derived-artifact-reminder.sh" "$DEST/.claude/hooks/"
   cp "$TEMPLATE/.claude/hooks/deny-authorization-forge.sh" "$DEST/.claude/hooks/"
+  cp "$TEMPLATE/.claude/hooks/inject-project-layer.sh" "$DEST/.claude/hooks/"
   chmod +x "$DEST/.claude/hooks/"*.sh
-  echo "      wrote $DEST/.claude/hooks/ (8: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit, derived-artifact-reminder, deny-authorization-forge)"
+  echo "      wrote $DEST/.claude/hooks/ (9: contract, brief, session-end, complete, deny-self-commit, deny-generated-edit, derived-artifact-reminder, deny-authorization-forge, project-layer)"
 
   # 3a. Git pre-commit backstop for governed derived artifacts (ADR-002 §4 point 4). Lives
   # under .claude/ (already untracked in upstream mode) and is wired through the LOCAL

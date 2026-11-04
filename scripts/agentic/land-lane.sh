@@ -95,10 +95,31 @@ $MISSING"
 fi
 say "lane contains origin/$BASE ✓"
 
+# 3b CURRENT — governed derived artifacts and the project's landing checks, on the sha that lands
+# (fleet report 2026-11-04: code graphs went stale across six repos while mechanisms landed, because
+# only /sprint-accept checked them). The gate hashes HEAD and rebuilds each artifact (--bytes);
+# project-layer.sh runs <cto-home>/.cto/project/checks/landing/* and the repo's own.
+STEP="current"
+if [ -f "$TOP/.claude/derived-artifacts.yaml" ]; then
+    GOUT="$(bash "$HERE/derived-artifact-gate.sh" --head --bytes --repo "$TOP" 2>&1)"; grc=$?
+    [ $grc -eq 0 ] || stop "governed derived artifacts are not CURRENT on ${SHA:0:12} — regenerate on the lane, commit, re-run:
+$(printf '%s\n' "$GOUT" | grep -vE '^\s*(ARTIFACT|-+)\s' | tail -12)"
+    say "derived artifacts CURRENT on ${SHA:0:12} (stamp + rebuilt bytes) ✓"
+fi
+if [ -x "$HERE/project-layer.sh" ]; then
+    POUT="$(bash "$HERE/project-layer.sh" landing --repo "$TOP" ${HOME_CTO:+--home "$HOME_CTO"} 2>&1)"; prc=$?
+    [ -n "$POUT" ] && printf '%s\n' "$POUT" | sed 's/^/  /'
+    [ $prc -eq 0 ] || stop "a project landing check refused (above). Fix it on the lane, or change the check in the project layer"
+fi
+
 # 4 CI on the lane's HEAD sha
 STEP="ci"
 run env LAND_LANE=0 git -C "$TOP" push -q origin "$LANE" || stop "could not push the lane branch '$LANE'"
 CI="no-ci"
+if [ -d "$TOP/.github/workflows" ] && [ -x "$HERE/ci-lint.sh" ]; then
+    LOUT="$(bash "$HERE/ci-lint.sh" "$TOP" 2>&1)" || say "CI configuration WARNING (ci-lint.sh — runs that will read 'cancelled'):
+$(printf '%s\n' "$LOUT" | sed 's/^/  /')"
+fi
 if [ -n "$(g ls-tree --name-only "$SHA" .github/workflows/ 2>/dev/null)" ]; then
     if ! command -v gh >/dev/null 2>&1; then CI="unknown (gh not installed)"
     elif [ "$DRY" = 1 ]; then CI="(dry run: would wait up to ${CI_WAIT} min for the run on ${SHA:0:12})"

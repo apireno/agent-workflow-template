@@ -23,6 +23,9 @@
 # Exit: 0 all assertions pass · 1 a guard has regressed
 
 set -uo pipefail
+# qa-send waits for the operator to stop typing (SEND_IDLE_MS); tests must not depend on whether
+# someone is at the keyboard.
+export SEND_IDLE_MS=0
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT

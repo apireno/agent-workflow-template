@@ -6,6 +6,32 @@ gaps (`docs/memos/`), the template team implements and syncs. See `docs/personas
 
 Newest first.
 
+## 2026-11-04 — Project layer; the twelve gate-0 asks (CEO: isolate project items, standing orders)
+
+**Project layer.** `<cto-home>/.cto/project/` and `<repo>/.claude/project/` hold a project's and a
+repo's standing orders, checklists (kickoff · handoff · landing · accept) and executable checks;
+sync and push never write them. `scripts/agentic/project-layer.sh` runs them: preflight prints the
+orders every session and flags a missing/empty layer; lanes get them from the new
+`inject-project-layer.sh` SessionStart hook and in every brief; landing and accept run the checks;
+the accept decision answers every checklist item. Skeleton: `docs/project-layer/_templates/`;
+`/new-project` and `/setup` seed it; the settings overlay moves to `.cto/project/` (old path read).
+
+**Gate.** `derived-artifact-gate.sh --bytes` (rebuild, compare, restore — BYTE-DRIFT); NO-GENERATOR
+and BAD-ENTRY refuse in every mode; `seam_probes:` → BLIND. **Landing.** `land-lane.sh` step
+`current` (gate --head --bytes + project landing checks) and a `ci-lint.sh` warning; new
+`merge-when-green.sh` (PR path: CURRENT before checks, NO RUN distinct from RED, method printed, a
+clean lane checkout moved off the landed branch). **Branches.** `branch-census.sh` (squash-merge
+aware via merge-tree; protected = checked out / pinned / kept; `--reap`, `--archive-stale`, live
+cap); `/handoff` skips a repo over its cap; pre-commit refuses commits on a landed branch; pre-push
+refuses creating a foreign base branch; lint CHECK I (`cd … && git push`). **Fleet watch.**
+`ci-watch.sh`, `ci-lint.sh` + `docs/ci/_templates/heavy-job.yml`, `lane-watch.sh`,
+`cto-heartbeat.sh` + `docs/ops/_templates/com.cto.heartbeat.plist`, `fleet-repos.sh`, `log-line.sh`;
+`qa-send.sh` waits for an idle keyboard (exit 8 NOT SENT). **Sprint docs.** plan `**Declares:**`
+line + `## LLM-Stage Budget`; dev-report `## Wiring` + `## Statistical Risks`, enforced by
+`check-dev-report.sh` at accept; `/sprint-verify`: zero graded items is UNVERIFIED. Tests: project
+layer 17, branch census 13, merge-when-green 11, fleet watch 16, gate 47, landing 31. Migration
+guide: `docs/memos/20261104-project-layer-migration.md`.
+
 ## 2026-11-01 — PR #1 landed (fleet CTO): escalate-to-cto file-drop default, Phase-3 = CTO gate, in-main rule
 
 Reviewed and squash-merged (658ae51). escalate-to-cto.sh drops an inbox memo by default (no model

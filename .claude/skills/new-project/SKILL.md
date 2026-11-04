@@ -94,6 +94,9 @@ EOF
 # is lenient): acceptEdits, blanket Bash, the never-uninvited ask list, the SessionStart preflight.
 # rsync excluded settings.json on purpose — this writes the home's own from the template.
 bash "$HOME_DIR/scripts/cto/settings-posture.sh" --apply "$HOME_DIR"
+# The PROJECT LAYER (CEO 2026-11-04): this project's standing orders, checklists and checks live in
+# .cto/project/, which template sync never writes. Seed the skeleton; the CTO fills it.
+bash "$HOME_DIR/scripts/agentic/project-layer.sh" init "$HOME_DIR/.cto/project"
 
 # --- 2. Seed .cto/projects.yaml ---
 mkdir -p "$HOME_DIR/.cto"

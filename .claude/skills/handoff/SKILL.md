@@ -225,6 +225,17 @@ echo "Building mission briefs..."
 PATHS_TO_OPEN=""
 while IFS=$'\t' read -r REPO_NAME REPO_PATH PLAN_PATH; do
   BRIEF_FILE="$REPO_PATH/docs/sprints/sprint-$SPRINT/brief.md"
+
+  # --- BRANCH CAP (fleet report 2026-11-04): 151 branches, 115 already squash-merged and invisible.
+  # A new lane opens only when the repo is under its live-branch cap (.claude/land.yaml
+  # max_live_branches, default 2). Over the cap -> this repo is SKIPPED with the census printed.
+  CENSUS_OUT="$(bash "$ROOT/scripts/agentic/branch-census.sh" "$REPO_PATH" 2>&1)"; CENSUS_RC=$?
+  if [ "$CENSUS_RC" -eq 3 ]; then
+    echo "  [skip] $REPO_NAME — over its live-branch cap; nothing handed off:"
+    echo "$CENSUS_OUT" | sed 's/^/      /'
+    echo "      Reap first: bash scripts/agentic/branch-census.sh $REPO_PATH --reap  (add --archive-stale for old experiments)"
+    continue
+  fi
   mkdir -p "$REPO_PATH/docs/sprints/sprint-$SPRINT"
 
   # --- SELF-HEAL: guarantee session-tracking is wired in the target repo ---
@@ -234,7 +245,7 @@ while IFS=$'\t' read -r REPO_NAME REPO_PATH PLAN_PATH; do
   # Install the latest hooks, merge their wiring into the repo's settings.json
   # (idempotent), and record the active sprint for the completion hooks' scope.
   mkdir -p "$REPO_PATH/.claude/hooks"
-  for h in auto-paste-brief check-complete session-end-record deny-self-commit deny-generated-edit; do
+  for h in auto-paste-brief check-complete session-end-record deny-self-commit deny-generated-edit inject-project-layer; do
     cp "$ROOT/.claude/hooks/$h.sh" "$REPO_PATH/.claude/hooks/$h.sh" 2>/dev/null && chmod +x "$REPO_PATH/.claude/hooks/$h.sh"
   done
   echo "sprint-$SPRINT" > "$REPO_PATH/.claude/current-sprint"
@@ -285,6 +296,8 @@ def ensure(event, cmd, matcher="*"):
                 return
     arr.append({"matcher":matcher,"hooks":[{"type":"command","command":target}]})
 ensure("SessionStart", ".claude/hooks/auto-paste-brief.sh")
+# Project + repo standing orders into every lane session (CEO 2026-11-04).
+ensure("SessionStart", ".claude/hooks/inject-project-layer.sh")
 ensure("Stop", ".claude/hooks/check-complete.sh")
 # ADR-002 reminder: tells the lane ONCE per new finding that a governed derived artifact is
 # stale. Inert unless the repo has .claude/derived-artifacts.yaml.
@@ -367,6 +380,15 @@ dev-report.md under \`Mechanism gaps\` and continue — never edit the mechanism
 - Governed derived artifacts current: \`bash scripts/agentic/derived-artifact-gate.sh\` exits 0 (ADR-002)"
   fi
 
+  # Project + repo layer at kickoff: standing orders and the kickoff/handoff checklists (CEO 2026-11-04).
+  LAYER_BLOCK="$(bash "$ROOT/scripts/agentic/project-layer.sh" kickoff --repo "$REPO_PATH" --home "$ROOT" 2>/dev/null)"
+  LAYER_BLOCK="$LAYER_BLOCK$(bash "$ROOT/scripts/agentic/project-layer.sh" handoff --repo "$REPO_PATH" --home "$ROOT" --quiet 2>/dev/null | sed -n '/CHECKLIST/,$p')"
+  [ -n "$LAYER_BLOCK" ] && LAYER_BLOCK="
+## Standing orders and checklists (binding — the project and repo layers)
+
+$LAYER_BLOCK
+"
+
   cat > "$BRIEF_FILE" <<BRIEFEOF
 # Mission Brief — sprint-$SPRINT (Phase 2 execution)
 
@@ -384,7 +406,7 @@ $(cat "$PLAN_PATH")
 - dev-report.md committed to docs/sprints/sprint-$SPRINT/dev-report.md
 - demo-output.md if any [AUTO] demo steps exist$DERIVED_AC
 - Sign-off: — Dev
-$DERIVED_BLOCK
+$DERIVED_BLOCK$LAYER_BLOCK
 ## On crash recovery
 
 This session was launched via the CTO's \`/handoff\` skill. If you crash:

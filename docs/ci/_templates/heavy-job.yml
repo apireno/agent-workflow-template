@@ -1,0 +1,31 @@
+# heavy-job.yml — a long or self-hosted CI job that does not cancel itself (fleet report 2026-11-04).
+#
+# Copy into <repo>/.github/workflows/ and adapt. The three settings that matter:
+#   1. timeout-minutes >= the runner's maximum pre-job wait + the job's own run time. A self-hosted
+#      runner whose pre-job hook waits for a host lock (up to N min) will otherwise time every
+#      queued job out and report it as "cancelled". Declare N once in .claude/land.yaml as
+#      `ci_hook_max_wait_min: N`; scripts/agentic/ci-lint.sh checks every job against it.
+#   2. No labeled/unlabeled/edited triggers on a heavy job that sits in a cancel-in-progress
+#      concurrency group: a label change would cancel the run in flight.
+#   3. A concurrency group keyed by PR, so a NEW push still supersedes the old run (that is the
+#      cancel you want).
+name: heavy-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]     # not labeled/unlabeled/edited
+  push:
+    branches: [main]
+
+concurrency:
+  group: heavy-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true                     # a new push supersedes; a label event never starts one
+
+jobs:
+  gate:
+    runs-on: [self-hosted]
+    timeout-minutes: 240                       # >= ci_hook_max_wait_min (e.g. 180) + run time (e.g. 60)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the gate
+        run: ./scripts/ci/run-gate.sh

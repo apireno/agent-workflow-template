@@ -170,6 +170,7 @@ exists, and a list of candidate sibling repos. Walk the CEO through onboarding:
 6. **Apply the permissions posture to this home, mark setup complete, record the CTO home:**
    ```
    bash scripts/cto/settings-posture.sh --apply      # acceptEdits + blanket Bash + the never-uninvited ask list + preflight hook; a merge
+   bash scripts/agentic/project-layer.sh init .cto/project   # this project's standing orders / checklists / checks (never synced over)
    mkdir -p .claude && touch .claude/.setup-done
    mkdir -p ~/.cto && pwd > ~/.cto/home
    ```

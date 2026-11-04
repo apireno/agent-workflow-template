@@ -38,7 +38,7 @@
     ]
   },
   "hooks": {
-    "_comment_SessionStart": "inject-devteam-contract: loads CLAUDE.devteam.md as context in upstream/public clones where the tracked CLAUDE.md belongs to the upstream project (inert everywhere else). auto-paste-brief: pastes .claude/pending-prompt.md into context and records session_id for /peek and /resume-dev-team.",
+    "_comment_SessionStart": "inject-devteam-contract: loads CLAUDE.devteam.md as context in upstream/public clones where the tracked CLAUDE.md belongs to the upstream project (inert everywhere else). auto-paste-brief: pastes .claude/pending-prompt.md into context and records session_id for /peek and /resume-dev-team. inject-project-layer: prints the project's and this repo's standing orders (CEO 2026-11-04; scripts/agentic/project-layer.sh).",
     "SessionStart": [
       {
         "matcher": "*",
@@ -50,6 +50,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auto-paste-brief.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/inject-project-layer.sh"
           }
         ]
       }

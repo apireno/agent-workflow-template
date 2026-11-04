@@ -162,6 +162,57 @@ OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "live warn_
 sed -i.bak 's/2099-01-01/2000-01-01/' .claude/derived-artifacts.yaml
 OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "expired warn_until blocks" 3 "$?" "$OUT"
 
+echo "== 9. bytes, not inputs (--bytes); scanner blindness (seam_probes); NO-GENERATOR in any mode (2026-11-04) =="
+git checkout -q -- . 2>/dev/null; git clean -qfd -e .claude/derived-artifacts.yaml >/dev/null 2>&1
+cat > .claude/derived-artifacts.yaml <<'Y'
+artifacts:
+  - name: graph
+    path: docs/graph/
+    generator: scripts/graph/build.py
+    mode: block
+Y
+bash scripts/agentic/derived-artifact-gate.sh --fix >/dev/null 2>&1; git add -A >/dev/null; git commit -qm "re-baseline" >/dev/null 2>&1
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh --bytes 2>&1); expect_rc "--bytes on a freshly built artifact passes" 0 "$?" "$OUT"
+printf '{"hand": "edited"}\n' > docs/graph/graph.json; BEFORE="$(cat docs/graph/graph.json)"
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "stale bytes under a matching stamp pass the stamp check (the BUG-834 class)" 0 "$?" "$OUT"
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh --bytes 2>&1); expect_rc "--bytes refuses the stale bytes" 3 "$?" "$OUT"
+expect_grep "  names BYTE-DRIFT and the file" "BYTE-DRIFT.*graph.json" "$OUT"
+[ "$(cat docs/graph/graph.json)" = "$BEFORE" ] && ok "  --bytes restores the tree exactly (the check never edits)" || fail "  --bytes left the tree changed"
+git checkout -q -- docs/graph/graph.json
+cat > .claude/derived-artifacts.yaml <<'Y'
+artifacts:
+  - name: graph
+    path: docs/graph/
+    generator: scripts/graph/build.py
+    mode: warn
+    bytes_check: off
+Y
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "bytes_check: off without bytes_reason refuses even in warn mode" 3 "$?" "$OUT"
+expect_grep "  names BAD-ENTRY bytes_reason" "BAD-ENTRY.*bytes_reason" "$OUT"
+printf 'service-key\tservice_key\\(\tsrc/*\nconfig-read\tread_config\\(\n' > scripts/graph/seam-probes.tsv
+cat > .claude/derived-artifacts.yaml <<'Y'
+artifacts:
+  - name: graph
+    path: docs/graph/
+    generator: scripts/graph/build.py
+    mode: block
+    seam_probes: scripts/graph/seam-probes.tsv
+Y
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "probes whose kinds the scanner reports (or that match nothing) pass" 0 "$?" "$OUT"
+mkdir -p src/other; echo 'def svc(): return service_key("runner")' > src/other/svc.py
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "a probe kind present in code but absent from \`seams\` refuses" 3 "$?" "$OUT"
+expect_grep "  names BLIND, the kind and the first site" "BLIND.*service-key.*src/other/svc.py:1" "$OUT"
+expect_nogrep "  a kind the scanner reports is not BLIND" "BLIND.*config-read" "$OUT"
+rm -f src/other/svc.py
+cat > .claude/derived-artifacts.yaml <<'Y'
+artifacts:
+  - name: graph
+    path: docs/graph/
+    generator: scripts/graph/missing.py
+    mode: warn
+Y
+OUT=$(bash scripts/agentic/derived-artifact-gate.sh 2>&1); expect_rc "NO-GENERATOR refuses in warn mode too" 3 "$?" "$OUT"
+
 echo ""
 echo "derived-artifact-gate tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

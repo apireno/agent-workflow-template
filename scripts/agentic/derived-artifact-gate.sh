@@ -19,7 +19,19 @@
 #   (a) STALE         closure hash != stamp        -> regenerate + re-stamp
 #   (b) LEAK          a seam site outside closure  -> a root leaked past the generator's config
 #   (c) DEAD-ROOT     a declared root doesn't resolve -> the generator describes a retired engine
-#   (d) NO-GENERATOR  the manifest names a generator that is missing -> never a silent pass
+#   (d) NO-GENERATOR  the manifest names a generator that is missing -> never a silent pass;
+#                     refuses in EVERY mode (warn included): a derived artifact nobody can rebuild
+#                     is not derived (fleet report 2026-11-04)
+#   (e) BYTE-DRIFT    with --bytes: the gate rebuilds the artifact in place, compares bytes with what
+#                     is committed, restores the original, and refuses on any difference. The stamp
+#                     proves the INPUTS were unchanged; only a rebuild proves the BYTES are what the
+#                     generator makes from them (BUG class: a stale report passed on a matching stamp).
+#                     Opt out per artifact: `bytes_check: off` + `bytes_reason: <why>` (a reason is
+#                     required; `off` without one is a BAD-ENTRY). /sprint-accept and land-lane pass it.
+#   (f) BLIND         `seam_probes: <file>` names a TSV the PROJECT maintains, independent of the
+#                     scanner: `kind<TAB>regex[<TAB>pathglob]`. A probe kind with matches in the code
+#                     but zero sites of that kind in `<generator> seams` means the scanner cannot see
+#                     a seam the code uses (fleet report 2026-11-04: run-service keys).
 #
 # Manifest: <repo>/.claude/derived-artifacts.yaml (see .claude/derived-artifacts.yaml.example).
 # INERT when the manifest is absent (exit 0) unless --require is passed (exit 4): a repo the
@@ -34,6 +46,7 @@
 #   --staged    hash the index (the pre-commit hook: what is about to be committed)
 #   --head      hash HEAD (CTO session start, CI)
 #   --audit     report only; never --fix; exit 3 on ANY finding regardless of mode
+#   --bytes     also run the BYTE-DRIFT rebuild check (e) — accept and landing use it
 #   --fix       for each STALE/NO-STAMP artifact: run `<generator> build`, write the stamp,
 #               `git add` the artifact + stamp (scoped add, never -A)
 #   stamp NAME  write the stamp for one artifact without running build (generator run by hand)
@@ -48,12 +61,13 @@
 
 set -uo pipefail
 
-SOURCE="worktree"; AUDIT=0; FIX=0; REQUIRE=0; REPO=""; MANIFEST=""; CMD="check"; STAMP_NAME=""; REPIN_SHA=""
+BYTES=0; SOURCE="worktree"; AUDIT=0; FIX=0; REQUIRE=0; REPO=""; MANIFEST=""; CMD="check"; STAMP_NAME=""; REPIN_SHA=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --worktree|--staged|--head) SOURCE="${1#--}" ;;
         --audit)    AUDIT=1 ;;
         --fix)      FIX=1 ;;
+        --bytes)    BYTES=1 ;;
         --require)  REQUIRE=1 ;;
         --repo)     REPO="$2"; shift ;;
         --manifest) MANIFEST="$2"; shift ;;
@@ -85,7 +99,7 @@ if [ ! -f "$MANIFEST" ]; then
 fi
 
 export DAG_REPO="$REPO" DAG_MANIFEST="$MANIFEST" DAG_SOURCE="$SOURCE" DAG_AUDIT="$AUDIT" \
-       DAG_FIX="$FIX" DAG_CMD="$CMD" DAG_STAMP_NAME="$STAMP_NAME" DAG_SELF="$0" DAG_REPIN_SHA="$REPIN_SHA"
+       DAG_FIX="$FIX" DAG_CMD="$CMD" DAG_STAMP_NAME="$STAMP_NAME" DAG_SELF="$0" DAG_REPIN_SHA="$REPIN_SHA" DAG_BYTES="$BYTES"
 
 python3 - <<'PY'
 import os, re, sys, json, subprocess, hashlib, datetime, shlex, stat
@@ -94,6 +108,8 @@ REPO = os.environ["DAG_REPO"]; MANIFEST = os.environ["DAG_MANIFEST"]; SOURCE = o
 AUDIT = os.environ["DAG_AUDIT"] == "1"; FIX = os.environ["DAG_FIX"] == "1"
 CMD = os.environ["DAG_CMD"]; STAMP_NAME = os.environ["DAG_STAMP_NAME"]; SELF = os.environ["DAG_SELF"]
 REPIN_SHA = os.environ.get("DAG_REPIN_SHA", "")
+BYTES = os.environ.get("DAG_BYTES") == "1"
+HARD = ("NO-GENERATOR", "BAD-ENTRY")   # refuse in every mode
 REL_SELF = os.path.relpath(SELF, REPO) if SELF.startswith(REPO) else SELF
 
 # ---------- manifest ----------
@@ -323,6 +339,38 @@ def check_artifact(art):
     if len(leaks) > 8:
         findings.append(("LEAK", f"... and {len(leaks)-8} more seam sites outside the closure"))
 
+    # (f) scanner blindness: project-declared probes vs the kinds the generator reports
+    probes = norm(str(art.get("seam_probes") or ""))
+    if probes:
+        pf = os.path.join(REPO, probes)
+        if not os.path.isfile(pf):
+            findings.append(("BAD-ENTRY", f"seam_probes '{probes}' does not exist"))
+        else:
+            seen = {s.split(":", 2)[2] for s in seams if s.count(":") >= 2}
+            tracked = (git("ls-files", "--cached", "--others", "--exclude-standard") if SOURCE == "worktree" else git("ls-files")).splitlines() if IN_GIT else [os.path.relpath(os.path.join(dp, f), REPO) for dp, _, fs in os.walk(REPO) for f in fs if "/.git/" not in dp]
+            import fnmatch
+            for ln in open(pf, encoding="utf-8"):
+                if not ln.strip() or ln.lstrip().startswith("#"): continue
+                cols = ln.rstrip("\n").split("\t")
+                if len(cols) < 2: findings.append(("BAD-ENTRY", f"seam_probes line needs kind<TAB>regex: {ln.strip()[:60]}")); continue
+                kind, rx = cols[0].strip(), cols[1]; glob = cols[2].strip() if len(cols) > 2 and cols[2].strip() else "*"
+                if kind in seen: continue
+                try: cre = re.compile(rx)
+                except re.error as e: findings.append(("BAD-ENTRY", f"seam_probes '{kind}': bad regex: {e}")); continue
+                hits = []
+                for f in tracked:
+                    if not fnmatch.fnmatch(f, glob) or f == probes: continue
+                    txt = content(f)
+                    if not txt: continue
+                    for i, l in enumerate(txt.splitlines(), 1):
+                        if cre.search(l): hits.append(f"{f}:{i}"); break
+                    if len(hits) >= 50: break
+                if hits:
+                    findings.append(("BLIND", f"the code has '{kind}' seams ({len(hits)}{'+' if len(hits) >= 50 else ''} file(s), first {hits[0]}) but `{os.path.basename(gen)} seams` reports none of that kind — teach the scanner the kind, or drop the probe if it is not a seam"))
+    bc = str(art.get("bytes_check", "on")).lower()
+    if bc in ("off", "false", "no") and not str(art.get("bytes_reason") or "").strip():
+        findings.append(("BAD-ENTRY", "bytes_check: off needs bytes_reason: <why the rebuild check is skipped>"))
+
     # (a) stale
     sp = stamp_path(path)
     st = read_stamp(sp)
@@ -373,6 +421,42 @@ def rebuild_and_stamp(art, sha=None):
     how = f"at pin {extra[1][:12]}" if extra else "(unpinned)"
     return len(wt), how
 
+def byte_drift(art):
+    """Rebuild in place, compare with what is on disk now, restore. Returns a finding or None."""
+    path = norm(str(art["path"])); cmd = gen_cmd(norm(str(art["generator"])))
+    full = os.path.join(REPO, path.rstrip("/"))
+    def snap(root):
+        out = {}
+        if os.path.isfile(root):
+            out[""] = open(root, "rb").read()
+        elif os.path.isdir(root):
+            for dp, _, fs in os.walk(root):
+                for f in fs:
+                    fp = os.path.join(dp, f); out[os.path.relpath(fp, root)] = open(fp, "rb").read()
+        return out
+    before = snap(full)
+    try:
+        run_gen(cmd, "build", build_args(art, None))
+        after = snap(full)
+    except RuntimeError as e:
+        after = None; err = str(e)
+    finally:
+        # restore exactly what was there: the check never changes the tree
+        import shutil
+        if os.path.isdir(full) and not os.path.isfile(full): shutil.rmtree(full)
+        elif os.path.isfile(full): os.remove(full)
+        for rel, data in before.items():
+            fp = full if rel == "" else os.path.join(full, rel)
+            os.makedirs(os.path.dirname(fp) or ".", exist_ok=True)
+            open(fp, "wb").write(data)
+    if after is None:
+        return ("GEN-ERROR", f"--bytes rebuild failed: {err}")
+    if after == before:
+        return None
+    diff = sorted(set(before) ^ set(after)) + sorted(k for k in set(before) & set(after) if before[k] != after[k])
+    names = ", ".join((d or os.path.basename(path)) for d in diff[:4]) + (f" (+{len(diff)-4} more)" if len(diff) > 4 else "")
+    return ("BYTE-DRIFT", f"a rebuild produces different bytes than the committed '{path}' ({names}) — the stamp matched the inputs, the artifact is still stale. Rebuild and commit it")
+
 # ---------- repin subcommand: the deliberate act of MOVING a pin ----------
 if CMD == "repin":
     art = next((a for a in ARTS if a.get("name") == STAMP_NAME), None)
@@ -422,13 +506,17 @@ for art in ARTS:
         except RuntimeError as e:
             st = "UNPINNED" if str(e).startswith("UNPINNED") else "GEN-ERROR"
             findings.append((st, f"--fix refused: {e}" if st == "UNPINNED" else f"--fix failed: {e}"))
+    if BYTES and not FIX and not any(f[0] in HARD + ("GEN-ERROR",) for f in findings) \
+            and str(art.get("bytes_check", "on")).lower() not in ("off", "false", "no"):
+        bd = byte_drift(art)
+        if bd: findings.append(bd)
     if not findings:
         print(f"  {name:<24} {mode:<6} {'OK':<13}")
         continue
     for state, detail in findings:
         total_findings += 1
         print(f"  {name:<24} {mode:<6} {state:<13} {detail}")
-    if mode == "block": refused += 1
+    if mode == "block" or any(f[0] in HARD for f in findings): refused += 1
     else: warned += 1
 
 print("")
@@ -439,7 +527,7 @@ if AUDIT:
     print(f"derived-artifact-gate: {total_findings} finding(s) (audit — reported, not refused)")
     sys.exit(3)
 if refused:
-    print(f"REFUSED: {refused} artifact(s) in block mode have findings. Fix as shown, or set `mode: warn` in {os.path.relpath(MANIFEST, REPO)} (the project CTO's rigor call).")
+    print(f"REFUSED: {refused} artifact(s) have blocking findings (block mode, or NO-GENERATOR/BAD-ENTRY in any mode). Fix as shown, or set `mode: warn` in {os.path.relpath(MANIFEST, REPO)} (the project CTO's rigor call).")
     sys.exit(3)
 print(f"WARN: {warned} artifact(s) in warn mode have findings — reported, not refused.")
 sys.exit(0)

@@ -57,6 +57,21 @@ Steps that require a human. **CEO: please run these to verify.**
 - **[AUTO]** {One-liner command with expected output — already captured in demo-output.md}
 - **[HITL]** {One action for the CEO to do manually, if applicable}
 
+## Wiring
+<!-- MANDATORY when the plan declares new-mechanisms: yes (check-dev-report.sh refuses accept without it).
+     One line per new mechanism: the path from a real entry point to it in the code graph, or UNWIRED.
+     A mechanism nothing calls is not delivered, however green its unit tests are. -->
+| Mechanism | Path from the entry point (graph) | Status |
+|---|---|---|
+| {name} | {entry → … → mechanism, with file:line} | WIRED / UNWIRED |
+
+## Statistical Risks
+<!-- MANDATORY when the plan declares measurements: yes. Sample size and how it was drawn; what is
+     NOT measured (e.g. precision against sampled gold); confidence intervals or "n too small";
+     leakage between tuning and evaluation sets; whether every graded item was actually graded
+     (zero graded cells is UNVERIFIED, never a pass). Write "None — no measurement" otherwise. -->
+{risks, or "None — no measurement"}
+
 ## Deviations from Plan
 {Anything that changed from the sprint plan, and why}
 

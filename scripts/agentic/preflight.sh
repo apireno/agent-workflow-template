@@ -336,6 +336,30 @@ case "$REPO_NAME" in
         ;;
 esac
 
+# ─── 12. Project layer + heartbeat (CTO homes only) — CEO 2026-11-04 ──────────
+# The project's standing orders print at every session start (they are binding, and a reminder the
+# CTO cannot skip); its preflight checks run; a missing or empty layer is a gap. The session's
+# Terminal window is registered so cto-heartbeat.sh (launchd) can wake this session when lanes are
+# live and it has gone quiet.
+case "$REPO_NAME" in
+    agent-workflow-template|*-cto)
+        PL="$REPO_ROOT/scripts/agentic/project-layer.sh"
+        if [ -x "$PL" ]; then
+            if [ "$REPO_NAME" != agent-workflow-template ]; then
+                PL_STATUS="$(bash "$PL" status --repo "$REPO_ROOT" 2>&1)" || emit_warning "$PL_STATUS — project rules belong in .cto/project/ (standing-orders.md, checklists/, checks/); see docs/project-layer/_templates/README.md"
+            fi
+            PL_OUT="$(bash "$PL" preflight --repo "$REPO_ROOT" 2>&1)"; PL_RC=$?
+            [ -n "$PL_OUT" ] && printf '%s\n' "$PL_OUT"
+            [ "$PL_RC" -ne 0 ] && emit_warning "a project preflight check refused (above)"
+        fi
+        if [ -x "$REPO_ROOT/scripts/cto/cto-heartbeat.sh" ]; then
+            ( bash "$REPO_ROOT/scripts/cto/cto-heartbeat.sh" register >/dev/null 2>&1 & ) 2>/dev/null
+            launchctl list 2>/dev/null | grep -q 'cto.heartbeat' || \
+                echo "[HEARTBEAT] not installed — nothing wakes this session when lanes finish overnight. Install: docs/ops/_templates/README.md"
+        fi
+        ;;
+esac
+
 # ─── 10. Orphaned review engines (host-wide) — fleet RCA 2026-10-28 ──────────
 # A review subtree runs with TERM/HUP/INT ignored (it must outlive the skill shell), so a hung `agy`
 # used to live for days, ignore `kill`, and quietly hold memory. agy-exec.sh now bounds it; this
