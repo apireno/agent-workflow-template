@@ -14,8 +14,10 @@
 #               in the output; the CTO's call).
 #   3 CHECKS    wait up to --max-min (default 240) for every non-advisory check to finish.
 #               RED (fail/cancel) -> exit 1 · still pending at the deadline -> exit 3 ·
-#               NO RUN (zero checks after --grace-min, default 5) -> exit 5 — distinct from red:
-#               a push that produced no run is a CI wiring fault, not a passing PR.
+#               NO RUN (zero checks AND no queued/running workflow run for the head after
+#               --grace-min, default 5) -> exit 5 — distinct from red: a push that produced no run
+#               is a CI wiring fault, not a passing PR. A run queued behind a busy self-hosted
+#               runner reports no checks yet; it counts as pending.
 #               Advisory checks: names matching $MWG_ADVISORY_RE (default: advisory).
 #   4 MERGE     gh pr merge --<method> --delete-branch (default squash); prints the method; verifies
 #               the merge commit is on origin/<base>.
@@ -87,7 +89,17 @@ else: print("green")' "$ADV")"
     case "$V" in
         green) say "checks GREEN"; break ;;
         red:*) say "RED — not merged (${V#red:})"; exit 1 ;;
-        none) [ "$(date +%s)" -ge "$GEND" ] && { say "NO RUN — zero checks after ${GRACE} min. The push produced no CI run: a wiring fault (workflow triggers, path filters, a disabled workflow), not a green PR. Not merged."; exit 5; } ;;
+        none)
+            # `gh pr checks` reports nothing until a job STARTS. A run that is queued behind a busy
+            # self-hosted runner is a pending run, not a wiring fault (false NO RUN, 2026-11-05):
+            # look at the workflow runs for the current head sha before calling it NO RUN.
+            CUR="$(ghr pr view "$PR" --json headRefOid -q .headRefOid 2>/dev/null || echo "$HEAD_SHA")"
+            Q="$(ghr run list --commit "$CUR" --json status -q '[.[]|select(.status!="completed")]|length' 2>/dev/null || echo 0)"
+            if [ "${Q:-0}" -gt 0 ]; then
+                [ "$(date +%s)" -ge "$END" ] && { say "TIMEOUT after ${MAX} min with runs queued — NOT merged"; exit 3; }
+            elif [ "$(date +%s)" -ge "$GEND" ]; then
+                say "NO RUN — zero checks and no queued run for ${CUR:0:12} after ${GRACE} min. The push produced no CI run: a wiring fault (workflow triggers, path filters, a disabled workflow), not a green PR. Not merged."; exit 5
+            fi ;;
         pending) [ "$(date +%s)" -ge "$END" ] && { say "TIMEOUT after ${MAX} min with checks pending — NOT merged"; exit 3; } ;;
     esac
     sleep "${MWG_POLL:-30}"
